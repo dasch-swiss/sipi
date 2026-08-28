@@ -42,6 +42,7 @@
 #include <zlib.h>
 
 #include "logging/logger.h"
+#include "error/SipiValueError.h"
 #include "image/SipiIO.h"
 #include "image/SipiImageError.h"
 #include "image_processing/processing.h"
@@ -130,7 +131,7 @@ void sipi_warning_fn(png_structp png_ptr, png_const_charp warning_msg)
   log_warn("PNG warning: %s", warning_msg);
 }
 
-bool SipiIOPng::read(SipiImage *img,
+Result<bool> SipiIOPng::read_impl(SipiImage *img,
   const std::string &filepath,
   std::shared_ptr<SipiRegion> region,
   std::shared_ptr<SipiSize> size,
@@ -143,8 +144,9 @@ bool SipiIOPng::read(SipiImage *img,
   png_infop info_ptr;
 
   //
-  // open the input file. The unique_ptr is declared before the setjmp, so its
-  // destructor runs on the C++ unwind path when the handler below throws.
+  // open the input file. Objects that own a resource are declared before the
+  // setjmp so that their destructors run on the normal C++ path out of the
+  // landing block below.
   //
   auto infile = std::unique_ptr<FILE, decltype(&fclose)>(fopen(filepath.c_str(), "rb"), fclose);
   if (infile == nullptr) { return FALSE; }
@@ -159,23 +161,27 @@ bool SipiIOPng::read(SipiImage *img,
 
   if ((png_ptr = png_create_read_struct(PNG_LIBPNG_VER_STRING, (png_voidp) nullptr, sipi_error_fn, sipi_warning_fn))
       == nullptr) {
-    throw SipiImageError("Error reading PNG file \"" + filepath + "\": Could not allocate memory for png_structp !");
+    return std::unexpected(SipiValueError{ ErrorCode::kDecodeFailed,
+      "Error reading PNG file \"" + filepath + "\": Could not allocate memory for png_structp !" });
   }
   if ((info_ptr = png_create_info_struct(png_ptr)) == nullptr) {
     png_destroy_read_struct(&png_ptr, nullptr, nullptr);
-    throw SipiImageError("Error reading PNG file \"" + filepath + "\": Could not allocate memory for png_infop !");
+    return std::unexpected(SipiValueError{ ErrorCode::kDecodeFailed,
+      "Error reading PNG file \"" + filepath + "\": Could not allocate memory for png_infop !" });
   }
 
-  // Declared before the setjmp: on longjmp the handler throws, and the C++
-  // unwind path destroys these (they are resized inside the window, which is
-  // safe — the vector object's storage is stable memory, not a register).
+  // Declared before the setjmp so that their destructors run on the normal
+  // C++ path out of the landing block — a longjmp skips the destructors of
+  // anything constructed inside the risk window (they are resized inside the
+  // window, which is safe: the vector object's storage is stable memory, not
+  // a register).
   std::vector<uint8_t> buffer;
   std::vector<png_bytep> row_pointers;
 
   // setjmp error recovery — sipi_error_fn calls longjmp(png_jmpbuf(png_ptr), 1)
   if (setjmp(png_jmpbuf(png_ptr))) {
     png_destroy_read_struct(&png_ptr, &info_ptr, nullptr);
-    throw SipiImageError("PNG read failed for \"" + filepath + "\"");
+    return std::unexpected(SipiValueError{ ErrorCode::kDecodeFailed, "PNG read failed for \"" + filepath + "\"" });
   }
 
   png_init_io(png_ptr, infile.get());
@@ -337,10 +343,30 @@ bool SipiIOPng::read(SipiImage *img,
   return true;
 };
 
+bool SipiIOPng::read(SipiImage *img,
+  const std::string &filepath,
+  std::shared_ptr<SipiRegion> region,
+  std::shared_ptr<SipiSize> size,
+  bool force_bps_8,
+  ScalingQuality scaling_quality)
+{
+  auto result = read_impl(img, filepath, region, size, force_bps_8, scaling_quality);
+  if (!result) {
+    const auto &err = result.error();
+    throw SipiImageError(err.raw_message(), err.errnum(), err.location());
+  }
+  return *result;
+}
+
 /*==========================================================================*/
 
 
-SipiImgInfo SipiIOPng::read_shape(const std::string &filepath)
+namespace {
+
+// The shape probe proper: reports a libpng struct-allocation failure as a
+// SipiValueError value rather than by throwing. File-local: it touches no
+// SipiImage state.
+[[nodiscard]] Result<SipiImgInfo> read_shape_impl(const std::string &filepath)
 {
   SIPI_ZONE_N("SipiIOPng::read_shape");
   SipiImgInfo info;
@@ -366,11 +392,13 @@ SipiImgInfo SipiIOPng::read_shape(const std::string &filepath)
   if ((png_ptr = png_create_read_struct(
          PNG_LIBPNG_VER_STRING, (png_voidp) nullptr, (png_error_ptr)sipi_error_fn, (png_error_ptr)sipi_warning_fn))
       == nullptr) {
-    throw SipiImageError("Error reading PNG file \"" + filepath + "\": Could not allocate memory for png_structp !");
+    return std::unexpected(SipiValueError{ ErrorCode::kShapeProbeFailed,
+      "Error reading PNG file \"" + filepath + "\": Could not allocate memory for png_structp !" });
   }
   if ((info_ptr = png_create_info_struct(png_ptr)) == nullptr) {
     png_destroy_read_struct(&png_ptr, nullptr, nullptr);
-    throw SipiImageError("Error reading PNG file \"" + filepath + "\": Could not allocate memory for png_infop !");
+    return std::unexpected(SipiValueError{ ErrorCode::kShapeProbeFailed,
+      "Error reading PNG file \"" + filepath + "\": Could not allocate memory for png_infop !" });
   }
 
   // setjmp error recovery for read_shape
@@ -394,6 +422,18 @@ SipiImgInfo SipiIOPng::read_shape(const std::string &filepath)
   png_destroy_read_struct(&png_ptr, &info_ptr, nullptr);
 
   return info;
+}
+
+}// namespace
+
+SipiImgInfo SipiIOPng::read_shape(const std::string &filepath)
+{
+  auto result = read_shape_impl(filepath);
+  if (!result) {
+    const auto &err = result.error();
+    throw SipiImageError(err.raw_message(), err.errnum(), err.location());
+  }
+  return *result;
 }
 /*==========================================================================*/
 
@@ -448,7 +488,7 @@ static void conn_flush_data(png_structp /*png_ptr*/)
 
 /*==========================================================================*/
 
-void SipiIOPng::write(SipiImage *img, const OutputSink &sink, const SipiCompressionParams *params)
+Result<void> SipiIOPng::write_impl(SipiImage *img, const OutputSink &sink, const SipiCompressionParams *params)
 {
   SIPI_ZONE_N("SipiIOPng::write");
   // A streamed sink (callback/tee) is driven through SinkStream via libpng's
@@ -460,15 +500,19 @@ void SipiIOPng::write(SipiImage *img, const OutputSink &sink, const SipiCompress
   png_structp png_ptr;
 
   // Owns the output FILE for the file branch (stdout is never owned).
-  // Declared before the setjmp so the handler's throw unwinds it.
+  // Resource-owning objects are declared before the setjmp so their
+  // destructors run on the normal C++ path out of the landing block below; a
+  // longjmp skips the destructors of anything constructed inside the risk
+  // window.
   auto outfile_guard = std::unique_ptr<FILE, decltype(&fclose)>(nullptr, fclose);
 
   if (!(png_ptr = png_create_write_struct(PNG_LIBPNG_VER_STRING, nullptr, sipi_error_fn, sipi_warning_fn))) {
-    throw SipiImageError("Error writing PNG file \"" + filepath + "\": png_create_write_struct failed !");
+    return std::unexpected(SipiValueError{ ErrorCode::kWriteFailed,
+      "Error writing PNG file \"" + filepath + "\": png_create_write_struct failed !" });
   }
 
   // Streamed-write context: SinkStream and http_ctx are kept alive for the
-  // whole of SipiIOPng::write so their addresses stay valid across longjmp.
+  // whole of SipiIOPng::write_impl so their addresses stay valid across longjmp.
   // For a FilePath we leave them unused and let libpng's native file writer run.
   std::unique_ptr<SinkStream> sink_stream;
   PngHttpCtx http_ctx{ nullptr, false };
@@ -482,7 +526,8 @@ void SipiIOPng::write(SipiImage *img, const OutputSink &sink, const SipiCompress
   } else {
     if (!(outfile = fopen(filepath.c_str(), "wb"))) {
       png_free_data(png_ptr, nullptr, PNG_FREE_ALL, -1);
-      throw SipiImageError("Error writing PNG file \"" + filepath + "\": Could not open output file!");
+      return std::unexpected(SipiValueError{ ErrorCode::kWriteFailed,
+        "Error writing PNG file \"" + filepath + "\": Could not open output file!" });
     }
     outfile_guard.reset(outfile);
   }
@@ -490,16 +535,18 @@ void SipiIOPng::write(SipiImage *img, const OutputSink &sink, const SipiCompress
   png_infop info_ptr;
   if (!(info_ptr = png_create_info_struct(png_ptr))) {
     png_free_data(png_ptr, nullptr, PNG_FREE_ALL, -1);
-    throw SipiImageError("Error writing PNG file \"" + filepath + "\": png_create_info_struct !");
+    return std::unexpected(SipiValueError{ ErrorCode::kWriteFailed,
+      "Error writing PNG file \"" + filepath + "\": png_create_info_struct !" });
   }
 
   // setjmp error recovery for write — sipi_error_fn calls longjmp
   if (setjmp(png_jmpbuf(png_ptr))) {
     png_destroy_write_struct(&png_ptr, &info_ptr);
     if (http_ctx.client_aborted) {
-      throw SipiImageClientAbortError("Client aborted HTTP response during PNG write");
+      return std::unexpected(
+        SipiValueError{ ErrorCode::kClientAbort, "Client aborted HTTP response during PNG write" });
     }
-    throw SipiImageError("PNG write failed for \"" + filepath + "\"");
+    return std::unexpected(SipiValueError{ ErrorCode::kWriteFailed, "PNG write failed for \"" + filepath + "\"" });
   }
 
   if (outfile != nullptr) png_init_io(png_ptr, outfile);
@@ -531,7 +578,9 @@ void SipiIOPng::write(SipiImage *img, const OutputSink &sink, const SipiCompress
     img->bps = 8;
   } else {
     png_free_data(png_ptr, info_ptr, PNG_FREE_ALL, -1);
-    throw SipiImageError("Error writing PNG file \"" + filepath + "\": unsupported number of channels (" + std::to_string(img->nc) + "), expected 1, 2, 3, or 4");
+    return std::unexpected(SipiValueError{ ErrorCode::kUnsupportedFormat,
+      "Error writing PNG file \"" + filepath + "\": unsupported number of channels (" + std::to_string(img->nc)
+        + "), expected 1, 2, 3, or 4" });
   }
 
   png_set_IHDR(png_ptr,
@@ -620,6 +669,19 @@ void SipiIOPng::write(SipiImage *img, const OutputSink &sink, const SipiCompress
 
   png_ptr = nullptr;
   info_ptr = nullptr;
+  return {};
+}
+
+void SipiIOPng::write(SipiImage *img, const OutputSink &sink, const SipiCompressionParams *params)
+{
+  auto result = write_impl(img, sink, params);
+  if (!result) {
+    const auto &err = result.error();
+    if (err.code() == ErrorCode::kClientAbort) {
+      throw SipiImageClientAbortError(err.raw_message(), err.errnum(), err.location());
+    }
+    throw SipiImageError(err.raw_message(), err.errnum(), err.location());
+  }
 }
 
 }
