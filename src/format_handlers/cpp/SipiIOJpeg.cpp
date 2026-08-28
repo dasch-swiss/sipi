@@ -21,6 +21,7 @@
 
 #include "logging/logger.h"
 #include "error/SipiError.h"
+#include "error/SipiValueError.h"
 #include "image/SipiIO.h"
 #include "image/SipiImage.h"
 #include "image/SipiImageError.h"
@@ -459,7 +460,7 @@ void SipiIOJpeg::parse_photoshop(SipiImage *img, char *data, int length)
 //=============================================================================
 
 
-bool SipiIOJpeg::read(SipiImage *img,
+Result<bool> SipiIOJpeg::read_impl(SipiImage *img,
   const std::string &filepath,
   std::shared_ptr<SipiRegion> region,
   std::shared_ptr<SipiSize> size,
@@ -517,17 +518,18 @@ bool SipiIOJpeg::read(SipiImage *img,
   cinfo.dct_method = JDCT_ISLOW;
 
   //
-  // setjmp error handler — ALL libjpeg errors from this point longjmp here.
-  // This replaces the scattered try/catch(JpegError) blocks in the read path,
-  // eliminating C++ throw-through-C undefined behavior.
+  // setjmp error handler — ALL libjpeg errors from this point longjmp to this
+  // landing site; C++ exceptions must never cross libjpeg's C frames.
   //
   if (setjmp(jerr.error_jmp)) {
-    // longjmp landed here — clean up and throw in C++ context.
-    // file_buffer / srcmgr / infile_guard are declared before the setjmp, so
-    // their destructors run during the throw's stack unwinding.
+    // longjmp landed here. Resource-owning objects (file_buffer, srcmgr,
+    // infile_guard) are declared before the setjmp so their destructors run
+    // on the normal C++ path out of this landing block; a longjmp skips the
+    // destructors of anything constructed inside the risk window.
     free(icc_buffer_guard);  // may have been allocated during marker parsing
     jpeg_destroy_decompress(&cinfo);
-    throw SipiImageError("JPEG read failed for \"" + filepath + "\": " + std::string(jerr.error_message));
+    return std::unexpected(SipiValueError{ ErrorCode::kDecodeFailed,
+      "JPEG read failed for \"" + filepath + "\": " + std::string(jerr.error_message) });
   }
 
   jpeg_file_src(&cinfo, &file_buffer, &srcmgr);
@@ -540,7 +542,8 @@ bool SipiIOJpeg::read(SipiImage *img,
   int res = jpeg_read_header(&cinfo, static_cast<boolean>(true));
   if (res != JPEG_HEADER_OK) {
     jpeg_destroy_decompress(&cinfo);
-    throw SipiImageError("Error reading JPEG file: \"" + filepath + "\"");
+    return std::unexpected(
+      SipiValueError{ ErrorCode::kMalformedInput, "Error reading JPEG file: \"" + filepath + "\"" });
   }
 
   auto no_cropping = static_cast<boolean>(false);
@@ -734,14 +737,16 @@ bool SipiIOJpeg::read(SipiImage *img,
     break;
   }
   case JCS_UNKNOWN: {
-    throw SipiImageError("Unsupported JPEG colorspace JCS_UNKNOWN in file \"" + filepath
-      + "\" (dimensions: " + std::to_string(img->nx) + "x" + std::to_string(img->ny)
-      + ", components: " + std::to_string(cinfo.output_components) + ")");
+    return std::unexpected(SipiValueError{ ErrorCode::kUnsupportedFormat,
+      "Unsupported JPEG colorspace JCS_UNKNOWN in file \"" + filepath
+        + "\" (dimensions: " + std::to_string(img->nx) + "x" + std::to_string(img->ny)
+        + ", components: " + std::to_string(cinfo.output_components) + ")" });
   }
   default: {
-    throw SipiImageError("Unsupported JPEG colorspace (code: " + std::to_string(colspace) + ") in file \"" + filepath
-      + "\" (dimensions: " + std::to_string(img->nx) + "x" + std::to_string(img->ny)
-      + ", components: " + std::to_string(cinfo.output_components) + ")");
+    return std::unexpected(SipiValueError{ ErrorCode::kUnsupportedFormat,
+      "Unsupported JPEG colorspace (code: " + std::to_string(colspace) + ") in file \"" + filepath
+        + "\" (dimensions: " + std::to_string(img->nx) + "x" + std::to_string(img->ny)
+        + ", components: " + std::to_string(cinfo.output_components) + ")" });
   }
   }
   int sll = cinfo.output_components * cinfo.output_width * sizeof(uint8_t);
@@ -817,6 +822,21 @@ bool SipiIOJpeg::read(SipiImage *img,
   }
 
   return true;
+}
+
+bool SipiIOJpeg::read(SipiImage *img,
+  const std::string &filepath,
+  std::shared_ptr<SipiRegion> region,
+  std::shared_ptr<SipiSize> size,
+  bool force_bps_8,
+  ScalingQuality scaling_quality)
+{
+  auto result = read_impl(img, filepath, region, size, force_bps_8, scaling_quality);
+  if (!result) {
+    const auto &err = result.error();
+    throw SipiImageError(err.raw_message(), err.errnum(), err.location());
+  }
+  return *result;
 }
 
 //============================================================================
@@ -981,7 +1001,7 @@ SipiImgInfo SipiIOJpeg::read_shape(const std::string &filepath)
 //============================================================================
 
 
-void SipiIOJpeg::write(SipiImage *img, const OutputSink &sink, const SipiCompressionParams *params)
+Result<void> SipiIOJpeg::write_impl(SipiImage *img, const OutputSink &sink, const SipiCompressionParams *params)
 {
   SIPI_ZONE_N("SipiIOJpeg::write");
   // A streamed sink (callback/tee) writes to the response stream via SinkStream;
@@ -995,12 +1015,15 @@ void SipiIOJpeg::write(SipiImage *img, const OutputSink &sink, const SipiCompres
     try {
       quality = stoi(params->at(JPEG_QUALITY));
     } catch (const std::out_of_range &er) {
-      throw SipiImageError("JPEG quality argument must be integer between 0 and 100");
+      return std::unexpected(
+        SipiValueError{ ErrorCode::kWriteFailed, "JPEG quality argument must be integer between 0 and 100" });
     } catch (const std::invalid_argument &ia) {
-      throw SipiImageError("JPEG quality argument must be integer between 0 and 100");
+      return std::unexpected(
+        SipiValueError{ ErrorCode::kWriteFailed, "JPEG quality argument must be integer between 0 and 100" });
     }
     if ((quality < 0) || (quality > 100)) {
-      throw SipiImageError("JPEG quality argument must be integer between 0 and 100");
+      return std::unexpected(
+        SipiValueError{ ErrorCode::kWriteFailed, "JPEG quality argument must be integer between 0 and 100" });
     }
   }
 
@@ -1029,11 +1052,12 @@ void SipiIOJpeg::write(SipiImage *img, const OutputSink &sink, const SipiCompres
   jerr.pub.error_exit = jpegErrorExit;
 
   // FdGuard for outfile — constructed before setjmp. Its destructor runs
-  // during the C++ stack unwinding from the throw SipiImageError after longjmp.
+  // during the normal C++ unwind out of this function, including the
+  // std::unexpected return path taken from the setjmp landing block below.
   FdGuard outfile_guard(-1);
   // HTTP / file destination owned by the caller via unique_ptr. Declared
-  // before setjmp so destructors are on the normal C++ unwind path when we
-  // throw from the setjmp handler (longjmp would skip destructors of objects
+  // before setjmp so destructors are on the normal C++ unwind path on return
+  // from the setjmp landing block (longjmp would skip destructors of objects
   // constructed *between* setjmp and longjmp — these live outside that window).
   std::unique_ptr<SinkStream> sink_stream;
   std::unique_ptr<HtmlBuffer> html_buffer;
@@ -1045,24 +1069,26 @@ void SipiIOJpeg::write(SipiImage *img, const OutputSink &sink, const SipiCompres
   jpeg_create_compress(&cinfo);  // errors → longjmp → setjmp handler below
 
   //
-  // setjmp error handler — ALL libjpeg errors from this point longjmp here.
-  // This replaces the scattered try/catch(JpegError) blocks.
+  // setjmp error handler — ALL libjpeg errors from this point longjmp here;
+  // C++ exceptions must never cross libjpeg's C frames.
   //
   // NOTE on RAII: longjmp does NOT call C++ destructors. Between setjmp and
   // longjmp, the following RAII objects may leak on the error path:
   // - exifchunk, xmpchunk, iccchunk, iptcchunk (make_unique, each <65KB)
-  // These are freed when the thread handles the next request (stack unwinding
-  // from the SipiImageError thrown below). Acceptable small leak on error path.
+  // That allocation is leaked — its destructor never runs — but the leak is
+  // accepted: it is bounded (<65KB) and confined to an error path.
   //
   if (setjmp(jerr.error_jmp)) {
-    // longjmp landed here — clean up and throw in C++ context
+    // longjmp landed here — clean up and return the error in C++ context
     const bool client_aborted = html_buffer && html_buffer->client_aborted;
     jpeg_destroy_compress(&cinfo);
-    // html_buffer / destmgr / outfile_guard destructors run during throw unwinding
+    // html_buffer / destmgr / outfile_guard destructors run during the return unwind
     if (client_aborted) {
-      throw SipiImageClientAbortError("Client aborted HTTP response during JPEG write");
+      return std::unexpected(
+        SipiValueError{ ErrorCode::kClientAbort, "Client aborted HTTP response during JPEG write" });
     }
-    throw SipiImageError("JPEG write failed: " + std::string(jerr.error_message));
+    return std::unexpected(
+      SipiValueError{ ErrorCode::kWriteFailed, "JPEG write failed: " + std::string(jerr.error_message) });
   }
 
   if (streaming) {
@@ -1077,7 +1103,7 @@ void SipiIOJpeg::write(SipiImage *img, const OutputSink &sink, const SipiCompres
       int outfile = open(filepath.c_str(), O_WRONLY | O_CREAT, S_IRUSR | S_IWUSR | S_IRGRP | S_IROTH);
       if (outfile == -1) {
         jpeg_destroy_compress(&cinfo);
-        throw SipiImageError("Cannot open file \"" + filepath + "\"!");
+        return std::unexpected(SipiValueError{ ErrorCode::kWriteFailed, "Cannot open file \"" + filepath + "\"!" });
       }
       outfile_guard.fd = outfile;
       file_buffer = std::make_unique<FileBuffer>(outfile);
@@ -1094,9 +1120,10 @@ void SipiIOJpeg::write(SipiImage *img, const OutputSink &sink, const SipiCompres
   case PhotometricInterpretation::MINISBLACK: {
     if (img->nc != 1) {
       jpeg_destroy_compress(&cinfo);
-      throw SipiImageError("Cannot write JPEG: grayscale (MINISBLACK) requires 1 channel, got "
-        + std::to_string(img->nc) + " (dimensions: " + std::to_string(img->nx) + "x"
-        + std::to_string(img->ny) + ", bps: " + std::to_string(img->bps) + ")");
+      return std::unexpected(SipiValueError{ ErrorCode::kUnsupportedFormat,
+        "Cannot write JPEG: grayscale (MINISBLACK) requires 1 channel, got " + std::to_string(img->nc)
+          + " (dimensions: " + std::to_string(img->nx) + "x" + std::to_string(img->ny)
+          + ", bps: " + std::to_string(img->bps) + ")" });
     }
     cinfo.in_color_space = JCS_GRAYSCALE;
     cinfo.jpeg_color_space = JCS_GRAYSCALE;
@@ -1105,9 +1132,9 @@ void SipiIOJpeg::write(SipiImage *img, const OutputSink &sink, const SipiCompres
   case PhotometricInterpretation::RGB: {
     if (img->nc != 3) {
       jpeg_destroy_compress(&cinfo);
-      throw SipiImageError("Cannot write JPEG: RGB requires 3 channels, got "
-        + std::to_string(img->nc) + " (dimensions: " + std::to_string(img->nx) + "x"
-        + std::to_string(img->ny) + ", bps: " + std::to_string(img->bps) + ")");
+      return std::unexpected(SipiValueError{ ErrorCode::kUnsupportedFormat,
+        "Cannot write JPEG: RGB requires 3 channels, got " + std::to_string(img->nc) + " (dimensions: "
+          + std::to_string(img->nx) + "x" + std::to_string(img->ny) + ", bps: " + std::to_string(img->bps) + ")" });
     }
     cinfo.in_color_space = JCS_RGB;
     cinfo.jpeg_color_space = JCS_RGB;
@@ -1116,9 +1143,9 @@ void SipiIOJpeg::write(SipiImage *img, const OutputSink &sink, const SipiCompres
   case PhotometricInterpretation::SEPARATED: {
     if (img->nc != 4) {
       jpeg_destroy_compress(&cinfo);
-      throw SipiImageError("Cannot write JPEG: CMYK (SEPARATED) requires 4 channels, got "
-        + std::to_string(img->nc) + " (dimensions: " + std::to_string(img->nx) + "x"
-        + std::to_string(img->ny) + ", bps: " + std::to_string(img->bps) + ")");
+      return std::unexpected(SipiValueError{ ErrorCode::kUnsupportedFormat,
+        "Cannot write JPEG: CMYK (SEPARATED) requires 4 channels, got " + std::to_string(img->nc) + " (dimensions: "
+          + std::to_string(img->nx) + "x" + std::to_string(img->ny) + ", bps: " + std::to_string(img->bps) + ")" });
     }
     cinfo.in_color_space = JCS_CMYK;
     cinfo.jpeg_color_space = JCS_CMYK;
@@ -1127,9 +1154,9 @@ void SipiIOJpeg::write(SipiImage *img, const OutputSink &sink, const SipiCompres
   case PhotometricInterpretation::YCBCR: {
     if (img->nc != 3) {
       jpeg_destroy_compress(&cinfo);
-      throw SipiImageError("Cannot write JPEG: YCbCr requires 3 channels, got "
-        + std::to_string(img->nc) + " (dimensions: " + std::to_string(img->nx) + "x"
-        + std::to_string(img->ny) + ", bps: " + std::to_string(img->bps) + ")");
+      return std::unexpected(SipiValueError{ ErrorCode::kUnsupportedFormat,
+        "Cannot write JPEG: YCbCr requires 3 channels, got " + std::to_string(img->nc) + " (dimensions: "
+          + std::to_string(img->nx) + "x" + std::to_string(img->ny) + ", bps: " + std::to_string(img->bps) + ")" });
     }
     cinfo.in_color_space = JCS_YCbCr;
     cinfo.jpeg_color_space = JCS_YCbCr;
@@ -1143,9 +1170,10 @@ void SipiIOJpeg::write(SipiImage *img, const OutputSink &sink, const SipiCompres
   }
   default: {
     jpeg_destroy_compress(&cinfo);
-    throw SipiImageError("Cannot write JPEG: unsupported colorspace " + to_string(img->photo)
-      + " (dimensions: " + std::to_string(img->nx) + "x" + std::to_string(img->ny)
-      + ", channels: " + std::to_string(img->nc) + ", bps: " + std::to_string(img->bps) + ")");
+    return std::unexpected(SipiValueError{ ErrorCode::kUnsupportedFormat,
+      "Cannot write JPEG: unsupported colorspace " + to_string(img->photo) + " (dimensions: " + std::to_string(img->nx)
+        + "x" + std::to_string(img->ny) + ", channels: " + std::to_string(img->nc)
+        + ", bps: " + std::to_string(img->bps) + ")" });
   }
   }
   cinfo.write_Adobe_marker = TRUE;
@@ -1268,5 +1296,18 @@ void SipiIOJpeg::write(SipiImage *img, const OutputSink &sink, const SipiCompres
   jpeg_finish_compress(&cinfo);
   jpeg_destroy_compress(&cinfo);
   // outfile_guard destructor closes fd
+  return {};
+}
+
+void SipiIOJpeg::write(SipiImage *img, const OutputSink &sink, const SipiCompressionParams *params)
+{
+  auto result = write_impl(img, sink, params);
+  if (!result) {
+    const auto &err = result.error();
+    if (err.code() == ErrorCode::kClientAbort) {
+      throw SipiImageClientAbortError(err.raw_message(), err.errnum(), err.location());
+    }
+    throw SipiImageError(err.raw_message(), err.errnum(), err.location());
+  }
 }
 }// namespace Sipi
