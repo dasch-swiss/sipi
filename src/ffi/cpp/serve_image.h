@@ -21,10 +21,13 @@
 
 #include <expected>
 #include <functional>
+#include <string>
 
+#include "error/SipiValueError.h"
 #include "ffi/engine_context.h"
 #include "ffi/serve_response.h"
 #include "ffi/sipi_ffi.h"
+#include "image/populate_from_image.h"
 
 namespace Sipi::ffi {
 
@@ -35,6 +38,21 @@ namespace Sipi::ffi {
  *  when the client vanished mid-decode (the caller emits nothing). */
 [[nodiscard]] std::expected<ServeResponse, SipiStatus>
   build_image_response(const SipiServeRequest &req, const EngineContext &eng, const std::function<bool()> &cancelled);
+
+/*! The seam's `SipiStatus` for a `SipiValueError`, derived from
+ *  `policy_for(err.code()).http_status_class` (never a raw `ErrorCode` switch —
+ *  the policy table is the single source of truth). */
+[[nodiscard]] SipiStatus status_for(const SipiValueError &err);
+
+/*! Reports a `SipiValueError` through the seam's `SipiImageErrorReport` side
+ *  channel, honouring `policy_for(err.code()).sentry_policy`: a `kSkip` policy
+ *  marks a failure that is not a server-side fault — a client abort mid-response
+ *  is the motivating case — so it returns without calling `report_error`. */
+void report_value_error(SipiReportErrorFn report_error,
+  void *report_ctx,
+  const SipiValueError &err,
+  const std::string &phase,
+  const observability::ImageContext &ctx);
 
 }// namespace Sipi::ffi
 
