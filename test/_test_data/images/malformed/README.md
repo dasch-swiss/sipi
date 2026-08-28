@@ -18,6 +18,7 @@ Each fixture's defect is documented in the table below as fixtures land.
 | `jpeg_photoshop_short_app13.jpg` | APP13 segment truncated to 5 bytes (`"Photo"`, a prefix of the 14-byte `"Photoshop 3.0\0"` identifier it is compared against); regresses the `marker->data_length >= 14` guard added before the `strncmp` in both `read()` and `read_shape()` (N4). |
 | `jpeg_photoshop_overshoot_app13.jpg` | APP13 segment whose payload is a *valid* `"Photoshop 3.0\0"` identifier (14 bytes) followed by exactly one 7-byte 8BIM resource and nothing after: `"8BIM"` (4) + resource id `0x0404` (2) + a 1-byte Pascal name-length of `0x00` (empty, even-length name). `parse_photoshop()` sees a 7-byte block, so the caller's `data_length >= 14` + identifier `strncmp` guard passes and the parser runs. Consuming `8BIM`(4)+id(2) leaves `ptr` at offset 6 with `end` at 7; the name-length byte is 0, `slen++` (length byte) makes `slen=1`, and the odd->even padding bump makes `slen=2` — one more than the single byte remaining. Before the fix, `ptr += slen` walked one byte past `end`, so the next `4 > (size_t)(end - ptr)` computed `end - ptr == -1`, cast to `SIZE_MAX`, defeated the guard, and over-read `datalen` and beyond. Regresses the `if (slen > (size_t)(end - ptr)) break;` guard (and the sibling `datalen` guard) added before the pointer advances in `parse_photoshop()` — the adversarial review's most severe finding. Distinct from `jpeg_photoshop_short_app13.jpg`, which pins the *earlier* `data_length >= 14` identifier guard (N4) and never reaches `parse_photoshop()`. |
 | `palette_undersized_lut.jp2` | Palette (indexed-color) JP2 with an 8-bit index component but a `pclr` box declaring only 128 entries, so index values 128..255 would read past the R/G/B LUTs; regresses `validate_j2k_palette_mapping()` rejecting the mapping through the whole `SipiIOJ2k::read()` decode path — Kakadu parses the box structure, the guard fails it closed before the expansion buffer is sized (DEV-6065). The well-formed counterpart it must be distinguished from is the ISO/IEC 15444-4 conformance file `iso-15444-4/testfiles_jp2/file9.jp2` (256-entry, 3-column palette), which decodes to RGB. |
+| `j2k_oversized_dimensions.jp2` | JP2 whose codestream `SIZ` marker segment (`0xFF51`) declares `Xsiz`/`Ysiz`/`XTsiz`/`YTsiz` of 262144px (`1 << 18`, above `kMaxDecodeDim` = `1 << 17`), with the `ihdr` box's height/width patched to match so container and codestream agree; regresses `validate_decode_dims()` rejecting the header — Kakadu parses the (structurally valid, single-tile) main header and `SipiIOJ2k::read()` gets as far as `codestream.get_dims()` before the guard throws, well before any decode buffer is sized (DEV-6063). |
 
 ## Git LFS
 
@@ -53,6 +54,17 @@ fixing the `pclr` and enclosing `jp2h` box lengths — every other box,
 including the codestream, is byte-identical to file9. The codestream still
 declares an 8-bit index, so `validate_j2k_palette_mapping()` sees `nentries
 (128) < 1 << bps (256)` and rejects it.
+
+`j2k_oversized_dimensions.jp2` is hand-edited from the smallest existing JP2
+fixture, `images/unit/ycbcr16.jpx` (an 8x8, single-tile JPX): the `ihdr` box's
+height/width fields and the codestream `SIZ` marker's `Xsiz`/`Ysiz`/`XTsiz`/
+`YTsiz` fields (all four, to keep the file a single tile matching the
+original structure) are patched from `8` to `262144` (`1 << 18`, big-endian
+`uint32`), with no other bytes changed. Kakadu accepts the patched main
+header as structurally valid — it never needs to read the still-8x8-sized
+tile-part payload to report the declared dimensions — so `SipiIOJ2k::read()`
+reaches `codestream.get_dims()` and `validate_decode_dims()` before any pixel
+data would be touched.
 
 The `.tif`/`.jp2`/`.jpg`/`.png` files the generators produce are committed
 (via Git LFS) so CI does not need to regenerate them at test time. Each
