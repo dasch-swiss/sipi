@@ -145,6 +145,18 @@ public:
     return err_stream.str();
   }
 
+  /*!
+   * Raw field accessors. They exist so a caller behind an exception-based
+   * interface can reconstruct an equivalent `SipiImageError` — same message
+   * text, same `errno`, same origin — from a `SipiValueError` produced by
+   * `Result`-returning internals.
+   */
+  [[nodiscard]] const std::string &raw_message() const { return errmsg_; }
+
+  [[nodiscard]] int errnum() const { return errnum_; }
+
+  [[nodiscard]] const std::source_location &location() const { return location_; }
+
 private:
   ErrorCode code_;
   std::string errmsg_;
