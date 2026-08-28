@@ -494,7 +494,9 @@ Result<bool> SipiIOJpeg::read_impl(SipiImage *img,
 
   JSAMPARRAY linbuf = nullptr;
   jpeg_saved_marker_ptr marker = nullptr;
-  unsigned char *icc_buffer_guard = nullptr;  // for cleanup on longjmp
+  // volatile: assigned inside the setjmp risk window during ICC marker
+  // parsing and read by the landing block on longjmp.
+  unsigned char *volatile icc_buffer_guard = nullptr;
 
   // Source manager + buffer, owned here and declared before the setjmp so
   // their destructors run on the C++ unwind path.
@@ -583,7 +585,7 @@ Result<bool> SipiIOJpeg::read_impl(SipiImage *img,
   //
   marker = cinfo.marker_list;
   // Use icc_buffer_guard (declared before setjmp) so longjmp cleanup can free it
-  unsigned char *&icc_buffer = icc_buffer_guard;
+  unsigned char *volatile &icc_buffer = icc_buffer_guard;
   int icc_buffer_len = 0;
   while (marker != nullptr) {
     if (marker->marker == JPEG_COM) {
@@ -1051,20 +1053,40 @@ Result<void> SipiIOJpeg::write_impl(SipiImage *img, const OutputSink &sink, cons
   cinfo.err = jpeg_std_error(&jerr.pub);
   jerr.pub.error_exit = jpegErrorExit;
 
-  // FdGuard for outfile — constructed before setjmp. Its destructor runs
-  // during the normal C++ unwind out of this function, including the
-  // std::unexpected return path taken from the setjmp landing block below.
+  // FdGuard for outfile — constructed outside the setjmp risk window. Its
+  // destructor runs during the normal C++ unwind out of this function,
+  // including the std::unexpected return path taken from the setjmp landing
+  // block below.
   FdGuard outfile_guard(-1);
-  // HTTP / file destination owned by the caller via unique_ptr. Declared
-  // before setjmp so destructors are on the normal C++ unwind path on return
-  // from the setjmp landing block (longjmp would skip destructors of objects
-  // constructed *between* setjmp and longjmp — these live outside that window).
+  // HTTP / file destination owned by the caller via unique_ptr. Constructed
+  // outside the setjmp risk window so their destructors run on the normal
+  // C++ unwind path on return from the setjmp landing block — a longjmp
+  // skips the destructors of anything constructed *between* setjmp and
+  // longjmp, and these live outside that window.
   std::unique_ptr<SinkStream> sink_stream;
   std::unique_ptr<HtmlBuffer> html_buffer;
   std::unique_ptr<FileBuffer> file_buffer;
   std::unique_ptr<jpeg_destination_mgr> destmgr;
   JSAMPROW row_pointer[1];
   int row_stride;
+
+  bool use_stdout = false;
+
+  if (streaming) {
+    sink_stream = std::make_unique<SinkStream>(sink);
+    html_buffer = std::make_unique<HtmlBuffer>(sink_stream.get());
+    destmgr = std::make_unique<jpeg_destination_mgr>();
+  } else if (filepath == "stdout:") {
+    use_stdout = true;
+  } else {
+    int outfile = open(filepath.c_str(), O_WRONLY | O_CREAT, S_IRUSR | S_IWUSR | S_IRGRP | S_IROTH);
+    if (outfile == -1) {
+      return std::unexpected(SipiValueError{ ErrorCode::kWriteFailed, "Cannot open file \"" + filepath + "\"!" });
+    }
+    outfile_guard.fd = outfile;
+    file_buffer = std::make_unique<FileBuffer>(outfile);
+    destmgr = std::make_unique<jpeg_destination_mgr>();
+  }
 
   jpeg_create_compress(&cinfo);  // errors → longjmp → setjmp handler below
 
@@ -1092,24 +1114,11 @@ Result<void> SipiIOJpeg::write_impl(SipiImage *img, const OutputSink &sink, cons
   }
 
   if (streaming) {
-    sink_stream = std::make_unique<SinkStream>(sink);
-    html_buffer = std::make_unique<HtmlBuffer>(sink_stream.get());
-    destmgr = std::make_unique<jpeg_destination_mgr>();
     jpeg_html_dest(&cinfo, html_buffer.get(), destmgr.get());
+  } else if (use_stdout) {
+    jpeg_stdio_dest(&cinfo, stdout);
   } else {
-    if (filepath == "stdout:") {
-      jpeg_stdio_dest(&cinfo, stdout);
-    } else {
-      int outfile = open(filepath.c_str(), O_WRONLY | O_CREAT, S_IRUSR | S_IWUSR | S_IRGRP | S_IROTH);
-      if (outfile == -1) {
-        jpeg_destroy_compress(&cinfo);
-        return std::unexpected(SipiValueError{ ErrorCode::kWriteFailed, "Cannot open file \"" + filepath + "\"!" });
-      }
-      outfile_guard.fd = outfile;
-      file_buffer = std::make_unique<FileBuffer>(outfile);
-      destmgr = std::make_unique<jpeg_destination_mgr>();
-      jpeg_file_dest(&cinfo, file_buffer.get(), destmgr.get());
-    }
+    jpeg_file_dest(&cinfo, file_buffer.get(), destmgr.get());
   }
 
   cinfo.image_width = (int)img->nx;
