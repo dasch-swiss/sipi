@@ -15,8 +15,8 @@
 #include "tiff.h"
 #include "tiffio.h"
 
-#include "SipiImage.h"
-#include "SipiIO.h"
+#include "image/SipiImage.h"
+#include "image/SipiIO.h"
 
 namespace Sipi {
 

@@ -13,7 +13,7 @@
 #include <string>
 #include <utility>
 
-#include "SipiImage.h"// SipiImage::read_shape (sipi_image_dims)
+#include "image/SipiImage.h"// SipiImage::read_shape (sipi_image_dims)
 #include "ffi/engine_context.h"
 #include "ffi/metrics_snapshot.h"
 #include "ffi/serve_image.h"

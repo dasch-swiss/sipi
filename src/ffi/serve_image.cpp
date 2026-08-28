@@ -17,8 +17,8 @@
 #include <optional>
 #include <string>
 
-#include "SipiImage.h"
-#include "SipiImageError.h"
+#include "image/SipiImage.h"
+#include "image/SipiImageError.h"
 #include "cache/SipiCache.h"
 #include "throttling/SipiMemoryBudget.h"
 #include "throttling/SipiPeakMemory.h"
@@ -32,7 +32,7 @@
 #include "logging/logger.h"
 #include "metadata/icc.h"
 #include "observability/metrics.h"
-#include "populate_from_image.h"
+#include "image/populate_from_image.h"
 #include "util/Parsing.h"
 #include "util/UrlDecode.h"
 

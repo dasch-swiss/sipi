@@ -39,7 +39,7 @@ cc_library(
     deps = [
         # populate_from_image.h's observability::ImageContext, the struct
         # the report mirrors.
-        "//src:engine",
+        "//src/image",
         "@jansson//:jansson",
     ],
 )

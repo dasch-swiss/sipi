@@ -10,7 +10,7 @@
 #include <ostream>
 #include <string>
 
-#include "populate_from_image.h"
+#include "image/populate_from_image.h"
 
 namespace Sipi {
 

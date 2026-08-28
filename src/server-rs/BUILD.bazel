@@ -9,7 +9,7 @@ This is the first Rust → C++ link in the graph: `rules_rust` threads the seam'
 `CcInfo` (and the engine's transitive linkopts: `-ldl`/`-lpthread` on Linux, the
 iconv + CoreFoundation/SystemConfiguration frameworks on macOS) through to the
 final binary link, which happens in `//src/cli-rs`. `//src/ffi:sipi_ffi` pulls
-`//src:engine`, so the library carries the engine on its own — it no longer
+`//src/image`, so the library carries the engine on its own — it no longer
 depends on the C++ CLI (`//src/cli:cli_app`); `//src/cli-rs` adds that for
 `sipi_cli_main`.
 
@@ -82,7 +82,7 @@ rust_library(
         "//src/throttling/rust:admission",
         # The narrow C FFI seam → the transitive C++ image engine. This is the
         # cc_library → rust link (Open Question #1). //src/ffi:sipi_ffi pulls
-        # //src:engine, so the library carries the engine without depending on
+        # //src/image, so the library carries the engine without depending on
         # the C++ CLI.
         "//src/ffi:sipi_ffi",
     ],

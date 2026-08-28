@@ -17,7 +17,7 @@
 #include <memory>
 #include <vector>
 
-#include "../../../src/SipiImage.h"
+#include "image/SipiImage.h"
 #include "formats/SipiIOTiff.h"
 #include "metadata/exif.h"
 #include "test_paths.h"

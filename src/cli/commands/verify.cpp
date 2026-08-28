@@ -11,8 +11,8 @@
 #include <string>
 
 #include "logging/logger.h"
-#include "SipiImage.h"
-#include "SipiImageError.h"
+#include "image/SipiImage.h"
+#include "image/SipiImageError.h"
 #include "metadata/essentials.h"
 #include "observability/metrics.h"
 

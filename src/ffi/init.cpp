@@ -28,7 +28,7 @@
 
 #include "cache/SipiCache.h"
 #include "ffi/SipiConf.h"// Sipi::SipiConf, Sipi::parseSizeString
-#include "SipiIO.h"// Sipi::ScalingMethod, Sipi::ScalingQuality
+#include "image/SipiIO.h"// Sipi::ScalingMethod, Sipi::ScalingQuality
 #include "throttling/SipiMemoryBudget.h"// Sipi::SipiMemoryBudget, AdmissionMode, parse_admission_mode
 #include "logging/logger.h"// log_warn / log_err / log_info
 #include "observability/metrics.h"// Sipi::observability::Metrics

@@ -5,7 +5,7 @@ identifier path segments of an IIIF URL into validated value objects
 (`SipiRegion`, `SipiSize`, `SipiRotation`, `SipiQualityFormat`,
 `SipiIdentifier`, `SipiDecodeDims`). A leaf of the engine graph: it depends
 only on `SipiError` (`//src/error`) and the string helpers in `//src/util`,
-never on `SipiImage` or any codec. `//src:engine` deps this library and the
+never on `SipiImage` or any codec. `//src/image` deps this library and the
 format handlers pass `std::shared_ptr<SipiRegion>`/`SipiSize` — this is **live
 production engine code**, non-`testonly`, not deletable. The string
 constructors here are the reference the Rust `parse_*` port

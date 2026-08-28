@@ -1,0 +1,94 @@
+"""src/image — the transport-free image core (`SipiImage` decode/encode + pixel ops).
+
+`SipiImage` and the concrete format handlers reference each other:
+`SipiImage` dispatches read/write through the `io` registry, and the
+handlers touch `SipiImage` internals as `friend`s. A Bazel package cannot
+depend on itself, so `//src/formats` depends one-way on this package and
+*defines* `SipiImage::io` in `format_registry.cpp`; this package references
+`io` and `Sipi::read_watermark`, resolved at link time from `//src/formats`.
+`//src/image` therefore does **not** depend on `//src/formats:formats` — it
+does depend on `//src/formats:output_sink`, a dependency-free leaf `SipiIO`'s
+write path returns through.
+
+No HTTP transport, Lua, or SQLite reaches this package.
+
+`include_prefix = "image"` + `strip_include_prefix = "/src/image/cpp"`
+exposes the headers at `#include "image/SipiImage.h"` etc. for cross-package
+consumers; siblings inside this package use the bare quote form
+(`#include "SipiIO.h"`).
+"""
+
+load("@rules_cc//cc:defs.bzl", "cc_library")
+
+package(default_visibility = ["//src:__subpackages__"])
+
+cc_library(
+    name = "image",
+    srcs = [
+        "cpp/SipiImage.cpp",
+        "cpp/populate_from_image.cpp",
+        "cpp/resample.cc",
+    ],
+    hdrs = [
+        "cpp/SipiIO.h",
+        "cpp/SipiImage.h",
+        "cpp/SipiImageError.h",
+        "cpp/populate_from_image.h",
+        "cpp/resample.h",
+    ],
+    include_prefix = "image",
+    strip_include_prefix = "/src/image/cpp",
+    copts = ["-fexceptions"],
+    # Mirror :sipi_lib's system link surface so a target that links :image
+    # standalone (its own cc_tests) resolves exiv2's iconv + curl's macOS
+    # frameworks / libdl + libpthread on Linux.
+    linkopts = select({
+        "@platforms//os:linux": [
+            "-ldl",
+            "-lpthread",
+            # ELF/GNU-ld eager binding (full RELRO); keyed on the TARGET os
+            # (not the host-keyed `build:linux`) so a Linux→darwin cross-compile
+            # doesn't pass `-z` to ld64.lld, which rejects it.
+            "-Wl,-z,now",
+        ],
+        "@platforms//os:macos": [
+            "-liconv",
+            "-framework",
+            "SystemConfiguration",
+            "-framework",
+            "CoreFoundation",
+        ],
+        "//conditions:default": [],
+    }),
+    deps = [
+        "//src:sipi_generated_hdrs",
+        "//src/error",
+        "//src/formats:output_sink",
+        "//src/iiifparser/cpp/value_objects:iiifparser",
+        "//src/logging:logging",
+        "//src/metadata:metadata",
+        "//src/observability:observability",
+        "//src/throttling/cpp:memory_budget",
+        "//src/util",
+        "@lcms2//:lcms2",
+        "@exiv2//:exiv2",
+        "@libexpat",
+        "@tiff//:tiff",
+        "@libpng//:png",
+        "@xz//:lzma",
+        "@libmagic//:lib",
+        "@jansson//:jansson",
+        "@curl",
+        "@openssl//:crypto",
+        "@openssl//:ssl",
+        "@libjpeg_turbo//:jpeg",
+        "@bzip2//:bz2",
+        "@zstd",
+        "@zlib",
+        "@kakadu//:kdu",
+        "@highway//:hwy",
+    ] + select({
+        "@platforms//os:linux": ["//bazel:glibc23_compat"],
+        "//conditions:default": [],
+    }),
+)

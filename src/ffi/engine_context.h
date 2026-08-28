@@ -18,7 +18,7 @@
 #include <cstddef>
 #include <string>
 
-#include "SipiIO.h"// ScalingQuality (value member)
+#include "image/SipiIO.h"// ScalingQuality (value member)
 
 namespace Sipi {
 class SipiCache;

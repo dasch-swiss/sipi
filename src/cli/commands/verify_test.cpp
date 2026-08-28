@@ -28,7 +28,7 @@
 #include <string>
 #include <sys/stat.h>
 
-#include "SipiImage.h"
+#include "image/SipiImage.h"
 #include "cli/commands/convert_service_file.h"
 #include "cli/commands/verify.h"
 #include "metadata/essentials.h"

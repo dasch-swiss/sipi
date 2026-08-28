@@ -14,14 +14,14 @@
 #include <string>
 
 #include "logging/logger.h"
-#include "SipiImage.h"
-#include "SipiImageError.h"
+#include "image/SipiImage.h"
+#include "image/SipiImageError.h"
 #include "iiifparser/SipiRegion.h"
 #include "cli/SipiReport.h"
 #include "iiifparser/SipiSize.h"
 #include "metadata/essentials.h"
 #include "metadata/icc.h"
-#include "populate_from_image.h"
+#include "image/populate_from_image.h"
 
 namespace Sipi::cli {
 

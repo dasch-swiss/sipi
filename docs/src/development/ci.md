@@ -66,7 +66,7 @@ none of them wait on a separate lint gate. Every leg runs:
    instrumentation; unit + approval + e2e in a single Bazel
    invocation).
 2. **Docker smoke tests (Linux only)** — `just bazel-test-smoke`
-   builds `//src:image` as a transitive `data` dep of the
+   builds `//src:sipi_image` as a transitive `data` dep of the
    `:docker_smoke` rust_test, the test loads the OCI tarball into
    the local Docker daemon, and runs the smoke suite against the
    loaded container.

@@ -26,8 +26,8 @@ cc_fuzz_test(
     testonly = True,
     corpus = ["//src/formats/corpus/tiff:seed_corpus"],
     deps = [
-        "//src:engine",
         "//src/formats",
+        "//src/image",
     ],
 )
 
@@ -40,8 +40,8 @@ cc_fuzz_test(
     testonly = True,
     corpus = ["//src/formats/corpus/jpeg:seed_corpus"],
     deps = [
-        "//src:engine",
         "//src/formats",
+        "//src/image",
     ],
 )
 
@@ -54,8 +54,8 @@ cc_fuzz_test(
     testonly = True,
     corpus = ["//src/formats/corpus/png:seed_corpus"],
     deps = [
-        "//src:engine",
         "//src/formats",
+        "//src/image",
     ],
 )
 
@@ -68,7 +68,7 @@ cc_fuzz_test(
     testonly = True,
     corpus = ["//src/formats/corpus/j2k:seed_corpus"],
     deps = [
-        "//src:engine",
         "//src/formats",
+        "//src/image",
     ],
 )

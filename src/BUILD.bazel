@@ -141,114 +141,6 @@ cc_library(
     visibility = ["//src:__subpackages__"],
 )
 
-# ── //src:engine ───────────────────────────────────────────────────────────
-# The transport-free image core: `SipiImage` (decode/encode + pixel ops).
-# Carved out of
-# `:sipi_lib` so the FFI seam (//src/ffi:sipi_ffi) can drive the engine WITHOUT
-# a dependency cycle — `:sipi_lib` deps `:sipi_ffi`, so `:sipi_ffi` cannot reach
-# the engine while it lives inside `:sipi_lib`. The engine depends only on the
-# domain-utility layer (`//src/util`), the IIIF value objects
-# (`//src/iiifparser/cpp/value_objects`), the decode-memory budget
-# (`//src/throttling/cpp:memory_budget`) and
-# the codec-agnostic write sink (`//src/formats:output_sink`), never any HTTP
-# transport. The `rust_binary` links the engine through //src/ffi:sipi_ffi.
-#
-# The serve-time cache (`//src/cache`) is a sibling package, not part of the
-# engine: `SipiCache` has no dependency on `SipiImage`, so it stands on its
-# own leaf alongside the IIIF value objects
-# (`//src/iiifparser/cpp/value_objects`), the decode-memory budget
-# (`//src/throttling/cpp:memory_budget`) and the codec handlers
-# (`//src/formats`). The handlers could not become a package
-# BELOW SipiImage — they read/write it as `friend`s and SipiImage dispatches
-# through the `io` registry, a bidirectional coupling — so //src/formats depends
-# one-way on the engine and defines `SipiImage::io` (format_registry.cpp); the
-# engine references `io` and `Sipi::read_watermark`, resolved at link from
-# //src/formats. The engine therefore does NOT depend on //src/formats:formats.
-cc_library(
-    name = "engine",
-    srcs = [
-        "SipiImage.cpp",
-        "populate_from_image.cpp",
-        "resample.cc",
-    ],
-    hdrs = [
-        # The engine's headers, co-located with their sources (ADR-0003).
-        # The engine owns the image surface, sitting above //src/metadata
-        # (which does not depend on SipiImage).
-        "SipiIO.h",
-        "SipiImage.h",
-        "SipiImageError.h",
-        "populate_from_image.h",
-        "resample.h",
-    ],
-    # `.` (i.e. `src/`) on the include path resolves the engine's own quote-form
-    # headers (`#include "SipiImage.h"`). The `formats/` and `iiifparser/`
-    # headers now live in `//src/formats` and
-    # `//src/iiifparser/cpp/value_objects`, whose `strip_include_prefix` +
-    # `include_prefix = "iiifparser"` resolve the `formats/SipiIOTiff.h` /
-    # `iiifparser/SipiSize.h` forms for the engine's own headers.
-    includes = [
-        ".",
-    ],
-    copts = ["-fexceptions"],
-    # Mirror :sipi_lib's system link surface so a target that links :engine
-    # standalone (its own cc_tests) resolves exiv2's iconv + curl's macOS
-    # frameworks / libdl + libpthread on Linux.
-    linkopts = select({
-        "@platforms//os:linux": [
-            "-ldl",
-            "-lpthread",
-            # ELF/GNU-ld eager binding (full RELRO); keyed on the TARGET os
-            # (not the host-keyed `build:linux`) so a Linux→darwin cross-compile
-            # doesn't pass `-z` to ld64.lld, which rejects it.
-            "-Wl,-z,now",
-        ],
-        "@platforms//os:macos": [
-            "-liconv",
-            "-framework",
-            "SystemConfiguration",
-            "-framework",
-            "CoreFoundation",
-        ],
-        "//conditions:default": [],
-    }),
-    visibility = ["//src:__subpackages__"],
-    # The engine's deps: codecs, metadata, observability, and the domain-utility
-    # layer (//src/util). No HTTP transport, Lua, or SQLite — no engine TU
-    # includes them.
-    deps = [
-        ":sipi_generated_hdrs",
-        "//src/error",
-        "//src/formats:output_sink",
-        "//src/iiifparser/cpp/value_objects:iiifparser",
-        "//src/logging:logging",
-        "//src/metadata:metadata",
-        "//src/observability:observability",
-        "//src/throttling/cpp:memory_budget",
-        "//src/util",
-        "@lcms2//:lcms2",
-        "@exiv2//:exiv2",
-        "@libexpat",
-        "@tiff//:tiff",
-        "@libpng//:png",
-        "@xz//:lzma",
-        "@libmagic//:lib",
-        "@jansson//:jansson",
-        "@curl",
-        "@openssl//:crypto",
-        "@openssl//:ssl",
-        "@libjpeg_turbo//:jpeg",
-        "@bzip2//:bz2",
-        "@zstd",
-        "@zlib",
-        "@kakadu//:kdu",
-        "@highway//:hwy",
-    ] + select({
-        "@platforms//os:linux": ["//bazel:glibc23_compat"],
-        "//conditions:default": [],
-    }),
-)
-
 # ── //src:sipi_lib ─────────────────────────────────────────────────────────
 # Every translation unit except the executable's `main`.
 cc_library(
@@ -259,21 +151,18 @@ cc_library(
             "**/*.h",
         ],
         exclude = [
-            # Owned by `:engine` (the transport-free image engine carved out
-            # so //src/ffi:sipi_ffi can drive it without a cycle). The headers
-            # stay in the glob (harmless; headers aren't compiled) so callers
-            # in this package keep resolving them.
-            "SipiImage.cpp",
-            "populate_from_image.cpp",
             # Google Benchmark microbenchmark sources are `cc_binary`
             # main()-providers, not library TUs. Excluded here so they
             # never enter the production library or the `--instrumentation_filter=//src`
             # coverage build. They are declared as separate manual-tagged
             # `cc_binary` targets below and run only via `just bench`.
-            # (ADR-0003 will extend the same exclude to `**/*_test.cpp`
-            # when unit tests move into `src/`.)
             "**/*_benchmark.cpp",
         ],
+        # Every other translation unit at the `src/` root now lives under a
+        # per-module package (`//src/<mod>`); this root glob matches only
+        # `process_benchmark.cpp` (excluded above), so it would otherwise be
+        # empty.
+        allow_empty = True,
     ),
     includes = ["."],
     copts = ["-fexceptions"],
@@ -316,11 +205,11 @@ cc_library(
         "//conditions:default": [],
     }),
     deps = [
-        ":engine",
         ":sipi_generated_hdrs",
         "//src/error",
         "//src/ffi:sipi_ffi",
         "//src/formats:formats",
+        "//src/image",
         "//src/logging:logging",
         "//src/metadata:metadata",
         "//src/observability:observability",
@@ -779,7 +668,7 @@ tar(
 # `crane index append` to stitch the per-arch digests into a multi-arch
 # manifest (see research-findings §1).
 oci_image(
-    name = "image",
+    name = "sipi_image",
     base = "@distroless_base",
     cmd = [
         "server",
@@ -838,7 +727,7 @@ oci_image(
 )
 
 # ── Image push + load ──────────────────────────────────────────────────────
-# Two ways to consume `:image`:
+# Two ways to consume `:sipi_image`:
 #
 #   - `bazel run //src:image_load` materialises the image as a tarball
 #     and loads it into the local Docker daemon as
@@ -886,7 +775,7 @@ expand_template(
 
 oci_push(
     name = "image_push_amd64",
-    image = ":image",
+    image = ":sipi_image",
     remote_tags = ":remote_tags_amd64",
     repository = "docker.io/daschswiss/sipi",
     target_compatible_with = [
@@ -897,7 +786,7 @@ oci_push(
 
 oci_push(
     name = "image_push_arm64",
-    image = ":image",
+    image = ":sipi_image",
     remote_tags = ":remote_tags_arm64",
     repository = "docker.io/daschswiss/sipi",
     target_compatible_with = [
@@ -911,7 +800,7 @@ oci_push(
 # smoke test's `IMAGE` constant (`daschswiss/sipi:latest`) verbatim.
 oci_load(
     name = "image_load",
-    image = ":image",
+    image = ":sipi_image",
     repo_tags = ["daschswiss/sipi:latest"],
     target_compatible_with = ["@platforms//os:linux"],
 )
