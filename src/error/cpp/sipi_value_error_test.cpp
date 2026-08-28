@@ -123,6 +123,30 @@ TEST(SipiValueErrorTest, ErrnumIsSplicedIntoDiagnosticMessage)
   EXPECT_NE(msg.find(expected_suffix), std::string::npos);
 }
 
+TEST(SipiValueErrorTest, RawMessageIsUnformattedAndUnredacted)
+{
+  const SipiValueError err{ ErrorCode::kDecodeFailed, R"(Cannot read file "/srv/images/sub/foo.jp2": broken)" };
+
+  EXPECT_EQ(err.raw_message(), R"(Cannot read file "/srv/images/sub/foo.jp2": broken)");
+}
+
+TEST(SipiValueErrorTest, ErrnumAccessorReturnsConstructorValue)
+{
+  const int errnum = ENOENT;
+  const SipiValueError err{ ErrorCode::kDecodeFailed, "failed", errnum };
+
+  EXPECT_EQ(err.errnum(), errnum);
+}
+
+TEST(SipiValueErrorTest, LocationReportsConstructionSite)
+{
+  const SipiValueError err{ ErrorCode::kDecodeFailed, "failed" };
+  const auto expected_loc = std::source_location::current();
+
+  EXPECT_STREQ(err.location().file_name(), expected_loc.file_name());
+  EXPECT_EQ(err.location().line(), expected_loc.line() - 1);
+}
+
 TEST(ResultTest, SuccessRoundTrip)
 {
   Result<int> r = 42;
