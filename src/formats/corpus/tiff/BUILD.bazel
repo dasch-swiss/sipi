@@ -1,0 +1,24 @@
+"""Seed corpus for the TIFF codec fuzz harness (DEV-7066).
+
+Two tiers: the glob is where `fuzz-corpus-merge` checks minimized-corpus
+coverage growth in (empty today — libFuzzer writes new inputs here once the
+mutation loop finds coverage this seed set doesn't reach); the
+`//test/_test_data` label supplies the hand-picked seeds — the smallest-valid
+TIFF plus the crafted-malformed fixtures already used by the codec's unit
+tests. Those seed fixtures are Git LFS.
+"""
+
+package(default_visibility = ["//visibility:public"])
+
+# `BUILD.bazel` is excluded so the filegroup is exactly the seed inputs: libFuzzer
+# would otherwise load this file as a seed.
+filegroup(
+    name = "seed_corpus",
+    srcs = glob(
+        ["*"],
+        exclude = ["BUILD.bazel"],
+        allow_empty = True,
+    ) + [
+        "//test/_test_data:fuzz_seeds_tiff",
+    ],
+)
