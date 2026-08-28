@@ -449,11 +449,12 @@ bench name *FLAGS='':
     #!/usr/bin/env bash
     set -euo pipefail
     # The parse tier lives in the carved //src/iiifparser/cpp/value_objects
-    # package and the decode/encode tiers in //src/format_handlers (ADR-0003); the
-    # process tier still sits at //src.
+    # package, the decode/encode tiers in //src/format_handlers, and the
+    # process tier in //src/image_processing (ADR-0003).
     case "{{name}}" in
         parse)         pkg="src/iiifparser/cpp/value_objects" ;;
         decode|encode) pkg="src/format_handlers" ;;
+        process)       pkg="src/image_processing" ;;
         *)             pkg="src" ;;
     esac
     bazel build -c opt //${pkg}:{{name}}_benchmark

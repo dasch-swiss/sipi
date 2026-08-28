@@ -73,6 +73,9 @@ cc_library(
         # (//src/iiifparser/cpp/value_objects) reached transitively. //src/image
         # does NOT depend on this package, so there is no cycle.
         "//src/image",
+        # Free-function geometry operators (crop/scale/rotate/set_topleft)
+        # image_handle.cpp and serve_image.cpp drive over SipiImage.
+        "//src/image_processing",
         # The serve-time cache SipiCache. init.cpp constructs the single
         # instance; serve_image.cpp calls check/add. Independent of
         # //src/image (SipiCache has no dependency on SipiImage).

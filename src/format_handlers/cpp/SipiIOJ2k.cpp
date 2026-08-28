@@ -57,6 +57,7 @@
 
 #include "error/SipiError.h"
 #include "image/SipiImageError.h"
+#include "image_processing/processing.h"
 #include "SipiIOJ2k.h"
 #include "logging/logger.h"
 #include "observability/profiling.h"
@@ -795,20 +796,20 @@ bool SipiIOJ2k::read(SipiImage *img,
     img->nc = numcol;
   }
   if (img->photo == PhotometricInterpretation::YCBCR) {
-    img->convertYCC2RGB();
+    processing::convertYCC2RGB(*img);
     img->photo = PhotometricInterpretation::RGB;
   }
 
   if ((size != nullptr) && (!redonly)) {
     switch (scaling_quality.jk2) {
     case ScalingMethod::HIGH:
-      img->scale(nnx, nny);
+      Sipi::processing::scale(*img, nnx, nny);
       break;
     case ScalingMethod::MEDIUM:
-      img->scaleMedium(nnx, nny);
+      Sipi::processing::scaleMedium(*img, nnx, nny);
       break;
     case ScalingMethod::LOW:
-      img->scaleFast(nnx, nny);
+      Sipi::processing::scaleFast(*img, nnx, nny);
       break;
     }
   }

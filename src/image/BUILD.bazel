@@ -5,10 +5,11 @@
 handlers touch `SipiImage` internals as `friend`s. A Bazel package cannot
 depend on itself, so `//src/format_handlers` depends one-way on this package and
 *defines* `SipiImage::io` in `format_registry.cpp`; this package references
-`io` and `Sipi::read_watermark`, resolved at link time from `//src/format_handlers`.
-`//src/image` therefore does **not** depend on `//src/format_handlers:format_handlers` — it
+`io`, resolved at link time from `//src/format_handlers`. `//src/image`
+therefore does **not** depend on `//src/format_handlers:format_handlers` — it
 does depend on `//src/format_handlers:output_sink`, a dependency-free leaf `SipiIO`'s
-write path returns through.
+write path returns through. (`Sipi::read_watermark` is declared and called
+from `//src/image_processing`, not here — see that package's BUILD docstring.)
 
 No HTTP transport, Lua, or SQLite reaches this package.
 
@@ -27,14 +28,12 @@ cc_library(
     srcs = [
         "cpp/SipiImage.cpp",
         "cpp/populate_from_image.cpp",
-        "cpp/resample.cc",
     ],
     hdrs = [
         "cpp/SipiIO.h",
         "cpp/SipiImage.h",
         "cpp/SipiImageError.h",
         "cpp/populate_from_image.h",
-        "cpp/resample.h",
     ],
     include_prefix = "image",
     strip_include_prefix = "/src/image/cpp",
@@ -86,7 +85,6 @@ cc_library(
         "@zstd",
         "@zlib",
         "@kakadu//:kdu",
-        "@highway//:hwy",
     ] + select({
         "@platforms//os:linux": ["//bazel:glibc23_compat"],
         "//conditions:default": [],

@@ -55,6 +55,8 @@ cc_library(
         "//src/cli/commands:commands",
         # The sipi_cli_main declaration (the extern "C" seam contract).
         "//src/ffi:sipi_ffi",
+        # cli_app.cpp's rotate calls (orientation normalisation, --mirror/--rotate).
+        "//src/image_processing",
         ":sipi_report",
         # cli_app.cpp's `#include <CLI/CLI.hpp>` — the sole CLI11 consumer.
         "@cli11//:cli11",

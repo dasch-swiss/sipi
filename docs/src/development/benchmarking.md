@@ -26,15 +26,14 @@ co-located with the module it measures:
 |------|--------|---------------|
 | `parse` | `src/iiifparser/cpp/value_objects/parse_benchmark.cpp` | The five IIIF URL component parsers + the full per-request parse. Pure CPU, no fixtures. |
 | `decode` | `src/format_handlers/cpp/decode_benchmark.cpp` | `SipiImage::read()` across the input-format matrix (tiled-pyramid TIFF none/zstd/webp, JP2, plain-JPEG and flat-TIFF slow baselines) in two access shapes: full-resolution tile and `!256,256` thumbnail. |
-| `process` | `src/process_benchmark.cpp` | The operators between decode and encode: `scaleFast`/`scaleMedium`/`scale`, `rotate` (90° fast path + 45° general), `crop`, `to8bps`, `convertToIcc`, `removeChannel`. |
+| `process` | `src/image_processing/cpp/process_benchmark.cpp` | The operators between decode and encode: `scaleFast`/`scaleMedium`/`scale`, `rotate` (90° fast path + 45° general), `crop`, `to8bps`, `convertToIcc`, `removeChannel`. |
 | `encode` | `src/format_handlers/cpp/encode_benchmark.cpp` | `SipiImage::write()` for the four formats SIPI emits: JPEG (Q75/Q90), PNG, TIFF, JPEG2000. |
 
 Benchmarks are co-located with the module they measure (ADR-0003 direction:
 `*_benchmark.cpp` beside the source, the Abseil/Bloomberg-BDE/Chromium
-convention). The `parse`/`decode`/`encode` targets have been promoted into their
-modules (`//src/iiifparser/cpp/value_objects`, `//src/format_handlers`); the `process`
-tier still lives in `src/BUILD.bazel` until its module is promoted. A
-`**/*_benchmark.cpp` glob
+convention). The `parse`/`decode`/`encode`/`process` targets have all been
+promoted into their modules (`//src/iiifparser/cpp/value_objects`,
+`//src/format_handlers`, `//src/image_processing`). A `**/*_benchmark.cpp` glob
 exclude on `//src:sipi_lib` keeps the sources out of the production library
 and the coverage build, and `tags = ["manual"]` keeps the targets out of
 `bazel test //...`.

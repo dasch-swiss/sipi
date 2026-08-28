@@ -44,6 +44,7 @@
 #include "image/SipiIO.h"
 #include "image/SipiImage.h"
 #include "image/SipiImageError.h"
+#include "image_processing/processing.h"
 #include "SipiIOTiff.h"
 #include "observability/metrics.h"
 #include "observability/profiling.h"
@@ -1533,17 +1534,17 @@ bool SipiIOTiff::read(SipiImage *img,
       if (rtype != SipiSize::FULL) {
         switch (scaling_quality.jpeg) {
         case ScalingMethod::HIGH:
-          img->scale(nnx, nny);
+          Sipi::processing::scale(*img, nnx, nny);
           break;
         case ScalingMethod::MEDIUM:
-          img->scaleMedium(nnx, nny);
+          Sipi::processing::scaleMedium(*img, nnx, nny);
           break;
         case ScalingMethod::LOW:
-          img->scaleFast(nnx, nny);
+          Sipi::processing::scaleFast(*img, nnx, nny);
         }
       }
     }
-    if (force_bps_8) { img->to8bps(); }
+    if (force_bps_8) { processing::to8bps(*img); }
     return true;
   }
   return false;

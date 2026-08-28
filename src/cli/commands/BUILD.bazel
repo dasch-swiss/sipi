@@ -42,6 +42,8 @@ cc_library(
         "//src:sipi_lib",
         # convert_access_file.cpp's JSON report emitter.
         "//src/cli:sipi_report",
+        # convert_access_file.cpp / convert_service_file.cpp's rotate calls.
+        "//src/image_processing",
     ],
 )
 

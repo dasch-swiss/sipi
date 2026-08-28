@@ -41,6 +41,7 @@
 
 #include "image/SipiImage.h"
 #include "image/SipiImageError.h"
+#include "image_processing/processing.h"
 #include "iiifparser/SipiRegion.h"
 #include "iiifparser/SipiSize.h"
 #include "test_paths.h"
@@ -95,7 +96,7 @@ void encode(const std::string &in_path,
 {
   Sipi::SipiImage img;
   img.read(in_path, region, size);
-  if (rotation != 0.0f || mirror) img.rotate(rotation, mirror);
+  if (rotation != 0.0f || mirror) Sipi::processing::rotate(img, rotation, mirror);
   img.write(format, out_path);
 }
 

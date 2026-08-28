@@ -25,7 +25,7 @@
   (HWY_AVX10_2 | HWY_AVX3_SPR | HWY_AVX3_ZEN4 | HWY_AVX3_DL | HWY_AVX3)
 
 #undef HWY_TARGET_INCLUDE
-#define HWY_TARGET_INCLUDE "src/image/cpp/resample.cc"
+#define HWY_TARGET_INCLUDE "src/image_processing/cpp/resample.cc"
 #include "hwy/foreach_target.h"// IWYU pragma: keep
 
 #include "hwy/highway.h"

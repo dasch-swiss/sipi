@@ -2,7 +2,7 @@
  * Copyright © 2016 - 2026 Swiss National Data and Service Center for the Humanities and/or DaSCH Service Platform
  * contributors. SPDX-License-Identifier: AGPL-3.0-or-later
  *
- * Regression test — `SipiImage::operator==` compares the pixel buffers of
+ * Regression test — `Sipi::operator==` compares the pixel buffers of
  * both operands in every bits-per-sample arm.
  *
  * Before the fix the 16 bps arm aliased both comparison pointers to the
@@ -14,6 +14,7 @@
 #include <gtest/gtest.h>
 
 #include "image/SipiImage.h"
+#include "image_processing/processing.h"
 
 namespace {
 

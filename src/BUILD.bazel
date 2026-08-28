@@ -158,10 +158,10 @@ cc_library(
             # `cc_binary` targets below and run only via `just bench`.
             "**/*_benchmark.cpp",
         ],
-        # Every other translation unit at the `src/` root now lives under a
-        # per-module package (`//src/<mod>`); this root glob matches only
-        # `process_benchmark.cpp` (excluded above), so it would otherwise be
-        # empty.
+        # Every translation unit that used to live at the `src/` root now
+        # lives under a per-module package (`//src/<mod>`); this root glob
+        # matches nothing (the `src/` root holds only this BUILD file and
+        # `nsswitch.conf`).
         allow_empty = True,
     ),
     includes = ["."],
@@ -262,30 +262,9 @@ cc_library(
 # module at `//src/iiifparser/cpp/value_objects:parse_benchmark` (per ADR-0003),
 # moved with the iiifparser carve.
 
-# Process tier — the image-processing operators between decode and encode
-# (scale/rotate/crop/to8bps/convertToIcc/removeChannel). Uses existing small
-# repo fixtures via the `//test/_test_data:images` filegroup — not blocked on
-# the benchmark fixture archive. The `env` applies under `bazel run`; `just
-# bench` exports the same variables when exec'ing the binary directly
-# (SOURCE_DATE_EPOCH pins the wall-clock-stamped ICC creation date on the
-# convertToIcc path per ADR-0002; SIPI_WORKSPACE_ROOT resolves fixtures via
-# //test:test_paths).
-cc_binary(
-    name = "process_benchmark",
-    srcs = ["process_benchmark.cpp"],
-    data = ["//test/_test_data:images"],
-    env = {
-        "SIPI_WORKSPACE_ROOT": ".",
-        "SOURCE_DATE_EPOCH": "946684800",
-    },
-    tags = ["manual"],
-    testonly = True,
-    deps = [
-        ":sipi_lib",
-        "//test:test_paths",
-        "@google_benchmark//:benchmark_main",
-    ],
-)
+# Process tier — now co-located with the module at
+# `//src/image_processing:process_benchmark` (per ADR-0003), moved with the
+# image_processing carve.
 
 # Decode + encode tiers — now co-located with the module at
 # `//src/format_handlers:{decode,encode}_benchmark` (per ADR-0003), moved with the

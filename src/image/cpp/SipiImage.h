@@ -12,6 +12,7 @@
 #ifndef _sipi_image_h
 #define _sipi_image_h
 
+#include <span>
 #include <string>
 // #include <unordered_map>
 
@@ -29,12 +30,6 @@
  * \namespace Sipi Is used for all Sipi things.
  */
 namespace Sipi {
-
-// Reads a watermark TIFF into a grayscale byte buffer. `SipiImage::add_watermark`
-// (engine) calls this; the definition lives in //src/format_handlers (SipiIOTiff.cpp,
-// which uses libtiff) and is resolved at link — the engine does not include the
-// format_handlers headers, keeping the SipiImage<->handler cycle broken.
-std::vector<unsigned char> read_watermark(const std::string &wmfile, int &nx, int &ny, int &nc);
 
 // Used for 8 bits per sample (color channel) images
 using byte = unsigned char;
@@ -95,8 +90,6 @@ class SipiImage
 {
   static std::unordered_map<std::string, std::shared_ptr<SipiIO>>
     io;//!< member variable holding a map of I/O class instances for the different file formats
-  static byte bilinn(byte buf[], int nx, int ny, double x, double y, int c, int n);
-  static word bilinn(word buf[], int nx, int ny, double x, double y, int c, int n);
   void ensure_exif();
 
 protected:
@@ -314,6 +307,70 @@ public:
   [[nodiscard]] Essentials essential_metadata() const { return emdata; }
 
   /*!
+   * Replace the pixel buffer and its geometry atomically. This is the only
+   * path that changes the buffer's size: it validates
+   * `buf.size() == nx_p * ny_p * nc_p * (bps_p / 8)` before accepting the
+   * buffer, instead of trusting every call site to keep buffer and geometry
+   * in sync.
+   *
+   * \param[in] buf New pixel buffer, moved in on success
+   * \param[in] nx_p New width
+   * \param[in] ny_p New height
+   * \param[in] nc_p New channel count
+   * \param[in] bps_p New bits per sample (8 or 16)
+   * \throws SipiImageError if buf's size does not match the given geometry
+   */
+  void set_pixels(std::vector<byte> &&buf, size_t nx_p, size_t ny_p, size_t nc_p, size_t bps_p);
+
+  /*!
+   * Mutable view over the pixel buffer at its current size. A `span`
+   * (unlike a `std::vector<byte>&`) cannot resize, clear, or reassign the
+   * underlying buffer, so it cannot desynchronize it from
+   * `nx`/`ny`/`nc`/`bps` — only `set_pixels()` changes size.
+   */
+  [[nodiscard]] std::span<byte> pixels_writable() { return std::span<byte>(pixels); }
+
+  /*!
+   * Read-only view over the pixel buffer at its current size.
+   */
+  [[nodiscard]] std::span<const byte> pixels_view() const { return std::span<const byte>(pixels); }
+
+  /*!
+   * Getter for the extra-samples (channel-meaning) vector.
+   */
+  [[nodiscard]] const std::vector<ExtraSamples> &getEs() const { return es; }
+
+  /*!
+   * Setter for the extra-samples (channel-meaning) vector. Kept independent
+   * of `set_pixels()` since a channel add/remove changes `es` alongside,
+   * but not in lockstep with, the buffer geometry `set_pixels()` tracks.
+   */
+  void setEs(std::vector<ExtraSamples> es_p) { es = std::move(es_p); }
+
+  /*!
+   * Setter for the photometric interpretation. Kept independent of
+   * `set_pixels()` for the same reason as `setEs()`.
+   */
+  void setPhoto(PhotometricInterpretation photo_p) { photo = photo_p; }
+
+  /*!
+   * Setter for the ICC color profile, mirroring `essential_metadata()`'s
+   * getter/setter shape.
+   */
+  void set_icc(std::shared_ptr<Icc> icc_p) { icc = std::move(icc_p); }
+
+  /*!
+   * Returns the image's Exif metadata, lazily allocating an empty `Exif`
+   * instance first if none exists yet. Absorbs `ensure_exif()`'s
+   * lazy-initialisation so callers never need the private method.
+   */
+  [[nodiscard]] std::shared_ptr<Exif> exif_writable()
+  {
+    ensure_exif();
+    return exif;
+  }
+
+  /*!
    * Hash the current pixel buffer with the requested digest algorithm and
    * return the raw digest bytes (NOT hex). Used by the `convert service-file`
    * command (DEV-6540) to
@@ -420,187 +477,6 @@ public:
    */
   void write(const std::string &ftype, const std::string &filepath, const SipiCompressionParams *params = nullptr);
 
-
-  /*!
-   * Convert full range YCbCr (YCC) to RGB colors
-   */
-  void convertYCC2RGB();
-
-
-  /*!
-   * Converts the image representation
-   *
-   * \param[in] target_icc_p ICC profile which determines the new image representation
-   * \param[in] bps Bits/sample of the new image representation
-   */
-  void convertToIcc(const Icc &target_icc_p, int bps);
-
-
-  /*!
-   * Remove extra samples from the image. Some output formats support only 3 channels (e.g., JPEG)
-   * so we need to remove the alpha channel. If we are dealing with a CMYK image, we need to take
-   * this into account as well.
-   */
-  void removeExtraSamples(const bool force_gray_alpha = false)
-  {
-    const size_t content_channels = (photo == PhotometricInterpretation::SEPARATED ? 4 : 3);
-    const size_t extra_channels = es.size();
-    for (size_t i = content_channels; i < (extra_channels + content_channels); i++) {
-      removeChannel(i, force_gray_alpha);
-    }
-  }
-
-
-  /*!
-   * Removes a channel from a multi component image
-   *
-   * \param[in] channel Index of component to remove, starting with 0
-   * \param[in] force_gray_alpha If true,  based on the alpha channel that is removed, a gray value is applied
-   * to the remaining channels. This is useful for image formats that don't support alpha channel and where the
-   * main content is black, so it is better separated from the background (as the default would be black).
-   */
-  void removeChannel(unsigned int channel, bool force_gray_alpha = false);
-
-  /*!
-   * Crops an image to a region
-   *
-   * \param[in] x Horizontal start position of region. If negative, it's set to 0, and the width is adjusted
-   * \param[in] y Vertical start position of region. If negative, it's set to 0, and the height is adjusted
-   * \param[in] width Width of the region. If the region goes beyond the image dimensions, it's adjusted.
-   * \param[in] height Height of the region. If the region goes beyond the image dimensions, it's adjusted
-   */
-  bool crop(int x, int y, size_t width = 0, size_t height = 0);
-
-  /*!
-   * Crops an image to a region
-   *
-   * \param[in] Pointer to SipiRegion
-   * \param[in] ny Vertical start position of region. If negative, it's set to 0, and the height is adjusted
-   * \param[in] width Width of the region. If the region goes beyond the image dimensions, it's adjusted.
-   * \param[in] height Height of the region. If the region goes beyond the image dimensions, it's adjusted
-   */
-  bool crop(const std::shared_ptr<SipiRegion> &region);
-
-  /*!
-   * Resize an image using a high speed algorithm which may result in poor image quality
-   *
-   * \param[in] nnx New horizontal dimension (width)
-   * \param[in] nny New vertical dimension (height)
-   */
-  bool scaleFast(size_t nnx, size_t nny);
-
-  /*!
-   * Resize an image using some balance between speed and quality
-   *
-   * \param[in] nnx New horizontal dimension (width)
-   * \param[in] nny New vertical dimension (height)
-   */
-  bool scaleMedium(size_t nnx, size_t nny);
-
-  /*!
-   * Resize an image using the best (but slow) algorithm
-   *
-   * \param[in] nnx New horizontal dimension (width)
-   * \param[in] nny New vertical dimension (height)
-   */
-  bool scale(size_t nnx = 0, size_t nny = 0);
-
-
-  /*!
-   * Rotate an image
-   *
-   * The angles 0, 90, 180, 270 are treated specially!
-   *
-   * \param[in] angle Rotation angle
-   * \param[in] mirror If true, mirror the image before rotation
-   */
-  bool rotate(float angle, bool mirror = false);
-
-  /*!
-   * Rotate the image if necessare so that ot has TOPLEFT orientation
-   *
-   * @return Returns true on success, false on error
-   */
-  bool set_topleft();
-
-  /*!
-   * Convert an image from 16 to 8 bit. The algorithm just divides all pixel values
-   * by 256 using the ">> 8" operator (fast & efficient)
-   */
-  void to8bps();
-
-  /*!
-   * Convert an image to a bitonal representation using Steinberg-Floyd dithering.
-   *
-   * The method does nothing if the image is already bitonal. Otherwise, the image is converted
-   * into a gray value image if necessary and then a FLoyd-Steinberg dithering is applied.
-   */
-  void toBitonal();
-
-  /*!
-   * Conclude similarity of two SipiImages, used in tests. Only tested with small differences.
-   *
-   * \returns Returns similarity index, returns in [0..1]
-   */
-  std::optional<double> compare(const SipiImage &rhs) const;
-
-  /*!
-   * Computes the per-channel absolute pixel-difference statistics against
-   * another image. Unlike `operator-=` (which rescales the signed diff into
-   * a displayable visualization), this reads the raw samples and reports the
-   * true mean and maximum |Δ| plus the location of the maximum. Used by
-   * `sipi compare` as the codec-rebaseline tolerance metric.
-   *
-   * \param[in] rhs image to compare against
-   * \returns the difference statistics, or nullopt if the images are not
-   *          comparable (differing dimensions, channels, bit depth, or photometric interpretation)
-   */
-  [[nodiscard]] std::optional<PixelDelta> maxPixelDelta(const SipiImage &rhs) const;
-
-  /*!
-   * Add a watermark to a file...
-   *
-   * \param[in] wmfilename Path to watermarkfile (which must be a TIFF file at the moment)
-   */
-  void add_watermark(const std::string &wmfilename);
-
-  /*!
-   * Calculates the difference between 2 images.
-   *
-   * The difference between 2 images can contain (and usually will) negative values.
-   * In order to create a standard image, the values at "0" will be lifted to 127 (8-bit images)
-   * or 32767. The span will be defined by max(minimum, maximum), where minimum and maximum are
-   * absolute values. Thus a new pixelvalue will be calculated as follows:
-   * ```
-   * int maxmax = abs(min) > abs(max) ? abs(min) : abs(min);
-   * newval = (byte) ((oldval + maxmax)*UCHAR_MAX/(2*maxmax));
-   * ```
-   * \param[in] rhs right hand side of "-="
-   */
-  SipiImage &operator-=(const SipiImage &rhs);
-
-  /*!
-   * Calculates the difference between 2 images.
-   *
-   * The difference between 2 images can contain (and usually will) negative values.
-   * In order to create a standard image, the values at "0" will be lifted to 127 (8-bit images)
-   * or 32767. The span will be defined by max(minimum, maximum), where minimum and maximum are
-   * absolute values. Thus a new pixelvalue will be calculated as follows:
-   * ```
-   * int maxmax = abs(min) > abs(max) ? abs(min) : abs(min);
-   * newval = (byte) ((oldval + maxmax)*UCHAR_MAX/(2*maxmax));
-   * ```
-   *
-   * \param[in] lhs left-hand side of "-" operator
-   * \param[in] rhs right hand side of "-" operator
-   */
-  SipiImage operator-(const SipiImage &rhs) const;
-
-  SipiImage &operator+=(const SipiImage &rhs);
-
-  SipiImage operator+(const SipiImage &rhs) const;
-
-  bool operator==(const SipiImage &rhs) const;
 
   /*!
    * The overloaded << operator which is used to write the error message to the output
