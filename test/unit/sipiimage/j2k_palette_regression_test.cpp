@@ -19,21 +19,41 @@
  * geometry the expansion loop can't handle (non-8-bit indices, more than
  * one index component, a color count other than 3, or a palette too small
  * to cover every possible index value) before the expansion buffer is ever
- * sized or written. Exercising it directly (rather than through a decoded
- * JP2) avoids depending on a Kakadu-encoded palette fixture, which SIPI's
- * own J2K writer does not produce and which requires license-gated Kakadu
- * tooling to construct externally.
+ * sized or written.
+ *
+ * Coverage is two-layered:
+ *   1. Direct calls to validate_j2k_palette_mapping() below pin every
+ *      rejection branch precisely and cheaply.
+ *   2. Two on-disk fixtures drive the whole SipiIOJ2k::read() decode path:
+ *      - a well-formed palette JP2 (file9.jp2 from the ISO/IEC 15444-4
+ *        conformance suite: NC=1 8-bit index, pclr with 256 entries and
+ *        3 RGB columns, cmap mapping the single component to those 3
+ *        colours) must decode and expand to a 3-channel RGB image;
+ *      - a malformed variant of it (pclr NE shrunk from 256 to 128, so an
+ *        8-bit index can point past the LUT) must be rejected by the guard
+ *        that read() calls with the file-derived geometry — proving the
+ *        wiring, not just the predicate. SIPI's own J2K writer produces no
+ *        palette JP2 (it decodes palette->RGB and has no palette-encode
+ *        path), so the malformed file is hand-edited from file9.jp2; see
+ *        test/_test_data/images/malformed/README.md.
  */
 
 #include <gtest/gtest.h>
 
-#include "formats/SipiIOJ2k.h"
+#include "SipiImage.h"
 #include "SipiImageError.h"
+#include "formats/SipiIOJ2k.h"
+#include "test_paths.h"
 
 namespace {
 
+using Sipi::PhotometricInterpretation;
+using Sipi::SipiImage;
 using Sipi::SipiImageError;
 using Sipi::validate_j2k_palette_mapping;
+
+const std::string kPaletteJp2 = sipi::test::data_dir() + "/images/iso-15444-4/testfiles_jp2/file9.jp2";
+const std::string kUndersizedPaletteJp2 = sipi::test::data_dir() + "/images/malformed/palette_undersized_lut.jp2";
 
 constexpr int kValidNumcol = 3;
 constexpr int kValidNentries = 256;// covers every 8-bit index value
@@ -72,6 +92,33 @@ TEST(J2kPaletteRegression, RejectsUndersizedPalette)
   // entries leaves some index values pointing past the LUT (DEV-6065).
   EXPECT_THROW(validate_j2k_palette_mapping(8, 1, kValidNumcol, 255, "palette.jp2"), SipiImageError);
   EXPECT_THROW(validate_j2k_palette_mapping(8, 1, kValidNumcol, 0, "palette.jp2"), SipiImageError);
+}
+
+// End-to-end: a well-formed palette JP2 decodes and the single 8-bit index
+// component is expanded through the R/G/B LUTs into a 3-channel RGB image at
+// the source geometry. Post-fix, the stride-3 expansion buffer matches the
+// numcol == 3 the file declares, so no write runs past its end.
+TEST(J2kPaletteRegression, DecodesWellFormedPaletteJp2EndToEnd)
+{
+  SipiImage img;
+  ASSERT_NO_THROW(img.read(kPaletteJp2));
+
+  EXPECT_EQ(img.getNx(), 768u);
+  EXPECT_EQ(img.getNy(), 512u);
+  EXPECT_EQ(img.getNc(), 3u);// NC=1 index expanded to R,G,B via the palette
+  EXPECT_EQ(img.getBps(), 8u);
+  EXPECT_EQ(img.getPhoto(), PhotometricInterpretation::RGB);
+}
+
+// End-to-end: the malformed variant carries an 8-bit index but only 128
+// palette entries, so index values 128..255 would read past the LUT. read()
+// must reject it via validate_j2k_palette_mapping() before sizing or writing
+// the expansion buffer — Kakadu parses the box structure fine, so the guard
+// (not Kakadu) is what fails it closed.
+TEST(J2kPaletteRegression, RejectsUndersizedPaletteJp2EndToEnd)
+{
+  SipiImage img;
+  EXPECT_THROW(img.read(kUndersizedPaletteJp2), SipiImageError);
 }
 
 }// namespace
