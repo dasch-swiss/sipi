@@ -1,11 +1,11 @@
 """src/iiifparser/rust — the production Rust IIIF URL parser (`iiif_parser`).
 
-Carved out of `//src/server-rs:lib` (ADR-0021) into a standalone, FFI-free
+Carved out of `//src/server/rust:lib` (ADR-0021) into a standalone, FFI-free
 `rust_library` that emits its own domain types (`RegionKind`/`SizeKind`/
 `QualityKind`/`FormatKind`, `IiifParams` with idiomatic `bool` flags). It
 depends only on `@crates//:percent-encoding` — no `//src/ffi:sipi_ffi`, no C++
 engine link, no `_CPP_STDLIB_LINK` bracket — so it builds pure-CPU and
-participates in the sanitizer leg without a `no-sanitizer` tag. `server-rs` owns
+participates in the sanitizer leg without a `no-sanitizer` tag. `server/rust` owns
 the `From<iiif_parser::IiifParams> for SipiIiifParams` flattening at the seam.
 
 Split into internal modules (`domain`/`parse`/`request`) with `#[cfg(test)]`

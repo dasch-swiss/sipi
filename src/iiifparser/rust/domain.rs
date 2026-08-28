@@ -7,7 +7,7 @@
 //! classifier rejects those forms — the constructors mirror the C++ value
 //! objects (`//src/iiifparser/cpp/value_objects`) branch-for-branch. Consumers
 //! own the mapping from these types into their own representation: the FFI seam
-//! flattening lives in `server-rs` (`src/server-rs/src/ffi.rs`, the
+//! flattening lives in `server/rust` (`src/server/rust/src/ffi.rs`, the
 //! `From<IiifParams> for SipiIiifParams` impls), so adding a variant to any enum
 //! here requires updating those exhaustive matches too (a new variant fails to
 //! compile until it is mapped).

@@ -9,7 +9,7 @@ For reviewer guidelines, see `docs/src/development/reviewer-guidelines.md`.
 
 ## Production surface
 
-The **Rust axum shell** (`src/server-rs` + `src/cli-rs`) is the sole production server. It drives the C++ **image engine** (`libsipi`, the FFI callee) over the seam in `src/server-rs/src/ffi.rs`. There is no C++ server: the `shttps` transport and `SipiHttpServer` were removed with the oracle ([ADR-0020](docs/adr/0020-oracle-removal.md)). `src/cli` is production too: `sipi_cli_main` and the offline verbs (`convert`/`verify`/`query`/`compare`/`health`) the Rust CLI shell drives.
+The **Rust axum shell** (`src/server/rust` + `src/cli/rust`) is the sole production server. It drives the C++ **image engine** (`libsipi`, the FFI callee) over the seam in `src/server/rust/src/ffi.rs`. There is no C++ server: the `shttps` transport and `SipiHttpServer` were removed with the oracle ([ADR-0020](docs/adr/0020-oracle-removal.md)). `src/cli/cpp` is production too: `sipi_cli_main` and the offline verbs (`convert`/`verify`/`query`/`compare`/`health`) the Rust CLI shell drives.
 
 Consequences for production code:
 
@@ -21,7 +21,7 @@ Consequences for production code:
 - C++23, Clang 15+ / GCC 13+
 - Build orchestrator: Bazel (single source of truth for CI; reproducible action graph)
 - Reproducible dev environment: Nix dev shells (`flake.nix` `devShells` only — no Nix-side build derivations)
-- HTTP framework: Rust axum shell (`src/server-rs`, `src/cli-rs`) — the production server (see "Production surface")
+- HTTP framework: Rust axum shell (`src/server/rust`, `src/cli/rust`) — the production server (see "Production surface")
 - Image formats: libtiff, libpng, libjpeg, libwebp, Kakadu (JPEG 2000)
 - Scripting: Lua (routes, preflight checks, image manipulation)
 
@@ -99,7 +99,7 @@ to per-module co-located directories is tracked by
 
 Scope a commit by the responsibility it serves, not the directory the edited
 files happen to sit in. A metrics or tracing change is `observability` even
-when the code lives under `src/server-rs/` or rides the `ffi` seam; a change
+when the code lives under `src/server/rust/` or rides the `ffi` seam; a change
 is scoped `ffi` only when the seam mechanism itself is the point.
 
 | Module (scope) | Path | Responsibility |
@@ -113,21 +113,20 @@ is scoped `ffi` only when the seam mechanism itself is the point.
 | `error` | `src/error/` | The `SipiError` exception base shared by the codec, metadata, and IIIF-parser packages |
 | `cache` | `src/cache/` | File-based LRU cache with dual-limit eviction |
 | `throttling` | `src/throttling/` (colocated polyglot, ADR-0021/0022): `cpp/` (engine-side `memory_budget` — the full-lane decode budget) + `rust/` (shell-side `admission` — the two-lane pool) | Load-driven request-rejection: two-lane admission (tile floor + full hard cap) and the full-lane memory budget |
-| `memory` | `bazel/mimalloc.BUILD.bazel`, `_ALLOCATOR` in `src/cli-rs/BUILD.bazel`, `tools/allocator-replay/` | Process memory behavior: the production allocator, RSS/retention measurement |
+| `memory` | `bazel/mimalloc.BUILD.bazel`, `_ALLOCATOR` in `src/cli/rust/BUILD.bazel`, `tools/allocator-replay/` | Process memory behavior: the production allocator, RSS/retention measurement |
 | `observability` | `src/observability/` | Metrics (atomic counters/gauges), tracing |
 | `logging` | `src/logging/` | Structured logging |
-| `cli` | `src/cli/` | C++ CLI app (offline verbs) behind the `sipi_cli_main` FFI entry |
+| `cli` | `src/cli/` (colocated polyglot, ADR-0021): `cpp/` (the offline verbs behind the `sipi_cli_main` FFI entry) + `rust/` (the default `sipi` binary, the production entry point) | C++ CLI app + the Rust CLI binary |
 | `ffi` | `src/ffi/` | Rust↔C++ FFI seam (incl. the `sipi_image_*` handle family) |
 | `lua` | `scripts/`, `config/*.lua` | Lua route/preflight scripts and config |
-| `server-rs` | `src/server-rs/` | Rust server shell — the production server |
-| `cli-rs` | `src/cli-rs/` | Rust CLI shell |
+| `server` | `src/server/rust/` | Rust server shell — the production server |
 
-All server work lands under `server-rs`; there is no C++ server (the `shttps`
+All server work lands under `server`; there is no C++ server (the `shttps`
 transport and `SipiHttpServer` were removed with the oracle,
 [ADR-0020](docs/adr/0020-oracle-removal.md)).
 
 **FFI direction.** The seam is Rust-calls-C++ everywhere that ships: `src/ffi/`
-and `src/server-rs/src/ffi.rs`. The one **C++-calls-Rust** link is
+and `src/server/rust/src/ffi.rs`. The one **C++-calls-Rust** link is
 `//src/iiifparser/fuzz` (`shim.rs` → `fuzz_target.cc`), which exists because
 libFuzzer's entry point is a C symbol and `rules_fuzzing` is a C++ rule set.
 Its confinement is analysis-enforced, not documented: both targets are `testonly`
@@ -181,10 +180,7 @@ subpackage, e.g.
 (`#include "Foo.h"`). A package that hasn't split by language has no
 extra physical depth to correct for and needs only the plain
 `strip_include_prefix = "/src"` form, self-sufficient without any
-`include_prefix` twinning — `src/util/` and
-`src/ffi/` set exactly that. `src/metadata/` sets neither attribute,
-the weaker fallback: cross-module consumers resolve `#include
-"metadata/icc.h"` through the consumer's own `includes = ["."]`.
+`include_prefix` twinning.
 
 Until ADR-0003 is accepted and a module is migrated, follow the
 historical layout for that module — the language-subfolder split
@@ -195,13 +191,13 @@ per-module diff shape.
 ## Route Registration
 
 Built-in routes are registered on the axum `Router` in the Rust shell
-(`src/server-rs/src/routes.rs`). Scripted routes are Lua scripts bound to URL
+(`src/server/rust/src/routes.rs`). Scripted routes are Lua scripts bound to URL
 patterns in the config ([ADR-0017](docs/adr/0017-extensibility-lua-and-rust.md)):
 a `Route handler` is a Lua script the shell dispatches to, run inside a
 request-scoped hardened VM of the Rust mlua runtime (`src/scripting/rust/`). IIIF requests are classified by the
 standalone `//src/iiifparser/rust:iiif_parser` crate (`parse_request`), which
 owns region/size/rotation/quality/format parsing and emits domain types;
-`server-rs` flattens those into the FFI params that cross the seam to the C++
+`server` flattens those into the FFI params that cross the seam to the C++
 engine.
 
 ## HTTP Status Codes
@@ -227,22 +223,22 @@ links **fail to compile** if you forget them (DUNE-006), except the last C++
 apply block, which is the one hand-mirrored seam.
 
 Rust production side:
-1. **clap flag** — a field in the right `src/cli-rs/src/commands/server/args/<group>.rs`
+1. **clap flag** — a field in the right `src/cli/rust/src/commands/server/args/<group>.rs`
    group (network/paths/cache/limits/tls_auth/knora/logging/concurrency), with a
    colocated `env = "SIPI_X"` (clap owns CLI-over-env precedence).
-2. **`ServerOverrides` field** — `src/server-rs/src/config.rs` (the Rust-native bag).
+2. **`ServerOverrides` field** — `src/server/rust/src/config.rs` (the Rust-native bag).
 3. **forward from clap** — `From<&ServerArgs> for ServerOverrides`
-   (`src/cli-rs/src/commands/server/mod.rs`). *Exhaustively destructures every
+   (`src/cli/rust/src/commands/server/mod.rs`). *Exhaustively destructures every
    clap group → a new flag that is not forwarded (or explicitly `field: _`) fails
    to compile.*
 4. **TOML base** — a `Config` field + its `Config::base()` mapping
-   (`src/server-rs/src/config_file.rs`). *Exhaustive `ServerOverrides` literal →
+   (`src/server/rust/src/config_file.rs`). *Exhaustive `ServerOverrides` literal →
    a missing map fails to compile.*
 5. **merge** — `ServerOverrides::layered_over` (`config.rs`). *Exhaustive literal.*
 
 FFI seam:
 6. **`SipiServerConfig` struct** — a field (plus a `has_*` presence flag for a
-   scalar) in `src/ffi/sipi_ffi.h`, mirrored by the Rust `#[repr(C)]
+   scalar) in `src/ffi/cpp/sipi_ffi.h`, mirrored by the Rust `#[repr(C)]
    SipiServerConfig` in `config.rs`. Both sides are layout-guarded by the paired
    `static_assert`/`offset_of!` blocks (a drift fails the build/tests).
 7. **forward to the FFI struct** — `OverridesHolder::new` (`config.rs`).
@@ -250,11 +246,11 @@ FFI seam:
    struct fails to compile (unused binding under `-D warnings`).*
 
 C++ engine:
-8. **`src/ffi/SipiConf.h` + `src/ffi/SipiConf.cpp`** — the getter/setter and the Lua
+8. **`src/ffi/cpp/SipiConf.h` + `src/ffi/cpp/SipiConf.cpp`** — the getter/setter and the Lua
    `config.*` table read (the engine's own config surface).
 9. **`config/sipi.config.lua`** — document the option.
 10. **THE ONE UNMECHANIZED LINK — the `sipi_init` apply block**
-    (`src/ffi/init.cpp`): a hand-written `if (o.newfield != nullptr)
+    (`src/ffi/cpp/init.cpp`): a hand-written `if (o.newfield != nullptr)
     conf.setNewfield(...)` per override. **Nothing checks this for
     completeness** — a forgotten line compiles clean and silently drops the
     override before the engine sees it. Always add the apply line here when you
@@ -285,11 +281,11 @@ C++ engine:
 ## Metrics
 
 Engine-internal singleton at `Sipi::observability::Metrics::instance()`
-(`src/observability/metrics.h`) — plain lock-free atomics (`Counter` / `Gauge`).
+(`src/observability/cpp/metrics.h`) — plain lock-free atomics (`Counter` / `Gauge`).
 The engine bumps them on the decode/cache/serve paths. Production exports over OTLP:
 the scalar counters and gauges cross the seam as the flat `SipiMetricsSnapshot`
-(`src/ffi/sipi_ffi.cpp`) and are re-registered as OTel observable instruments in
-`src/server-rs/src/metrics.rs`. **A new counter or gauge here does not reach
+(`src/ffi/cpp/sipi_ffi.cpp`) and are re-registered as OTel observable instruments in
+`src/server/rust/src/metrics.rs`. **A new counter or gauge here does not reach
 production until it is added to that snapshot and that module.** Distributions
 cannot cross the flat snapshot at all; record them as OTel histograms shell-side
 (see `record_http_duration` and `record_decode_estimate`).
@@ -299,7 +295,7 @@ at it fails silently — it simply never appears in Grafana:
 
 - `//src/observability:metrics_registry_test` classifies every metric field as
   bridged-to-OTLP or engine-internal. Adding a field fails it until you say which.
-- `every_snapshot_field_is_accounted_for` in `src/server-rs/src/metrics.rs` fails
+- `every_snapshot_field_is_accounted_for` in `src/server/rust/src/metrics.rs` fails
   unless each snapshot field is exported or explicitly listed as unexported.
 
 **Engine-internal (not bridged)** — incremented in production, observable by
@@ -322,4 +318,4 @@ Sipi::observability::Metrics::instance().my_counter_total.Increment();
 ```
 
 To reach production OTLP, also read the field into `SipiMetricsSnapshot`
-(`src/ffi/sipi_ffi.cpp`) and map it in `src/server-rs/src/metrics.rs`.
+(`src/ffi/cpp/sipi_ffi.cpp`) and map it in `src/server/rust/src/metrics.rs`.

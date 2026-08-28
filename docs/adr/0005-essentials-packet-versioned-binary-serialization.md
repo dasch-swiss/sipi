@@ -21,7 +21,7 @@ CBOR-jsoncons, tinycbor, and a custom in-tree binary codec were all considered a
 
 (Earlier drafts of this ADR are preserved in the repository's git history; see commits prior to the [DEV-6537](https://linear.app/dasch/issue/DEV-6537) joint-implementation merge for the v1/v2 CBOR-flavoured framing.)
 
-## Schema (`src/metadata/essentials.proto`)
+## Schema (`src/metadata/cpp/essentials.proto`)
 
 ```protobuf
 syntax = "proto3";
@@ -132,7 +132,7 @@ Per [ADR-0009](./0009-file-taxonomy.md) and the [DEV-6537](https://linear.app/da
 
 - **`Essentials::serialize() → std::vector<std::byte>`** is the only emitter (the Contract step dropped the `std::string`-returning overload). The on-disk artefact is *bytes*; the existing API's typing was a mistake corrected by the rewrite.
 
-- **New build dep**: protobuf + rules_proto, both via BCR. No `rules_foreign_cc` integration, no host-environment configuration. `cc_proto_library` consumed only by `src/metadata/internal/protobuf_codec.cpp` so the `.pb.h` header doesn't leak into client code.
+- **New build dep**: protobuf + rules_proto, both via BCR. No `rules_foreign_cc` integration, no host-environment configuration. `cc_proto_library` consumed only by `src/metadata/cpp/internal/protobuf_codec.cpp` so the `.pb.h` header doesn't leak into client code.
 
 - **`std::expected<Essentials, ParseError>`** is the parse-API shape, matching [docs/src/development/cpp-style-guide.md](../src/development/cpp-style-guide.md)'s preference and the planned Rust target's `Result` ergonomics.
 

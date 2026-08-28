@@ -54,7 +54,7 @@ bazel-build *FLAGS='':
 # Build the Rust HTTP shell (strangler-fig rewrite). Additive — the C++ server
 # still owns the production socket until the cutover; this is for local testing.
 bazel-build-server *FLAGS='':
-    bazel build --stamp //src/cli-rs:sipi {{FLAGS}}
+    bazel build --stamp //src/cli/rust:sipi {{FLAGS}}
 
 # Build + run the full test pyramid (unit + approval + e2e) under
 # fastbuild — no coverage instrumentation. CI's linux-arm64 and
@@ -136,7 +136,7 @@ bazel-rustfmt *FLAGS='':
 # `rustfmt --check` over every first-party Rust target and fails on any file
 # that is not rustfmt-clean; run `just bazel-rustfmt` to fix.
 bazel-rustfmt-check *FLAGS='':
-    bazel build //src/iiifparser/... //src/scripting/rust/... //src/throttling/rust/... //src/server-rs/... //src/cli-rs/... //test/e2e/... --aspects=@rules_rust//rust:defs.bzl%rustfmt_aspect --output_groups=rustfmt_checks {{FLAGS}}
+    bazel build //src/iiifparser/... //src/scripting/rust/... //src/throttling/rust/... //src/server/rust/... //src/cli/rust/... //test/e2e/... --aspects=@rules_rust//rust:defs.bzl%rustfmt_aspect --output_groups=rustfmt_checks {{FLAGS}}
 
 # Run clippy — the CI lint gate. The rules_rust clippy aspect runs
 # `clippy-driver` over every first-party Rust target; `-Dwarnings` promotes
@@ -145,7 +145,7 @@ bazel-rustfmt-check *FLAGS='':
 # fast unsafe check: it requires a `// SAFETY:` comment on every `unsafe {}`
 # block. Runs in CI's `lint` job alongside `bazel-rustfmt-check`.
 bazel-clippy-check *FLAGS='':
-    bazel build //src/iiifparser/... //src/scripting/rust/... //src/throttling/rust/... //src/server-rs/... //src/cli-rs/... //test/e2e/... --aspects=@rules_rust//rust:defs.bzl%rust_clippy_aspect --output_groups=clippy_checks --@rules_rust//rust/settings:clippy_flags=-Dwarnings {{FLAGS}}
+    bazel build //src/iiifparser/... //src/scripting/rust/... //src/throttling/rust/... //src/server/rust/... //src/cli/rust/... //test/e2e/... --aspects=@rules_rust//rust:defs.bzl%rust_clippy_aspect --output_groups=clippy_checks --@rules_rust//rust/settings:clippy_flags=-Dwarnings {{FLAGS}}
 
 # Lint commit messages with commitlint-rs — the CI `commit-lint` gate. Enforces
 # the type allowlist + mandatory scope from `.commitlintrc.yml` on every commit in
@@ -257,8 +257,8 @@ bazel-build-sanitized *FLAGS='':
 # it connects over the network too, so a macOS GUI can profile a Linux server.
 # See docs/src/development/profiling.md.
 bazel-build-tracy *FLAGS='':
-    bazel build -c opt --config=tracy --verbose_failures --stamp {{FLAGS}} //src/cli-rs:sipi
-    @echo "Tracy-instrumented server binary at: $(pwd)/bazel-bin/src/cli-rs/sipi"
+    bazel build -c opt --config=tracy --verbose_failures --stamp {{FLAGS}} //src/cli/rust:sipi
+    @echo "Tracy-instrumented server binary at: $(pwd)/bazel-bin/src/cli/rust/sipi"
     @echo "Run it (e.g. `sipi server --config …`), then open the Tracy profiler and Connect (localhost:8086)."
 
 #####################################
@@ -499,10 +499,10 @@ bench-compare before after *FLAGS='':
 loadtest-decode concs='10,20,40' dur='20' warm='5' id='knora/load_test.jpx':
     #!/usr/bin/env bash
     set -euo pipefail
-    bazel build -c opt //src/cli-rs:sipi
+    bazel build -c opt //src/cli/rust:sipi
     port=2048
     rm -rf ./loadtest_cache && mkdir -p ./loadtest_cache
-    ./bazel-bin/src/cli-rs/sipi server --config config/sipi.loadtest-config.lua \
+    ./bazel-bin/src/cli/rust/sipi server --config config/sipi.loadtest-config.lua \
         --serverport "$port" --drain-timeout 2 >/tmp/sipi-loadtest.log 2>&1 &
     srv=$!
     trap 'kill $srv 2>/dev/null || true; wait $srv 2>/dev/null || true' EXIT
@@ -657,7 +657,7 @@ bazel-docker-extract-debug arch *FLAGS='':
 run: bazel-build-server
     #!/usr/bin/env bash
     set -euo pipefail
-    SIPI_BIN="${SIPI_BIN:-{{justfile_directory()}}/bazel-bin/src/cli-rs/sipi}"
+    SIPI_BIN="${SIPI_BIN:-{{justfile_directory()}}/bazel-bin/src/cli/rust/sipi}"
     "$SIPI_BIN" server --config={{justfile_directory()}}/config/sipi.localdev-config.lua
 
 # Start a local LGTM observability stack (Grafana on :3000, OTLP gRPC :4317 /
@@ -683,14 +683,14 @@ run-otel: bazel-build-server
     OTEL_RESOURCE_ATTRIBUTES="service.namespace=dsp,service.version=${version},deployment.environment.name=dev" \
     SIPI_OTLP_LOGS=1 \
     RUST_LOG="${RUST_LOG:-info}" \
-    "{{justfile_directory()}}/bazel-bin/src/cli-rs/sipi" server \
+    "{{justfile_directory()}}/bazel-bin/src/cli/rust/sipi" server \
         --config="{{justfile_directory()}}/config/sipi.localdev-config.lua" --serverport 1024
 
 # Run sipi under Valgrind.
 valgrind: bazel-build-server
     #!/usr/bin/env bash
     set -euo pipefail
-    SIPI_BIN="${SIPI_BIN:-{{justfile_directory()}}/bazel-bin/src/cli-rs/sipi}"
+    SIPI_BIN="${SIPI_BIN:-{{justfile_directory()}}/bazel-bin/src/cli/rust/sipi}"
     valgrind --leak-check=yes --track-origins=yes "$SIPI_BIN" server --config={{justfile_directory()}}/config/sipi.config.lua
 
 #####################################

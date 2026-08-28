@@ -1,4 +1,4 @@
-//! End-to-end guards for the preflight access-cache (`server-rs/preflight_cache.rs`).
+//! End-to-end guards for the preflight access-cache (`server/rust/preflight_cache.rs`).
 //!
 //! The cache is opt-in (disabled by default), so these tests start a dedicated
 //! server with `--preflight-cache-ttl 2` to exercise it; a second request for the

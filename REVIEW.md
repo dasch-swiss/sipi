@@ -3,7 +3,7 @@
 ## Always check
 
 ### Production surface
-- The Rust shell (`src/server-rs`, `src/cli-rs`) is the sole production server; it drives the C++ image engine (`libsipi`) over the FFI seam. There is no C++ server (the shttps oracle was removed, ADR-0020); the C++ `//src/cli:sipi` binary provides only the offline verbs.
+- The Rust shell (`src/server/rust`, `src/cli/rust`) is the sole production server; it drives the C++ image engine (`libsipi`) over the FFI seam. There is no C++ server (the shttps oracle was removed, ADR-0020); the C++ `//src/cli:sipi` binary provides only the offline verbs.
 - Flag comments in production code that frame it relative to the removed C++ server / oracle / transport ("matches the oracle", "the transport's X", "at the cutover"). Comments should state current behavior. Referencing the C++ **engine** (the FFI callee) is fine.
 - Flag roadmap / in-flight-history comments ("not yet wired", "previously", "now uses") — describe what the code does today.
 
@@ -40,7 +40,7 @@
 - Rate limiter budget deducted before processing, not after
 
 ### Configuration consistency
-- New server config options are threaded through every surface — see the config recipe in [`CONVENTIONS.md`](CONVENTIONS.md). Server config originates in the Rust shell (clap arg with colocated `env`, `config.rs`, `config_file.rs`), crosses the FFI as `SipiServerConfig` (`src/ffi/sipi_ffi.h`), and the C++ engine applies it in `src/ffi/init.cpp`.
+- New server config options are threaded through every surface — see the config recipe in [`CONVENTIONS.md`](CONVENTIONS.md). Server config originates in the Rust shell (clap arg with colocated `env`, `config.rs`, `config_file.rs`), crosses the FFI as `SipiServerConfig` (`src/ffi/cpp/sipi_ffi.h`), and the C++ engine applies it in `src/ffi/cpp/init.cpp`.
 - Defaults identical across all entry points
 - `docs/src/development/reviewer-guidelines.md` summarises this as "Lua / CLI / env" for review-checklist brevity; the four-surface list above is the authoritative one
 - Invalid values produce clear startup errors with guidance on valid values
@@ -61,7 +61,7 @@
 - New metrics use the right atomic type in `observability/metrics.h`: `Counter` for monotonic totals, `Gauge` for current state
 - Metric field names follow the `_total` suffix convention for counters
 - Instrumentation in the correct layer (not duplicated across call chain)
-- A new scalar metric reaches production OTLP only if it is also read into `SipiMetricsSnapshot` (`src/ffi/sipi_ffi.cpp`) and mapped in `src/server-rs/src/metrics.rs`; the `metrics_registry_test.cpp` seam tripwire forces that decision. Label-fanned counters stay engine-internal (not snapshotted)
+- A new scalar metric reaches production OTLP only if it is also read into `SipiMetricsSnapshot` (`src/ffi/cpp/sipi_ffi.cpp`) and mapped in `src/server/rust/src/metrics.rs`; the `metrics_registry_test.cpp` seam tripwire forces that decision. Label-fanned counters stay engine-internal (not snapshotted)
 
 ### Thread safety
 - Shared mutable state protected by `std::mutex` + `std::scoped_lock` or `std::atomic`

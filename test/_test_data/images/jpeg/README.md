@@ -16,11 +16,11 @@ the fix is regression-pinned by `Jpeg_35_2421d_ReadsSuccessfullyTest`
 
 Regenerate with:
 
-    uv run test/unit/sipiimage/fixtures/generate_jpeg_fixtures.py \
+    uv run test/unit/fixtures/generate_jpeg_fixtures.py \
         test/_test_data/images/jpeg/
 
 The generator lives at
-`test/unit/sipiimage/fixtures/generate_jpeg_fixtures.py`. The `.jpg` files
+`test/unit/fixtures/generate_jpeg_fixtures.py`. The `.jpg` files
 are committed so CI does not need a Python/Pillow tool chain.
 
 | File | Purpose |

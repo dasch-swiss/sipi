@@ -4,7 +4,7 @@
 offline subcommand body (`convert`/`verify`/`query`/`compare`/`health`),
 exposed through the `extern "C" sipi_cli_main` entry declared in
 `ffi/sipi_ffi.h`. It lives in its own library — separate from the binary's
-`main` translation unit — so the Rust HTTP shell (`//src/server-rs`) can link
+`main` translation unit — so the Rust HTTP shell (`//src/server/rust`) can link
 it and call `sipi_cli_main` for the offline subcommands without colliding with
 Rust's own `main`.
 
@@ -13,12 +13,11 @@ translation unit is `sipi.cpp`, whose `main` just calls `sipi_cli_main`.
 
 `//src/cli:sipi_report` holds the offline verbs' JSON report emitter
 (`SipiReport.h`/`.cpp`). It is a separate leaf target rather than folded into
-`:cli_app` because `:cli_app` depends one-way on `//src/cli/commands:commands`
+`:cli_app` because `:cli_app` depends one-way on `//src/cli/cpp/commands:commands`
 (`convert_access_file.cpp` reports through it too) — a dependency back from
-`commands` to `cli_app` would cycle. `strip_include_prefix = "/src"` exposes
-the header at `#include "cli/SipiReport.h"` (ADR-0003), the same shape as
-`//src/ffi`; both `:cli_app` and `//src/cli/commands:commands` depend on it
-directly.
+`commands` to `cli_app` would cycle. `include_prefix = "cli"` + `strip_include_prefix
+= "/src/cli/cpp"` exposes the header at `#include "cli/SipiReport.h"` (ADR-0003);
+both `:cli_app` and `//src/cli/cpp/commands:commands` depend on it directly.
 
 System-lib + framework linkopts (`-ldl`, `-lpthread`, `-liconv`,
 `-framework SystemConfiguration`, `-framework CoreFoundation`) are declared on
@@ -33,9 +32,10 @@ package(default_visibility = ["//visibility:public"])
 
 cc_library(
     name = "sipi_report",
-    srcs = ["SipiReport.cpp"],
-    hdrs = ["SipiReport.h"],
-    strip_include_prefix = "/src",
+    srcs = ["cpp/SipiReport.cpp"],
+    hdrs = ["cpp/SipiReport.h"],
+    include_prefix = "cli",
+    strip_include_prefix = "/src/cli/cpp",
     deps = [
         # populate_from_image.h's observability::ImageContext, the struct
         # the report mirrors.
@@ -46,13 +46,13 @@ cc_library(
 
 cc_library(
     name = "cli_app",
-    srcs = ["cli_app.cpp"],
+    srcs = ["cpp/cli_app.cpp"],
     # -fexceptions: sipi_cli_main is an FFI entry; CLI dispatch + the engine
     # throw, and those must not unwind across the extern "C" boundary.
     copts = ["-fexceptions"],
     deps = [
         "//src:sipi_lib",
-        "//src/cli/commands:commands",
+        "//src/cli/cpp/commands:commands",
         # The sipi_cli_main declaration (the extern "C" seam contract).
         "//src/ffi:sipi_ffi",
         # cli_app.cpp's rotate calls (orientation normalisation, --mirror/--rotate).
@@ -66,7 +66,7 @@ cc_library(
 cc_binary(
     name = "sipi",
     srcs = [
-        "sipi.cpp",
+        "cpp/sipi.cpp",
     ],
     linkopts = select({
         "@platforms//os:linux": [

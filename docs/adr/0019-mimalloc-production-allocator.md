@@ -36,7 +36,7 @@ decode never spreads allocations across arenas.
 
 **Link an override allocator with sharded free lists — mimalloc v3, vendored
 as a native `cc_library` (`bazel/mimalloc.BUILD.bazel`) — statically into
-`//src/cli-rs:sipi`, Linux targets only.** macOS dev builds stay on the system
+`//src/cli/rust:sipi`, Linux targets only.** macOS dev builds stay on the system
 allocator.
 
 **Why vendored v3 and not the BCR 2.x module:** the BCR drop-in (2.2.4) was
@@ -67,7 +67,7 @@ jemalloc's flat line in the same replay harness.
 
 **Mechanism.** `rust_binary` has no `malloc=` attribute, so the module's
 public alias `@mimalloc//:mimalloc` is linked as a plain Linux-only dep
-(`_ALLOCATOR` in `src/cli-rs/BUILD.bazel`) — on Linux that produces the exact
+(`_ALLOCATOR` in `src/cli/rust/BUILD.bazel`) — on Linux that produces the exact
 link line `malloc=` would. The BCR `:mimalloc-lib` is `alwayslink`
 (whole-archive), so the override objects — including the glibc-internal
 `__libc_malloc` aliases and the Itanium-mangled C++ operators — are always in
@@ -80,7 +80,7 @@ mimalloc as well.
 *partial* interposition (override symbols silently not exported): the binary's
 `free` would be mimalloc while libc-internal `malloc` stays glibc — latent
 heap corruption (the engine frees `scandir`-allocated entries in
-`src/SipiCache.cpp`). At startup, `allocator::init()` in `src/cli-rs/src/main.rs`
+`src/SipiCache.cpp`). At startup, `allocator::init()` in `src/cli/rust/src/main.rs`
 probes a libc-internal allocation (`getcwd(NULL, 0)`) with
 `mi_is_in_heap_region` and aborts on mismatch rather than serving.
 
@@ -89,7 +89,7 @@ stays allocator-agnostic: the final-link binary registers a stats reader via
 `set_source`; without one, the library falls back to glibc `mallinfo2`. The
 `sipi.malloc.*` OTLP gauges therefore report the allocator that is actually
 serving the heap. The reader calls `mi_stats_get` through a one-function C
-shim (`src/cli-rs/mi_stats_shim.c`) compiled against the vendored
+shim (`src/cli/rust/mi_stats_shim.c`) compiled against the vendored
 `mimalloc-stats.h`, never through a Rust `extern "C"` re-declaration: nothing
 verifies a hand-mirrored declaration against the header, and a drift from the
 pinned version is a SIGSEGV on the metrics thread at the first collection
@@ -105,7 +105,7 @@ gate compares HTTP/pixel output and is allocator-neutral.
 - `MALLOC_ARENA_MAX=2` is removed from the OCI image env: with glibc's
   allocator bypassed it configures nothing that serves requests.
 - Downstream crates that replace this binary with their own `main` (per the
-  `cli-rs` extension contract) choose their own allocator; the `sipi` library
+  `cli/rust` extension contract) choose their own allocator; the `sipi` library
   neither requires nor assumes mimalloc. A downstream `main` that links no
   override gets correct glibc gauges via the fallback.
 - Kakadu's per-request thread-pool create/destroy remains a perf smell worth

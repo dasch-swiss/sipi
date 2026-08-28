@@ -10,7 +10,7 @@
 #include <stdint.h>
 
 // Hand-mirrored declaration of `shim.rs`'s entry point, following the
-// `src/ffi/sipi_ffi.h` convention (no cbindgen). Must stay in sync with the
+// `src/ffi/cpp/sipi_ffi.h` convention (no cbindgen). Must stay in sync with the
 // Rust signature — a mismatch is UB the compiler cannot see.
 extern "C" int sipi_fuzz_parse_request(const uint8_t *data, size_t len);
 

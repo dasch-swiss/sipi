@@ -7,7 +7,7 @@
  * vectorizes cleanly; the horizontal pass is per-output-column (tap sets differ
  * per column) and stays scalar. Accumulation is int32 fixed-point, so the result
  * is bit-identical to the scalar reference and across every SIMD target — see
- * resample.h and test/unit/sipiimage/scale_resample_test.cpp.
+ * resample.h and src/image_processing/cpp/scale_resample_test.cpp.
  */
 
 #include "resample.h"

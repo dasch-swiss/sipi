@@ -7,7 +7,7 @@
 // callback runs.
 //
 // These tests subprocess the real `sipi` binary (the per-subcommand unit
-// tests in `src/cli/commands/` exercise the command bodies directly; here
+// tests in `src/cli/cpp/commands/` exercise the command bodies directly; here
 // we exercise the CLI11 parse layer). Each rejected combination is
 // asserted on both:
 //

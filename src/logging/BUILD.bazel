@@ -15,14 +15,15 @@ package(default_visibility = ["//src:__subpackages__"])
 
 cc_library(
     name = "logging",
-    srcs = ["logger.cpp"],
-    hdrs = ["logger.h"],
+    srcs = ["cpp/logger.cpp"],
+    hdrs = ["cpp/logger.h"],
     # Virtual-include staging publishes `logger.h` as `logging/logger.h`
     # regardless of where the consumer sits — required for top-level
     # packages whose include path does not have `src/` on it (e.g.
     # `//src/util`, `//src/scripting`) and thus cannot resolve the include via
     # `:sipi_lib`'s `includes = ["."]`.
     include_prefix = "logging",
+    strip_include_prefix = "/src/logging/cpp",
     features = ["layering_check", "parse_headers"],
 )
 
@@ -31,7 +32,7 @@ cc_library(
 # (the library itself is stdlib-only; only the test needs a JSON reader).
 cc_test(
     name = "logger_test",
-    srcs = ["logger_test.cpp"],
+    srcs = ["cpp/logger_test.cpp"],
     deps = [
         ":logging",
         "@googletest//:gtest_main",

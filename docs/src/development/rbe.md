@@ -196,7 +196,7 @@ E2E tests are tagged `exclusive-if-local` and `no-sandbox` in
   unaffected). It does not prevent cross-compilation.
 
 The reason e2e tests need `no-sandbox` at all: SIPI's `validate_resolved_path` guard
-in `src/server-rs/src/path.rs` canonicalises the request path via `realpath(3)`
+in `src/server/rust/src/path.rs` canonicalises the request path via `realpath(3)`
 (Rust's `std::fs::canonicalize`). Under the Bazel sandbox, path resolution returns the
 writable runfiles path rather than the `TEST_TMPDIR` copy, so sipi rejects legitimate
 test files with HTTP 400. Disabling the

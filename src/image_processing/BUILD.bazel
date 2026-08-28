@@ -23,11 +23,10 @@ operators — would cycle).
 `resample.cc` includes `resample.h` with the bare quote form.
 
 Default visibility is public: `processing.h` is included directly from
-`test/unit/sipiimage/` and `test/approval/` sources, which sit outside
-`//src/...`.
+`test/approval/` sources, which sit outside `//src/...`.
 """
 
-load("@rules_cc//cc:defs.bzl", "cc_binary", "cc_library")
+load("@rules_cc//cc:defs.bzl", "cc_binary", "cc_library", "cc_test")
 
 package(default_visibility = ["//visibility:public"])
 
@@ -80,5 +79,31 @@ cc_binary(
         "//src:sipi_lib",
         "//test:test_paths",
         "@google_benchmark//:benchmark_main",
+    ],
+)
+
+# Colocated unit tests (ADR-0003): the resample/scale filter, the channel-count
+# and equality/pixel-delta regression suite, the buffer-overflow and crop
+# guards, and the engine-direct IIIF region/size/rotation/quality transform
+# matrix. Two source files decode real JP2/TIFF fixtures through `SipiImage`,
+# so this target — unlike the `:image_processing` library it exercises —
+# depends on `//src/format_handlers` for the codec dispatch.
+cc_test(
+    name = "image_processing_test",
+    srcs = [
+        "cpp/channel_count_regression_test.cpp",
+        "cpp/equality_regression_test.cpp",
+        "cpp/iiif_transform_matrix_test.cpp",
+        "cpp/overflow_regression_test.cpp",
+        "cpp/pixel_delta_regression_test.cpp",
+        "cpp/scale_resample_test.cpp",
+    ],
+    data = ["//test/_test_data:images"],
+    env = {"SIPI_WORKSPACE_ROOT": "."},
+    deps = [
+        ":image_processing",
+        "//src/format_handlers:format_handlers",
+        "//test:test_paths",
+        "@googletest//:gtest_main",
     ],
 )

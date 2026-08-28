@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 > [!IMPORTANT]
 > **No commit or push without the lint gates passing.** For any Rust change
-> (`src/server-rs`, `src/cli-rs`, `test/e2e`), run **`just bazel-rustfmt-check`**
+> (`src/server/rust`, `src/cli/rust`, `test/e2e`), run **`just bazel-rustfmt-check`**
 > and **`just bazel-clippy-check`** before committing (fix with `just bazel-rustfmt`).
 > Both are CI gates (`-Dwarnings`, run as `rules_rust` lint aspects on the `test`
 > job) that are **not** exercised by `just bazel-test`, `bazel-test-e2e`, or
@@ -46,7 +46,7 @@ For full build instructions, see [`docs/src/development/building.md`](docs/src/d
 
 **First-time setup:** Bazel builds (including `just bazel-docker-build-${arch}`) fetch Kakadu directly via Bazel's `gh_release_archive` repository_rule (no `vendor/` step). Requires `gh auth login` and `dasch-swiss` org membership. See [`docs/src/development/kakadu.md`](docs/src/development/kakadu.md).
 
-**ICC determinism invariant:** [`Icc::iccBytes()`](src/metadata/icc.cpp) is the single chokepoint that converts an `cmsHPROFILE` into raw bytes for codec consumption — every TIFF, JPEG, PNG, and JP2 emission funnels through it. Any new format handler must route through `iccBytes()`; bypassing it (calling `cmsSaveProfileToMem` directly) breaks the approval-test gate. Approval tests run with `SOURCE_DATE_EPOCH=946684800` and `SIPI_WORKSPACE_ROOT="."` injected by `test/approval/BUILD.bazel` so the wall-clock-stamped ICC creation date is overwritten with a fixed value and goldens stay byte-deterministic. Production never sets the env var; deployed binaries continue to embed wall-clock-stamped ICC headers. See [`docs/adr/0002-icc-profile-determinism-test-only.md`](docs/adr/0002-icc-profile-determinism-test-only.md).
+**ICC determinism invariant:** [`Icc::iccBytes()`](src/metadata/cpp/icc.cpp) is the single chokepoint that converts an `cmsHPROFILE` into raw bytes for codec consumption — every TIFF, JPEG, PNG, and JP2 emission funnels through it. Any new format handler must route through `iccBytes()`; bypassing it (calling `cmsSaveProfileToMem` directly) breaks the approval-test gate. Approval tests run with `SOURCE_DATE_EPOCH=946684800` and `SIPI_WORKSPACE_ROOT="."` injected by `test/approval/BUILD.bazel` so the wall-clock-stamped ICC creation date is overwritten with a fixed value and goldens stay byte-deterministic. Production never sets the env var; deployed binaries continue to embed wall-clock-stamped ICC headers. See [`docs/adr/0002-icc-profile-determinism-test-only.md`](docs/adr/0002-icc-profile-determinism-test-only.md).
 
 ### Inner-loop development (incremental rebuilds)
 
@@ -68,19 +68,19 @@ localdev config in one step.
 
 ## High-Level Architecture
 
-**Production surface.** The **Rust axum shell** (`src/server-rs` + `src/cli-rs`, built by `just bazel-build-server`) is the production server. It drives the C++ **image engine** (`libsipi`) over the FFI seam in `src/server-rs/src/ffi.rs`. There is no C++ server: the retained shttps oracle was removed (ADR-0020); the C++ `//src/cli:sipi` binary now provides only the offline verbs (`convert`/`verify`/`query`/`compare`/`health`). In production Rust code, describe current behavior on its own terms; do not frame it relative to the removed C++ server / oracle / transport (referencing the C++ *engine*, the FFI callee, is fine). See [`CONVENTIONS.md` § Production surface](CONVENTIONS.md).
+**Production surface.** The **Rust axum shell** (`src/server/rust` + `src/cli/rust`, built by `just bazel-build-server`) is the production server. It drives the C++ **image engine** (`libsipi`) over the FFI seam in `src/server/rust/src/ffi.rs`. There is no C++ server: the retained shttps oracle was removed (ADR-0020); the C++ `//src/cli:sipi` binary now provides only the offline verbs (`convert`/`verify`/`query`/`compare`/`health`). In production Rust code, describe current behavior on its own terms; do not frame it relative to the removed C++ server / oracle / transport (referencing the C++ *engine*, the FFI callee, is fine). See [`CONVENTIONS.md` § Production surface](CONVENTIONS.md).
 
 ### Core Components
 
 | Component | Path | Purpose |
 |-----------|------|---------|
-| Main Application | `src/cli/cli_app.cpp` | CLI11 arg parsing + offline-verb dispatch, behind the `sipi_cli_main` FFI entry; `src/cli-rs/src/main.rs` owns `main` and Sentry init |
+| Main Application | `src/cli/cpp/cli_app.cpp` | CLI11 arg parsing + offline-verb dispatch, behind the `sipi_cli_main` FFI entry; `src/cli/rust/src/main.rs` owns `main` and Sentry init |
 | SipiImage | `src/image/cpp/SipiImage.h` | Image processing: TIFF, JP2, PNG, JPEG; metadata (EXIF, IPTC, XMP); ICC profiles |
-| Rust HTTP shell | `src/server-rs/` | The production server: axum routes, IIIF endpoints, caching, Lua request-shaping; drives the C++ engine over FFI |
-| IIIF Parser | `src/iiifparser/cpp/` (C++ engine) / `src/iiifparser/rust/` (production, `//src/iiifparser/rust:iiif_parser`) | IIIF URL parsing: identifier, region, size, rotation, quality/format. Production parses in Rust and emits domain types; `server-rs` flattens them into the seam struct the C++ engine consumes (ADR-0021) |
+| Rust HTTP shell | `src/server/rust/` | The production server: axum routes, IIIF endpoints, caching, Lua request-shaping; drives the C++ engine over FFI |
+| IIIF Parser | `src/iiifparser/cpp/` (C++ engine) / `src/iiifparser/rust/` (production, `//src/iiifparser/rust:iiif_parser`) | IIIF URL parsing: identifier, region, size, rotation, quality/format. Production parses in Rust and emits domain types; `server` flattens them into the seam struct the C++ engine consumes (ADR-0021) |
 | Format Handlers | `src/format_handlers/` | SipiIO base class + SipiIOTiff, SipiIOJ2k, SipiIOJpeg, SipiIOPng |
 | Caching | `src/cache/cpp/SipiCache.h` | File-based LRU cache with dual-limit eviction (size + file count), crash recovery |
-| Metrics | `src/observability/metrics.h` | Metrics singleton (`Sipi::observability::Metrics`) — plain atomic counters/gauges; scalar fields cross the FFI seam as `SipiMetricsSnapshot` and export over OTLP via `src/server-rs/src/metrics.rs` |
+| Metrics | `src/observability/cpp/metrics.h` | Metrics singleton (`Sipi::observability::Metrics`) — plain atomic counters/gauges; scalar fields cross the FFI seam as `SipiMetricsSnapshot` and export over OTLP via `src/server/rust/src/metrics.rs` |
 | Memory Budget | `src/throttling/cpp/SipiMemoryBudget.h` | Lock-free decode memory budget with RAII guard — prevents OOM from concurrent large decodes |
 | Lua Runtime | `src/scripting/rust/` | Rust-hosted mlua runtime (ADR-0023): hardened per-request VM (stdlib whitelist, memory cap, deadline), bytecode cache, all `server.*`/`SipiImage`/sqlite bindings, Lua-flavor config parse |
 
@@ -178,4 +178,4 @@ These are not style preferences — they are contract with the maintainer. Code 
 - `bazel build --config=asan --config=ubsan //src/cli:sipi` — sanitizers
 - `bazel build --config=fuzz //src/iiifparser/fuzz:parse_request_fuzz_bin` — instrumented libFuzzer binary (Linux only; `-c opt` + SanitizerCoverage on the Rust crate graph)
 
-**Error Reporting:** Optional Sentry integration (Rust `sentry` crate, `cli-rs/src/main.rs`) via `SIPI_SENTRY_DSN`, `SIPI_SENTRY_ENVIRONMENT`, `SIPI_SENTRY_RELEASE` environment variables — panics and handled image errors for every verb, plus an out-of-process minidump reporter for native crashes on `server` (see [`docs/adr/0018-minidump-crash-memory-accepted-risk.md`](docs/adr/0018-minidump-crash-memory-accepted-risk.md)).
+**Error Reporting:** Optional Sentry integration (Rust `sentry` crate, `cli/rust/src/main.rs`) via `SIPI_SENTRY_DSN`, `SIPI_SENTRY_ENVIRONMENT`, `SIPI_SENTRY_RELEASE` environment variables — panics and handled image errors for every verb, plus an out-of-process minidump reporter for native crashes on `server` (see [`docs/adr/0018-minidump-crash-memory-accepted-risk.md`](docs/adr/0018-minidump-crash-memory-accepted-risk.md)).

@@ -8,7 +8,7 @@ root-caused the 2026-07-29 vre-prod-01 OOM and gated the mimalloc switch
 Run it whenever a change touches the JP2 decode path's threading or
 allocation behavior (`src/format_handlers/cpp/SipiIOJ2k.cpp`, Kakadu thread handling,
 decode buffering), the allocator itself (`bazel/mimalloc.BUILD.bazel`, the
-`_ALLOCATOR` dep in `src/cli-rs/BUILD.bazel`), or allocator-relevant image
+`_ALLOCATOR` dep in `src/cli/rust/BUILD.bazel`), or allocator-relevant image
 env. Microbenchmarks (`just bench decode`) measure speed; this harness
 measures what those decodes do to resident memory over time — a regression
 here reaches production as an OOM, not a slow chart.
@@ -72,4 +72,4 @@ this harness must run again if that threading model changes.
 
 In production, the same split is visible without a replay via the
 `sipi.malloc.*` gauges (`in_use` vs `retained`; see
-`src/server-rs/src/malloc_stats.rs`).
+`src/server/rust/src/malloc_stats.rs`).

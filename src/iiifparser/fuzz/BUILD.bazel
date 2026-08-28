@@ -5,7 +5,7 @@ HTTP request hits. Reopens the gap ADR-0020 left when the oracle-only C++ fuzz
 harness was retired.
 
 This is the repo's only **C++-calls-Rust** link: `//src/ffi` and
-`src/server-rs/src/ffi.rs` are all Rust→C++. It exists because libFuzzer's entry
+`src/server/rust/src/ffi.rs` are all Rust→C++. It exists because libFuzzer's entry
 point is `LLVMFuzzerTestOneInput` and `rules_fuzzing` is a C++/Java rule set, so
 the Rust parser enters through an `extern "C"` shim (`shim.rs`) whose declaration
 is hand-mirrored in `fuzz_target.cc` — the `sipi_ffi.h` convention, no cbindgen.

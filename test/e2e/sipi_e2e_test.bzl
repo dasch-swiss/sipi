@@ -9,7 +9,7 @@ others aren't.
 What the macro injects:
 
   * `data`:
-      - `//src/cli-rs:sipi`      Rust shell binary under test, via `SIPI_BIN`.
+      - `//src/cli/rust:sipi`      Rust shell binary under test, via `SIPI_BIN`.
       - `//:test_fixtures`       `test/_test_data/`, `config/`,
                                  `scripts/`, `server/` materialised so
                                  `sipi_e2e::repo_root()` resolves under
@@ -25,7 +25,7 @@ What the macro injects:
                                  the RBE worker.
 
   * `env`:
-      - `SIPI_BIN`               `$(rootpath //src/cli-rs:sipi)` — runfiles-
+      - `SIPI_BIN`               `$(rootpath //src/cli/rust:sipi)` — runfiles-
                                  relative; `SipiServer` canonicalises
                                  to absolute before spawning.
       - `SIPI_REPO_ROOT`         `$(rootpath //:test_fixtures)` — the
@@ -78,7 +78,7 @@ What the macro injects:
                                  with `realpath()` resolution against the
                                  materialised `:test_fixtures` tree — sipi's
                                  path-traversal guard
-                                 (`src/server-rs/src/path.rs`)
+                                 (`src/server/rust/src/path.rs`)
                                  then rejects every IIIF request with
                                  "Invalid IIIF identifier".
                                  NOT `local`: `local` additionally force-runs
@@ -121,12 +121,12 @@ def sipi_e2e_test(
         # serves `server` natively and forwards every offline subcommand to
         # the C++ CLI via sipi_cli_main, so it covers both the server and CLI
         # e2e suites.
-        "SIPI_BIN": "$(rootpath //src/cli-rs:sipi)",
+        "SIPI_BIN": "$(rootpath //src/cli/rust:sipi)",
         # Points at the `copy_to_directory` output that materialises
         # `version.txt`, `test/_test_data/`, `config/`, `scripts/`,
         # `server/` as real files (no symlinks). Required so sipi's
         # `realpath()`-based path-traversal guard
-        # (`src/server-rs/src/path.rs`) keeps
+        # (`src/server/rust/src/path.rs`) keeps
         # imgroot's resolved prefix and per-request files in
         # agreement — under a runfiles tree of symlinks the prefix
         # check rejects every IIIF request. The same materialisation
@@ -163,7 +163,7 @@ def sipi_e2e_test(
         # `ASAN_SYMBOLIZER_PATH` resolves on the RBE worker as well as the
         # local runner (LSan needs it to match the `leak:lua*` suppressions).
         data = [
-            "//src/cli-rs:sipi",
+            "//src/cli/rust:sipi",
             "//:test_fixtures",
             "//:lsan_suppressions",
             ":snapshots",

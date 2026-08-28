@@ -7,7 +7,7 @@ status: accepted
 SIPI vendors the [Tracy](https://github.com/wolfpld/tracy) profiler client as an
 **unconditional** Bazel dependency of the production graph, instrumented along the
 IIIF hot path (parse / cache / decode / process / encode) with scoped zones behind
-a single first-party shim, `src/observability/profiling.h`. The profiler is inert
+a single first-party shim, `src/observability/cpp/profiling.h`. The profiler is inert
 in every build except `--config=tracy`: the entire Tracy machinery — listening
 socket, sampling thread, allocation arena — is gated behind `TRACY_ENABLE`, which
 only the `build:tracy` block in `.bazelrc` defines. A normal or production build
@@ -44,7 +44,7 @@ Prometheus metrics and the isolated Google Benchmark microbenchmarks. See
   `http_archive` (`bazel/tracy.BUILD.bazel`).
 
 - **Raw Tracy macros at every call site — rejected.** Instrumented code uses the
-  `SIPI_ZONE*` macros from `src/observability/profiling.h`, the single place
+  `SIPI_ZONE*` macros from `src/observability/cpp/profiling.h`, the single place
   `<tracy/Tracy.hpp>` is included, so the codebase can be re-pointed at a different
   profiler (or none) from one file. The lone exception is `src/shttps/Server.cpp`
   worker-thread naming: shttps sits *below* observability in the dependency graph

@@ -407,7 +407,7 @@ fn video_knora_json_checksums() {
 
 #[test]
 fn knora_json_image_required_fields() {
-    // knora.json for images: verify all required fields (src/server-rs/src/info.rs)
+    // knora.json for images: verify all required fields (src/server/rust/src/info.rs)
     let srv = server();
     let json: serde_json::Value = client()
         .get(format!("{}/unit/lena512.jp2/knora.json", srv.base_url))
