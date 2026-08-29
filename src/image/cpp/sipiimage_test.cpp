@@ -366,8 +366,38 @@ TEST(SipiImage, Watermark)
   ASSERT_TRUE(img1.read(cielab).has_value());
   EXPECT_TRUE(Sipi::processing::add_watermark(img1, watermark_correct).has_value());
 
+  Sipi::SipiImage cielab16_reference;
+  ASSERT_TRUE(cielab16_reference.read(cielab16).has_value());
   ASSERT_TRUE(img2.read(cielab16).has_value());
   EXPECT_TRUE(Sipi::processing::add_watermark(img2, watermark_correct).has_value());
+
+  // Watermarking must actually change the pixels (bps == 16 must not be a silent no-op),
+  // while leaving the image geometry untouched.
+  ASSERT_EQ(img2.getNx(), cielab16_reference.getNx());
+  ASSERT_EQ(img2.getNy(), cielab16_reference.getNy());
+  ASSERT_EQ(img2.getNc(), cielab16_reference.getNc());
+  ASSERT_EQ(img2.getBps(), cielab16_reference.getBps());
+  {
+    const auto watermarked_bytes = img2.pixels_view();
+    const auto reference_bytes = cielab16_reference.pixels_view();
+    ASSERT_EQ(watermarked_bytes.size(), reference_bytes.size());
+    const Sipi::word *watermarked = reinterpret_cast<const Sipi::word *>(watermarked_bytes.data());
+    const Sipi::word *reference = reinterpret_cast<const Sipi::word *>(reference_bytes.data());
+    const size_t nwords = watermarked_bytes.size() / sizeof(Sipi::word);
+
+    bool differs = false;
+    int max_abs_diff = 0;
+    for (size_t idx = 0; idx < nwords; idx++) {
+      const int diff = static_cast<int>(watermarked[idx]) - static_cast<int>(reference[idx]);
+      if (diff != 0) differs = true;
+      const int abs_diff = diff < 0 ? -diff : diff;
+      if (abs_diff > max_abs_diff) max_abs_diff = abs_diff;
+    }
+
+    EXPECT_TRUE(differs);
+    EXPECT_GT(max_abs_diff, 0);
+    EXPECT_LT(max_abs_diff, 65535 / 2);
+  }
 
   ASSERT_TRUE(img3.read(maori).has_value());
 
