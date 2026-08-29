@@ -419,14 +419,15 @@ void SipiIOJpeg::parse_photoshop(SipiImage *img, char *data, int length)
     // Bounds check: validate datalen against remaining buffer
     if (datalen > (size_t)(end - ptr)) break;
 
+    // A resource block that fails to parse is logged and abandons the rest
+    // of this Photoshop resource block scan, leaving the image with whatever
+    // parsed before it.
     switch (id) {
     case 0x0404: {
       if (img->getIptc() == nullptr) {
         if (auto iptc = Iptc::parse((unsigned char *)ptr, datalen)) {
           img->set_iptc(*iptc);
         } else {
-          // Mirrors the callers' catch handler: log and abandon the rest of this
-          // Photoshop resource block scan, leaving the image without IPTC data.
           log_warn("Failed to parse Photoshop APP13 resource block: %s", iptc.error().diagnostic_message().c_str());
           return;
         }
@@ -438,8 +439,6 @@ void SipiIOJpeg::parse_photoshop(SipiImage *img, char *data, int length)
         if (auto icc = Icc::parse((unsigned char *)ptr, datalen)) {
           img->set_icc(*icc);
         } else {
-          // Mirrors the callers' catch handler: log and abandon the rest of this
-          // Photoshop resource block scan, leaving the image without an ICC profile.
           log_warn("Failed to parse Photoshop APP13 resource block: %s", icc.error().diagnostic_message().c_str());
           return;
         }
@@ -451,8 +450,6 @@ void SipiIOJpeg::parse_photoshop(SipiImage *img, char *data, int length)
         if (auto exif = Exif::parse((unsigned char *)ptr, datalen)) {
           img->set_exif(*exif);
         } else {
-          // Mirrors the callers' catch handler: log and abandon the rest of this
-          // Photoshop resource block scan, leaving the image without EXIF data.
           log_warn("Failed to parse Photoshop APP13 resource block: %s", exif.error().diagnostic_message().c_str());
           return;
         }
@@ -662,18 +659,16 @@ Result<bool> SipiIOJpeg::read(SipiImage *img,
       // TODO: handle ExtendedXMP (multi-APP1-segment XMP packets
       // larger than 64 KB). The "http://ns.adobe.com/xmp/extension/\0"
       // namespace is currently ignored.
+      //
+      // Nothing below can throw but std::bad_alloc.
       constexpr size_t kXmpNsLen = 29;// "http://ns.adobe.com/xap/1.0/" + NUL
       pos = (unsigned char *)memmem(marker->data, marker->data_length, "http://ns.adobe.com/xap/1.0/\000", kXmpNsLen);
       if (pos != nullptr) {
-        try {
-          const auto *data_end = (const unsigned char *)marker->data + marker->data_length;
-          const unsigned char *xmp_start = pos + kXmpNsLen;
-          if (xmp_start < data_end) {
-            const size_t xmp_len = data_end - xmp_start;
-            img->set_xmp(std::make_shared<Xmp>(std::string((const char *)xmp_start, xmp_len)));
-          }
-        } catch (const std::exception &err) {
-          log_warn("Failed to parse XMP metadata from JPEG: %s", err.what());
+        const auto *data_end = (const unsigned char *)marker->data + marker->data_length;
+        const unsigned char *xmp_start = pos + kXmpNsLen;
+        if (xmp_start < data_end) {
+          const size_t xmp_len = data_end - xmp_start;
+          img->set_xmp(std::make_shared<Xmp>(std::string((const char *)xmp_start, xmp_len)));
         }
       }
     } else if (marker->marker == JPEG_APP0 + 2) {
@@ -703,21 +698,12 @@ Result<bool> SipiIOJpeg::read(SipiImage *img,
         }
       }
     } else if (marker->marker == JPEG_APP0 + 13) {
-      // PHOTOSHOP MARKER....
-      // Wrapped in try/catch so a malformed XMP inside the Photoshop
-      // resource block does not prevent the image from being read.
-      // TODO(SipiReport-style-guide): refactor Xmp
-      // constructors to return std::expected<T, E> and delete this try/catch.
+      // PHOTOSHOP MARKER.... parse_photoshop logs and returns early on a
+      // malformed resource block itself, leaving the image with whatever
+      // metadata parsed successfully; nothing on this path can throw but
+      // std::bad_alloc.
       if (marker->data_length >= 14 && strncmp("Photoshop 3.0", (char *)marker->data, 14) == 0) {
-        try {
-          parse_photoshop(img, (char *)marker->data + 14, (int)marker->data_length - 14);
-        } catch (const std::exception &err) {
-          // SipiImageError and SipiError both derive from std::exception, so
-          // a single handler covers every fallible parse path below
-          // parse_photoshop. Downgrading to log_warn keeps the image read
-          // alive when one resource block is malformed.
-          log_warn("Failed to parse Photoshop APP13 resource block: %s", err.what());
-        }
+        parse_photoshop(img, (char *)marker->data + 14, (int)marker->data_length - 14);
       }
     } else if (marker->marker == JPEG_APP0 + 14) {
       // Adobe APP14 marker — 12-byte segment payload (data_length excludes
@@ -982,31 +968,27 @@ Result<SipiImgInfo> SipiIOJpeg::read_shape(const std::string &filepath)
       // <?xpacket> wrappers, so scanning for them is not reliable). TODO:
       // handle ExtendedXMP (multi-APP1-segment XMP packets larger than
       // 64 KB).
+      //
+      // Nothing below can throw but std::bad_alloc.
       constexpr size_t kXmpNsLen = 29;// "http://ns.adobe.com/xap/1.0/" + NUL
       pos = (unsigned char *)memmem(marker->data, marker->data_length, "http://ns.adobe.com/xap/1.0/\000", kXmpNsLen);
       if (pos != nullptr) {
-        try {
-          const auto *data_end = (const unsigned char *)marker->data + marker->data_length;
-          const unsigned char *xmp_start = pos + kXmpNsLen;
-          if (xmp_start < data_end) {
-            const size_t xmp_len = data_end - xmp_start;
-            img.set_xmp(std::make_shared<Xmp>(std::string((const char *)xmp_start, xmp_len)));
-          }
-        } catch (const std::exception &err) {
-          log_warn("Failed to parse XMP metadata from JPEG (read_shape): %s", err.what());
+        const auto *data_end = (const unsigned char *)marker->data + marker->data_length;
+        const unsigned char *xmp_start = pos + kXmpNsLen;
+        if (xmp_start < data_end) {
+          const size_t xmp_len = data_end - xmp_start;
+          img.set_xmp(std::make_shared<Xmp>(std::string((const char *)xmp_start, xmp_len)));
         }
       }
     } else if (marker->marker == JPEG_APP0 + 13) {
-      // PHOTOSHOP MARKER....
-      // Wrapped like the main read path: a malformed XMP inside the
-      // Photoshop resource block must not abort the shape probe (and must
-      // not unwind past the live decompress struct).
+      // PHOTOSHOP MARKER.... parse_photoshop logs and returns early on a
+      // malformed resource block itself, leaving the shape probe with
+      // whatever metadata parsed successfully; nothing on this path can
+      // throw but std::bad_alloc, which unwinds past the live decompress
+      // struct on every other allocation in this function too and is not
+      // caught at this layer.
       if (marker->data_length >= 14 && strncmp("Photoshop 3.0", (char *)marker->data, 14) == 0) {
-        try {
-          parse_photoshop(&img, (char *)marker->data + 14, (int)marker->data_length - 14);
-        } catch (const std::exception &err) {
-          log_warn("Failed to parse Photoshop APP13 resource block: %s", err.what());
-        }
+        parse_photoshop(&img, (char *)marker->data + 14, (int)marker->data_length - 14);
       }
     }
     marker = marker->next;
