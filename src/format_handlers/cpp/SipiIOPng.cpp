@@ -317,7 +317,9 @@ Result<bool> SipiIOPng::read(SipiImage *img,
   infile.reset();
 
   if (region != nullptr) {// we just use the image.crop method
-    (void)Sipi::processing::crop(*img, region);
+    if (const auto cropped = Sipi::processing::crop(*img, region); !cropped) {
+      return std::unexpected(cropped.error());
+    }
   }
 
   //

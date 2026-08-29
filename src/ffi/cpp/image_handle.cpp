@@ -192,7 +192,10 @@ extern "C" int sipi_image_crop(SipiImageHandle *img, const char *iiif_region, Si
       emit_str(err, err_ctx, e.message());
       return 1;
     }
-    Sipi::processing::crop(img->image, reg);
+    if (const auto cropped = Sipi::processing::crop(img->image, reg); !cropped) {
+      emit_str(err, err_ctx, cropped.error().client_message());
+      return 1;
+    }
     return static_cast<int>(Sipi::ffi::SipiStatus::Ok);
   });
 }

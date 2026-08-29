@@ -13,8 +13,9 @@
 #include "processing.h"
 #include "resample.h"
 
-#include "image/SipiImageError.h"
+#include "error/SipiValueError.h"
 #include "iiifparser/SipiRegion.h"
+#include "image/SipiImageError.h"
 #include "logging/logger.h"
 #include "observability/profiling.h"
 #include "util/checked_arith.h"
@@ -210,7 +211,7 @@ word bilinn(const word buf[], const int nx, const int ny, const double x, const 
 
 #undef POSITION
 
-bool crop(SipiImage &img, int x, int y, size_t width, size_t height)
+Result<void> crop(SipiImage &img, int x, int y, size_t width, size_t height)
 {
   SIPI_ZONE_N("SipiImage::crop");
   const size_t img_nx = img.getNx();
@@ -223,23 +224,33 @@ bool crop(SipiImage &img, int x, int y, size_t width, size_t height)
   if (x < 0) {
     const auto shrink_x = static_cast<size_t>(-static_cast<long long>(x));
     if (width != 0) {
-      if (shrink_x >= width) { return false; }
+      if (shrink_x >= width) {
+        return std::unexpected(SipiValueError{ ErrorCode::kMalformedInput,
+          "Crop region entirely left of the image (x=" + std::to_string(x) + ", width=" + std::to_string(width)
+            + ")" });
+      }
       width -= shrink_x;
     }
     x = 0;
   } else if (x >= (long)img_nx) {
-    return false;
+    return std::unexpected(SipiValueError{ ErrorCode::kMalformedInput,
+      "Crop x=" + std::to_string(x) + " is outside the image (width=" + std::to_string(img_nx) + ")" });
   }
 
   if (y < 0) {
     const auto shrink_y = static_cast<size_t>(-static_cast<long long>(y));
     if (height != 0) {
-      if (shrink_y >= height) { return false; }
+      if (shrink_y >= height) {
+        return std::unexpected(SipiValueError{ ErrorCode::kMalformedInput,
+          "Crop region entirely above the image (y=" + std::to_string(y) + ", height=" + std::to_string(height)
+            + ")" });
+      }
       height -= shrink_y;
     }
     y = 0;
   } else if (y >= (long)img_ny) {
-    return false;
+    return std::unexpected(SipiValueError{ ErrorCode::kMalformedInput,
+      "Crop y=" + std::to_string(y) + " is outside the image (height=" + std::to_string(img_ny) + ")" });
   }
 
   if (width == 0) {
@@ -255,7 +266,7 @@ bool crop(SipiImage &img, int x, int y, size_t width, size_t height)
   }
 
   if ((x == 0) && (y == 0) && (width == img_nx) && (height == img_ny)) {
-    return true;// we do not have to crop!!
+    return {};// we do not have to crop!!
   }
 
   const size_t nc = img.getNc();
@@ -292,17 +303,17 @@ bool crop(SipiImage &img, int x, int y, size_t width, size_t height)
     // clean up and throw exception
   }
 
-  return true;
+  return {};
 }
 
 //============================================================================
 
-bool crop(SipiImage &img, const std::shared_ptr<SipiRegion> &region)
+Result<void> crop(SipiImage &img, const std::shared_ptr<SipiRegion> &region)
 {
   int x, y;
   size_t width, height;
   if (region->getType() == SipiRegion::FULL) {
-    return true;// we do not have to crop;
+    return {};// we do not have to crop;
   }
   const size_t img_nx = img.getNx();
   const size_t img_ny = img.getNy();
@@ -342,7 +353,7 @@ bool crop(SipiImage &img, const std::shared_ptr<SipiRegion> &region)
     // clean up and throw exception
   }
 
-  return true;
+  return {};
 }
 
 //============================================================================
