@@ -41,11 +41,15 @@ namespace processing {
 Result<void> add_watermark(SipiImage &img, const std::string &wmfilename)
 {
   int wm_nx, wm_ny, wm_nc;
-  std::vector<unsigned char> wm = read_watermark(wmfilename, wm_nx, wm_ny, wm_nc);
-  if (wm.empty()) {
+  auto wm = read_watermark(wmfilename, wm_nx, wm_ny, wm_nc);
+  if (!wm) { return std::unexpected(wm.error()); }
+  // read_watermark returns success with an empty buffer when the file cannot
+  // be opened at all (as opposed to opening but failing to parse), so this
+  // check is still reachable and stays.
+  if (wm->empty()) {
     return std::unexpected(SipiValueError{ ErrorCode::kDecodeFailed, "Cannot read watermark file " + wmfilename });
   }
-  byte *wmbuf = wm.data();
+  byte *wmbuf = wm->data();
 
   const size_t nx = img.getNx();
   const size_t ny = img.getNy();

@@ -29,7 +29,12 @@ namespace Sipi {
 // which uses libtiff) and is resolved at link time — this package does not
 // depend on `//src/format_handlers` (see this package's BUILD docstring),
 // keeping the one-way edge intact.
-std::vector<unsigned char> read_watermark(const std::string &wmfile, int &nx, int &ny, int &nc);
+//
+// \returns an error if the file cannot be parsed as a TIFF with the expected
+//          shape (unreadable width/length tags, bits-per-sample other than
+//          8, non-contiguous planar config) or a scanline read fails;
+//          success with an empty buffer if the file cannot be opened at all.
+[[nodiscard]] Result<std::vector<unsigned char>> read_watermark(const std::string &wmfile, int &nx, int &ny, int &nc);
 
 namespace processing {
 
