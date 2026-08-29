@@ -68,15 +68,17 @@ Result<std::shared_ptr<Icc>> Icc::parse(const unsigned char *icc_buf, int icc_le
   }
   unsigned int len =
     cmsGetProfileInfoASCII(profile.get(), cmsInfoDescription, cmsNoLanguage, cmsNoCountry, nullptr, 0);
-  auto buf = std::make_unique<char[]>(len);
-  cmsGetProfileInfoASCII(profile.get(), cmsInfoDescription, cmsNoLanguage, cmsNoCountry, buf.get(), len);
-  PredefinedProfiles type;
-  if (strcmp(buf.get(), "sRGB IEC61966-2.1") == 0) {
-    type = icc_sRGB;
-  } else if (strncmp(buf.get(), "AdobeRGB", 8) == 0) {
-    type = icc_AdobeRGB;
-  } else {
-    type = icc_unknown;
+  // An ICC profile need not carry a description tag; cmsGetProfileInfoASCII
+  // then reports len == 0 and there is no description to classify against.
+  PredefinedProfiles type = icc_unknown;
+  if (len > 0) {
+    auto buf = std::make_unique<char[]>(len);
+    cmsGetProfileInfoASCII(profile.get(), cmsInfoDescription, cmsNoLanguage, cmsNoCountry, buf.get(), len);
+    if (strcmp(buf.get(), "sRGB IEC61966-2.1") == 0) {
+      type = icc_sRGB;
+    } else if (strncmp(buf.get(), "AdobeRGB", 8) == 0) {
+      type = icc_AdobeRGB;
+    }
   }
   return std::shared_ptr<Icc>(new Icc(std::move(profile), type));
 }

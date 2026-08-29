@@ -44,6 +44,7 @@ filegroup(
     name = "fuzz_seeds_jpeg",
     srcs = [
         "images/malformed/jpeg_exif_truncated.jpg",
+        "images/malformed/jpeg_icc_no_description.jpg",
         "images/malformed/jpeg_icc_short_app2.jpg",
         "images/malformed/jpeg_photoshop_overshoot_app13.jpg",
         "images/malformed/jpeg_photoshop_short_app13.jpg",
