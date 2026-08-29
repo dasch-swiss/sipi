@@ -980,48 +980,49 @@ Result<bool> SipiIOTiff::read(SipiImage *img,
     //
     uint16_t safo, ori, planar, stmp;
 
-    // TIFFGetField writes a uint32_t through these two pointers; img->nx/ny
-    // are size_t, so passing their addresses directly leaves the upper
-    // 32 bits (on a 64-bit size_t) uninitialized. Read into local uint32_t
-    // out-params first.
+    // TIFFGetField writes a uint32_t through these two pointers; the image's
+    // width/height are size_t, so passing their addresses directly leaves the
+    // upper 32 bits (on a 64-bit size_t) uninitialized. Read into local
+    // uint32_t out-params first.
     uint32_t tiff_width = 0, tiff_height = 0;
     if (TIFFGetField(tif, TIFFTAG_IMAGEWIDTH, &tiff_width) == 0) {
       return std::unexpected(SipiValueError{
         ErrorCode::kMalformedInput, "TIFFGetField of TIFFTAG_IMAGEWIDTH failed: " + filepath });
     }
-    img->nx = tiff_width;
 
     if (TIFFGetField(tif, TIFFTAG_IMAGELENGTH, &tiff_height) == 0) {
       return std::unexpected(SipiValueError{
         ErrorCode::kMalformedInput, "TIFFGetField of TIFFTAG_IMAGELENGTH failed: " + filepath });
     }
-    img->ny = tiff_height;
 
     TIFF_GET_FIELD(tif, TIFFTAG_SAMPLESPERPIXEL, &stmp, 1);
-    img->nc = static_cast<size_t>(stmp);
+    const size_t tiff_nc = static_cast<size_t>(stmp);
 
     TIFF_GET_FIELD(tif, TIFFTAG_BITSPERSAMPLE, &stmp, 1);
-    img->bps = static_cast<size_t>(stmp);
+    const size_t tiff_bps = static_cast<size_t>(stmp);
 
-    validate_decode_dims(img->nx, img->ny, img->nc, static_cast<int>(img->bps), filepath);
+    img->set_geometry(tiff_width, tiff_height, tiff_nc, tiff_bps);
+
+    validate_decode_dims(img->getNx(), img->getNy(), img->getNc(), static_cast<int>(img->getBps()), filepath);
 
     TIFF_GET_FIELD(tif, TIFFTAG_ORIENTATION, &ori, ORIENTATION_TOPLEFT);
-    img->orientation = static_cast<Orientation>(ori);
+    img->setOrientation(static_cast<Orientation>(ori));
 
     if (1 != TIFFGetField(tif, TIFFTAG_PHOTOMETRIC, &stmp)) {
-      img->photo = PhotometricInterpretation::MINISBLACK;
+      img->setPhoto(PhotometricInterpretation::MINISBLACK);
     } else {
-      img->photo = static_cast<PhotometricInterpretation>(stmp);
+      img->setPhoto(static_cast<PhotometricInterpretation>(stmp));
     }
 
     // With TIFFTAG_JPEGCOLORMODE set to JPEGCOLORMODE_RGB, libtiff's JPEG codec
     // converts YCbCr scanlines to RGB before handing them back; TIFFTAG_PHOTOMETRIC
-    // keeps reporting the file's on-disk YCbCr encoding regardless. img->photo drives
-    // downstream colorspace/ICC handling, so it must track the decoded pixel layout.
+    // keeps reporting the file's on-disk YCbCr encoding regardless. The image's
+    // photometric interpretation drives downstream colorspace/ICC handling, so
+    // it must track the decoded pixel layout.
     uint16_t decode_compression = COMPRESSION_NONE;
     TIFF_GET_FIELD(tif, TIFFTAG_COMPRESSION, &decode_compression, COMPRESSION_NONE);
-    if (decode_compression == COMPRESSION_JPEG && img->photo == PhotometricInterpretation::YCBCR) {
-      img->photo = PhotometricInterpretation::RGB;
+    if (decode_compression == COMPRESSION_JPEG && img->getPhoto() == PhotometricInterpretation::YCBCR) {
+      img->setPhoto(PhotometricInterpretation::RGB);
     }
 
     //
@@ -1036,15 +1037,15 @@ Result<bool> SipiIOTiff::read(SipiImage *img,
     std::vector<uint16_t> bcm;
 
     size_t colmap_len = 0;
-    if (img->photo == PhotometricInterpretation::PALETTE) {
+    if (img->getPhoto() == PhotometricInterpretation::PALETTE) {
       uint16_t *_rcm = nullptr, *_gcm = nullptr, *_bcm = nullptr;
       if (TIFFGetField(tif, TIFFTAG_COLORMAP, &_rcm, &_gcm, &_bcm) == 0) {
         return std::unexpected(SipiValueError{
           ErrorCode::kMalformedInput, "TIFFGetField of TIFFTAG_COLORMAP failed: " + filepath });
       }
-      // img->bps was already validated above (validate_decode_dims) to be one
-      // of {1, 4, 8, 12, 16}, so 1 << bps cannot overflow size_t.
-      colmap_len = static_cast<size_t>(1) << img->bps;
+      // The image's bps was already validated above (validate_decode_dims) to
+      // be one of {1, 4, 8, 12, 16}, so 1 << bps cannot overflow size_t.
+      colmap_len = static_cast<size_t>(1) << img->getBps();
       rcm.resize(colmap_len);
       gcm.resize(colmap_len);
       bcm.resize(colmap_len);
@@ -1076,7 +1077,7 @@ Result<bool> SipiIOTiff::read(SipiImage *img,
         default:
           extra = ExtraSamples::UNSPECIFIED;
         }
-        img->es.push_back(extra);
+        img->addEs(extra);
       }
     }
 
@@ -1088,62 +1089,38 @@ Result<bool> SipiIOTiff::read(SipiImage *img,
     char *str;
 
     if (1 == TIFFGetField(tif, TIFFTAG_IMAGEDESCRIPTION, &str)) {
-      img->ensure_exif();
-      img->exif->addKeyVal(std::string("Exif.Image.ImageDescription"), std::string(str));
+      img->exif_writable()->addKeyVal(std::string("Exif.Image.ImageDescription"), std::string(str));
     }
     if (1 == TIFFGetField(tif, TIFFTAG_MAKE, &str)) {
-      img->ensure_exif();
-      img->exif->addKeyVal(std::string("Exif.Image.Make"), std::string(str));
+      img->exif_writable()->addKeyVal(std::string("Exif.Image.Make"), std::string(str));
     }
     if (1 == TIFFGetField(tif, TIFFTAG_MODEL, &str)) {
-      img->ensure_exif();
-      img->exif->addKeyVal(std::string("Exif.Image.Model"), std::string(str));
+      img->exif_writable()->addKeyVal(std::string("Exif.Image.Model"), std::string(str));
     }
     if (1 == TIFFGetField(tif, TIFFTAG_SOFTWARE, &str)) {
-      img->ensure_exif();
-      img->exif->addKeyVal(std::string("Exif.Image.Software"), std::string(str));
+      img->exif_writable()->addKeyVal(std::string("Exif.Image.Software"), std::string(str));
     }
     if (1 == TIFFGetField(tif, TIFFTAG_DATETIME, &str)) {
-      img->ensure_exif();
-      img->exif->addKeyVal(std::string("Exif.Image.DateTime"), std::string(str));
+      img->exif_writable()->addKeyVal(std::string("Exif.Image.DateTime"), std::string(str));
     }
     if (1 == TIFFGetField(tif, TIFFTAG_ARTIST, &str)) {
-      img->ensure_exif();
-      img->exif->addKeyVal(std::string("Exif.Image.Artist"), std::string(str));
+      img->exif_writable()->addKeyVal(std::string("Exif.Image.Artist"), std::string(str));
     }
     if (1 == TIFFGetField(tif, TIFFTAG_HOSTCOMPUTER, &str)) {
-      img->ensure_exif();
-      img->exif->addKeyVal(std::string("Exif.Image.HostComputer"), std::string(str));
+      img->exif_writable()->addKeyVal(std::string("Exif.Image.HostComputer"), std::string(str));
     }
     if (1 == TIFFGetField(tif, TIFFTAG_COPYRIGHT, &str)) {
-      img->ensure_exif();
-      img->exif->addKeyVal(std::string("Exif.Image.Copyright"), std::string(str));
+      img->exif_writable()->addKeyVal(std::string("Exif.Image.Copyright"), std::string(str));
     }
     if (1 == TIFFGetField(tif, TIFFTAG_DOCUMENTNAME, &str)) {
-      img->ensure_exif();
-      img->exif->addKeyVal(std::string("Exif.Image.DocumentName"), std::string(str));
+      img->exif_writable()->addKeyVal(std::string("Exif.Image.DocumentName"), std::string(str));
     }
-    // ???????? What shall we do with this meta data which is not standard in exif??????
-    // We could add it as Xmp?
-    //
-    /*
-                if (1 == TIFFGetField(tif, TIFFTAG_PAGENAME, &str)) {
-                    if (img->exif == NULL) img->exif = std::make_shared<Exif>();
-                    img->exif->addKeyVal(string("Exif.Image.PageName"), string(str));
-                }
-                if (1 == TIFFGetField(tif, TIFFTAG_PAGENUMBER, &str)) {
-                    if (img->exif == NULL) img->exif = std::make_shared<Exif>();
-                    img->exif->addKeyVal(string("Exif.Image.PageNumber"), string(str));
-                }
-    */
     float f;
     if (1 == TIFFGetField(tif, TIFFTAG_XRESOLUTION, &f)) {
-      img->ensure_exif();
-      img->exif->addKeyVal(std::string("Exif.Image.XResolution"), Exif::toRational(f));
+      img->exif_writable()->addKeyVal(std::string("Exif.Image.XResolution"), Exif::toRational(f));
     }
     if (1 == TIFFGetField(tif, TIFFTAG_YRESOLUTION, &f)) {
-      img->ensure_exif();
-      img->exif->addKeyVal(std::string("Exif.Image.YResolution"), Exif::toRational(f));
+      img->exif_writable()->addKeyVal(std::string("Exif.Image.YResolution"), Exif::toRational(f));
     }
 
     // libtiff writes a uint16_t here; `short` is already the same width
@@ -1156,8 +1133,7 @@ Result<bool> SipiIOTiff::read(SipiImage *img,
     // bytes for a well-formed decode.
     short s;
     if (1 == TIFFGetField(tif, TIFFTAG_RESOLUTIONUNIT, &s)) {
-      img->ensure_exif();
-      img->exif->addKeyVal(std::string("Exif.Image.ResolutionUnit"), s);
+      img->exif_writable()->addKeyVal(std::string("Exif.Image.ResolutionUnit"), s);
     }
 
     //
@@ -1168,7 +1144,7 @@ Result<bool> SipiIOTiff::read(SipiImage *img,
 
     if (TIFFGetField(tif, TIFFTAG_RICHTIFFIPTC, &iptc_length, &iptc_content) != 0) {
       try {
-        img->iptc = std::make_shared<Iptc>(iptc_content, iptc_length);
+        img->set_iptc(std::make_shared<Iptc>(iptc_content, iptc_length));
       } catch (SipiError &err) {
         log_err("%s", err.to_string().c_str());
       }
@@ -1178,10 +1154,7 @@ Result<bool> SipiIOTiff::read(SipiImage *img,
     // read exif here....
     //
     toff_t exif_ifd_offs;
-    if (1 == TIFFGetField(tif, TIFFTAG_EXIFIFD, &exif_ifd_offs)) {
-      img->ensure_exif();
-      readExif(img, tif, exif_ifd_offs);
-    }
+    if (1 == TIFFGetField(tif, TIFFTAG_EXIFIFD, &exif_ifd_offs)) { readExif(img, tif, exif_ifd_offs); }
 
     //
     // read xmp header
@@ -1194,7 +1167,7 @@ Result<bool> SipiIOTiff::read(SipiImage *img,
         log_warn("TIFF XMLPACKET (XMP) packet of %u bytes exceeds INT_MAX; skipping", xmp_length);
       } else {
         try {
-          img->xmp = std::make_shared<Xmp>(xmp_content, static_cast<int>(xmp_length));
+          img->set_xmp(std::make_shared<Xmp>(xmp_content, static_cast<int>(xmp_length)));
         } catch (SipiError &err) {
           log_err("%s", err.to_string().c_str());
         }
@@ -1211,7 +1184,7 @@ Result<bool> SipiIOTiff::read(SipiImage *img,
 
     if (1 == TIFFGetField(tif, TIFFTAG_ICCPROFILE, &icc_len, &icc_buf)) {
       try {
-        img->icc = std::make_shared<Icc>(icc_buf, icc_len);
+        img->set_icc(std::make_shared<Icc>(icc_buf, icc_len));
       } catch (SipiError &err) {
         log_err("%s", err.to_string().c_str());
       }
@@ -1244,12 +1217,12 @@ Result<bool> SipiIOTiff::read(SipiImage *img,
       }
 
       // Transfer functions are only meaningful for 8-bit and 16-bit images.
-      // For 1-bit / 4-bit images the buffer `3 * (1 << img->bps)` is only
-      // 6 / 48 shorts respectively; a malformed TRANSFERFUNCTION tag with
-      // a larger payload would overflow the heap allocation below. We
-      // deliberately allowlist 8 and 16 (rather than using `bps >= 8`) so
-      // the intent is documented in the code.
-      if (img->bps == 8 || img->bps == 16) {
+      // For 1-bit / 4-bit images the buffer `3 * (1 << bps)` is only 6 / 48
+      // shorts respectively; a malformed TRANSFERFUNCTION tag with a larger
+      // payload would overflow the heap allocation below. We deliberately
+      // allowlist 8 and 16 (rather than using `bps >= 8`) so the intent is
+      // documented in the code.
+      if (img->getBps() == 8 || img->getBps() == 16) {
         // RAII-wrap the transfer-function buffer so that an exception from
         // the Icc constructor cannot leak it. The `tfunc_ti_*` pointers are
         // owned by libtiff and must not be freed; only our copy (`tfunc`) is
@@ -1266,12 +1239,12 @@ Result<bool> SipiIOTiff::read(SipiImage *img,
         // Passing fewer than 3 out-pointer slots here under-reads the
         // varargs and crashes — verified empirically against the vendored
         // libtiff, not merely inferred from the tag's field-info table.
-        const size_t table_len = static_cast<size_t>(1) << img->bps;
+        const size_t table_len = static_cast<size_t>(1) << img->getBps();
         auto tfunc = std::make_unique<unsigned short[]>(3 * table_len);
         unsigned int tfunc_len = 0;
         bool has_tfunc = false;
 
-        const int color_channels = static_cast<int>(img->nc) - static_cast<int>(eslen);
+        const int color_channels = static_cast<int>(img->getNc()) - static_cast<int>(eslen);
         uint16_t *tfunc_ti_0 = nullptr;
         uint16_t *tfunc_ti_1 = nullptr;
         uint16_t *tfunc_ti_2 = nullptr;
@@ -1291,11 +1264,11 @@ Result<bool> SipiIOTiff::read(SipiImage *img,
           tfunc_len = static_cast<unsigned int>(table_len);
         }
 
-        img->icc = std::make_shared<Icc>(
-          whitepoint, primaries, has_tfunc ? tfunc.get() : nullptr, has_tfunc ? tfunc_len : 0);
+        img->set_icc(std::make_shared<Icc>(
+          whitepoint, primaries, has_tfunc ? tfunc.get() : nullptr, has_tfunc ? tfunc_len : 0));
       } else {
         // bilevel / 4-bit / non-standard — no transfer function
-        img->icc = std::make_shared<Icc>(whitepoint, primaries, nullptr, 0);
+        img->set_icc(std::make_shared<Icc>(whitepoint, primaries, nullptr, 0));
       }
     }
 
@@ -1333,7 +1306,7 @@ Result<bool> SipiIOTiff::read(SipiImage *img,
     auto resolutions = read_resolutions(img->getNx(), tif);
     int reduce = -1;
 
-    size_t w = img->nx, h = img->ny;
+    size_t w = img->getNx(), h = img->getNy();
     size_t out_w, out_h;
     bool redonly;
     bool is_tiled;
@@ -1350,8 +1323,7 @@ Result<bool> SipiIOTiff::read(SipiImage *img,
       TIFFSetDirectory(tif, level);
       set_jpeg_colormode_if_jpeg(tif);
 
-      img->nx = resolutions[level].width;
-      img->ny = resolutions[level].height;
+      img->set_geometry(resolutions[level].width, resolutions[level].height, img->getNc(), img->getBps());
 
       // crop_coords maps a full-resolution region into this level's coordinate
       // space by dividing by the level's ratio (1, 2, 4, 8 …), NOT by the log2
@@ -1370,14 +1342,14 @@ Result<bool> SipiIOTiff::read(SipiImage *img,
     if (region == nullptr) {
       roi_x = 0;
       roi_y = 0;
-      roi_w = img->nx;
-      roi_h = img->ny;
+      roi_w = img->getNx();
+      roi_h = img->getNy();
     } else {
-      region->crop_coords(img->nx, img->ny, roi_x, roi_y, roi_w, roi_h);
+      region->crop_coords(img->getNx(), img->getNy(), roi_x, roi_y, roi_w, roi_h);
     }
 
     int ps;// pixel size in bytes
-    switch (img->bps) {
+    switch (img->getBps()) {
     case 1:// 1-bit is converted to 8-bit on-the-fly by read_standard_data (one2eight<T>())
     case 8:
       ps = 1;
@@ -1387,45 +1359,49 @@ Result<bool> SipiIOTiff::read(SipiImage *img,
       break;
     default:
       return std::unexpected(SipiValueError{ ErrorCode::kUnsupportedFormat,
-        "Unsupported bits/sample (" + std::to_string(img->bps) + ") in file " + filepath });
+        "Unsupported bits/sample (" + std::to_string(img->getBps()) + ") in file " + filepath });
     }
 
-    std::vector<uint8_t> inbuf(checked_buf_size_or_throw(roi_w, roi_h, img->nc, static_cast<size_t>(ps)));
+    std::vector<uint8_t> inbuf(checked_buf_size_or_throw(roi_w, roi_h, img->getNc(), static_cast<size_t>(ps)));
 
-    if (img->bps <= 8) {
+    // The decoded bps can be promoted from the file's on-disk value (1-bit ->
+    // 8-bit via one2eight<T>()); tracked locally and applied to the image
+    // together with the pixel buffer below via set_pixels(), which is the
+    // only path that keeps buffer and geometry in lockstep.
+    size_t decoded_bps = img->getBps();
+    if (img->getBps() <= 8) {
       auto pixdata_result = is_tiled ? read_tiled_data<uint8_t>(tif, roi_x, roi_y, roi_w, roi_h)
                                       : read_standard_data<uint8_t>(tif, roi_x, roi_y, roi_w, roi_h);
       if (!pixdata_result) { return std::unexpected(std::move(pixdata_result).error()); }
       std::vector<uint8_t> pixdata = std::move(*pixdata_result);
 
-      img->bps = 8;
+      decoded_bps = 8;
 
-      memcpy(inbuf.data(), pixdata.data(), pixdata.size() * img->bps / 8);
-    } else if (img->bps <= 16) {
+      memcpy(inbuf.data(), pixdata.data(), pixdata.size() * decoded_bps / 8);
+    } else if (img->getBps() <= 16) {
       auto pixdata_result = is_tiled ? read_tiled_data<uint16_t>(tif, roi_x, roi_y, roi_w, roi_h)
                                       : read_standard_data<uint16_t>(tif, roi_x, roi_y, roi_w, roi_h);
       if (!pixdata_result) { return std::unexpected(std::move(pixdata_result).error()); }
       std::vector<uint16_t> pixdata = std::move(*pixdata_result);
-      img->bps = 16;
-      memcpy(inbuf.data(), pixdata.data(), pixdata.size() * img->bps / 8);
+      decoded_bps = 16;
+      memcpy(inbuf.data(), pixdata.data(), pixdata.size() * decoded_bps / 8);
     }
 
-    img->pixels = std::move(inbuf);
-    img->nx = roi_w;
-    img->ny = roi_h;
+    img->set_pixels(std::move(inbuf), roi_w, roi_h, img->getNc(), decoded_bps);
     tif_guard.reset();
 
-    if (img->photo == PhotometricInterpretation::PALETTE) {
+    if (img->getPhoto() == PhotometricInterpretation::PALETTE) {
       //
       // ok, we have a palette color image we have to convert to RGB...
       //
       // Validate every decoded pixel value once, up front, against the
       // colormap size before the RGB-expansion loop below indexes into
       // rcm/gcm/bcm with it unchecked (DEV-6065).
-      for (size_t i = 0; i < img->nx * img->ny; i++) {
-        if (static_cast<size_t>(img->pixels[i]) >= colmap_len) {
+      std::span<const byte> palette_pixels = img->pixels_view();
+      for (size_t i = 0; i < img->getNx() * img->getNy(); i++) {
+        if (static_cast<size_t>(palette_pixels[i]) >= colmap_len) {
           return std::unexpected(SipiValueError{ ErrorCode::kMalformedInput,
-            "Palette index " + std::to_string(img->pixels[i]) + " out of range for colormap size "
+            "Palette index " + std::to_string(palette_pixels[i]) + " out of range for colormap size "
               + std::to_string(colmap_len) + ": " + filepath });
         }
       }
@@ -1436,50 +1412,50 @@ Result<bool> SipiIOTiff::read(SipiImage *img,
         if (gcm[i] > cm_max) cm_max = gcm[i];
         if (bcm[i] > cm_max) cm_max = bcm[i];
       }
-      std::vector<uint8_t> dataptr(checked_buf_size_or_throw(img->nx, img->ny, 3, 1));
+      std::vector<uint8_t> dataptr(checked_buf_size_or_throw(img->getNx(), img->getNy(), 3, 1));
       if (cm_max <= 256) {// we have a colomap with entries form 0 - 255
-        for (size_t i = 0; i < img->nx * img->ny; i++) {
-          dataptr[3 * i] = (uint8_t)rcm[img->pixels[i]];
-          dataptr[3 * i + 1] = (uint8_t)gcm[img->pixels[i]];
-          dataptr[3 * i + 2] = (uint8_t)bcm[img->pixels[i]];
+        for (size_t i = 0; i < img->getNx() * img->getNy(); i++) {
+          dataptr[3 * i] = (uint8_t)rcm[palette_pixels[i]];
+          dataptr[3 * i + 1] = (uint8_t)gcm[palette_pixels[i]];
+          dataptr[3 * i + 2] = (uint8_t)bcm[palette_pixels[i]];
         }
       } else {// we have a colormap with entries > 255, assuming 16 bit
-        for (size_t i = 0; i < img->nx * img->ny; i++) {
-          dataptr[3 * i] = (uint8_t)(rcm[img->pixels[i]] >> 8);
-          dataptr[3 * i + 1] = (uint8_t)(gcm[img->pixels[i]] >> 8);
-          dataptr[3 * i + 2] = (uint8_t)(bcm[img->pixels[i]] >> 8);
+        for (size_t i = 0; i < img->getNx() * img->getNy(); i++) {
+          dataptr[3 * i] = (uint8_t)(rcm[palette_pixels[i]] >> 8);
+          dataptr[3 * i + 1] = (uint8_t)(gcm[palette_pixels[i]] >> 8);
+          dataptr[3 * i + 2] = (uint8_t)(bcm[palette_pixels[i]] >> 8);
         }
       }
-      img->pixels = std::move(dataptr);
-      img->photo = PhotometricInterpretation::RGB;
-      img->nc = 3;
+      img->set_pixels(std::move(dataptr), img->getNx(), img->getNy(), 3, img->getBps());
+      img->setPhoto(PhotometricInterpretation::RGB);
     }
 
-    if (img->icc == nullptr) {
-      switch (img->photo) {
+    if (img->getIcc() == nullptr) {
+      switch (img->getPhoto()) {
       case PhotometricInterpretation::MINISBLACK: {
         // read_standard_data<uint8_t>() already converts 1-bit to 8-bit via
-        // one2eight<T>(); by the time we reach this block `img->bps == 8`.
-        // The previous `cvrt1BitTo8Bit` call was dead code.
-        img->icc = std::make_shared<Icc>(icc_GRAY_D50);
+        // one2eight<T>(); by the time we reach this block the image already
+        // reports 8 bits per sample. The previous `cvrt1BitTo8Bit` call was
+        // dead code.
+        img->set_icc(std::make_shared<Icc>(icc_GRAY_D50));
         break;
       }
 
       case PhotometricInterpretation::MINISWHITE: {
         // Same as MINISBLACK above — 1-bit → 8-bit conversion already happened.
-        img->icc = std::make_shared<Icc>(icc_GRAY_D50);
+        img->set_icc(std::make_shared<Icc>(icc_GRAY_D50));
         break;
       }
 
       case PhotometricInterpretation::SEPARATED: {
-        img->icc = std::make_shared<Icc>(icc_CMYK_standard);
+        img->set_icc(std::make_shared<Icc>(icc_CMYK_standard));
         break;
       }
 
       case PhotometricInterpretation::YCBCR:// fall through!
 
       case PhotometricInterpretation::RGB: {
-        img->icc = std::make_shared<Icc>(icc_sRGB);
+        img->set_icc(std::make_shared<Icc>(icc_sRGB));
         break;
       }
 
@@ -1487,84 +1463,52 @@ Result<bool> SipiIOTiff::read(SipiImage *img,
         //
         // we have to convert to JPEG2000/littleCMS standard
         //
-        if (img->bps == 8) {
-          for (size_t y = 0; y < img->ny; y++) {
-            for (size_t x = 0; x < img->nx; x++) {
+        const size_t lab_nc = img->getNc();
+        const size_t lab_nx = img->getNx();
+        const size_t lab_ny = img->getNy();
+        if (img->getBps() == 8) {
+          byte *pix = img->pixels_writable().data();
+          for (size_t y = 0; y < lab_ny; y++) {
+            for (size_t x = 0; x < lab_nx; x++) {
               union {
                 unsigned char u;
                 signed char s;
               } v{};
-              v.u = img->pixels[img->nc * (y * img->nx + x) + 1];
-              img->pixels[img->nc * (y * img->nx + x) + 1] = 128 + v.s;
-              v.u = img->pixels[img->nc * (y * img->nx + x) + 2];
-              img->pixels[img->nc * (y * img->nx + x) + 2] = 128 + v.s;
+              v.u = pix[lab_nc * (y * lab_nx + x) + 1];
+              pix[lab_nc * (y * lab_nx + x) + 1] = 128 + v.s;
+              v.u = pix[lab_nc * (y * lab_nx + x) + 2];
+              pix[lab_nc * (y * lab_nx + x) + 2] = 128 + v.s;
             }
           }
-          img->icc = std::make_shared<Icc>(icc_LAB);
-        } else if (img->bps == 16) {
-          auto *data = (unsigned short *)img->pixels.data();
-          for (size_t y = 0; y < img->ny; y++) {
-            for (size_t x = 0; x < img->nx; x++) {
+          img->set_icc(std::make_shared<Icc>(icc_LAB));
+        } else if (img->getBps() == 16) {
+          auto *data = (unsigned short *)img->pixels_writable().data();
+          for (size_t y = 0; y < lab_ny; y++) {
+            for (size_t x = 0; x < lab_nx; x++) {
               union {
                 unsigned short u;
                 signed short s;
               } v{};
-              v.u = data[img->nc * (y * img->nx + x) + 1];
-              data[img->nc * (y * img->nx + x) + 1] = 32768 + v.s;
-              v.u = data[img->nc * (y * img->nx + x) + 2];
-              data[img->nc * (y * img->nx + x) + 2] = 32768 + v.s;
+              v.u = data[lab_nc * (y * lab_nx + x) + 1];
+              data[lab_nc * (y * lab_nx + x) + 1] = 32768 + v.s;
+              v.u = data[lab_nc * (y * lab_nx + x) + 2];
+              data[lab_nc * (y * lab_nx + x) + 2] = 32768 + v.s;
             }
           }
-          img->icc = std::make_shared<Icc>(icc_LAB);
+          img->set_icc(std::make_shared<Icc>(icc_LAB));
         } else {
           return std::unexpected(SipiValueError{
-            ErrorCode::kUnsupportedFormat, "Unsupported bits per sample (" + std::to_string(img->bps) + ")" });
+            ErrorCode::kUnsupportedFormat, "Unsupported bits per sample (" + std::to_string(img->getBps()) + ")" });
         }
         break;
       }
 
       default: {
         return std::unexpected(SipiValueError{ ErrorCode::kUnsupportedFormat,
-          "Unsupported photometric interpretation (" + to_string(img->photo) + ")" });
+          "Unsupported photometric interpretation (" + to_string(img->getPhoto()) + ")" });
       }
       }
     }
-    /*
-    if ((img->nc == 3) && (img->photo == PHOTOMETRIC_YCBCR)) {
-        std::shared_ptr<Icc> target_profile = std::make_shared<Icc>(img->icc);
-        switch (img->bps) {
-            case 8: {
-                img->convertToIcc(target_profile, TYPE_YCbCr_8);
-                break;
-            }
-            case 16: {
-                img->convertToIcc(target_profile, TYPE_YCbCr_16);
-                break;
-            }
-            default: {
-                throw Sipi::SipiImageError(thisSourceFile, __LINE__, "Unsupported bits/sample (" + std::to_string(bps) +
-    ")!");
-            }
-        }
-    }
-    else if ((img->nc == 4) && (img->photo == PHOTOMETRIC_SEPARATED)) { // CMYK image
-        std::shared_ptr<Icc> target_profile = std::make_shared<Icc>(icc_sRGB);
-        switch (img->bps) {
-            case 8: {
-                img->convertToIcc(target_profile, TYPE_CMYK_8);
-                break;
-            }
-            case 16: {
-                img->convertToIcc(target_profile, TYPE_CMYK_16);
-                break;
-            }
-            default: {
-                throw Sipi::SipiImageError(thisSourceFile, __LINE__, "Unsupported bits/sample (" + std::to_string(bps) +
-    ")!");
-            }
-        }
-    }
-    */
     //
     // resize/Scale the image if necessary
     //
@@ -1736,21 +1680,22 @@ void SipiIOTiff::write_basic_tags(const SipiImage &img,
     TIFFSetField(tif, TIFFTAG_BITSPERSAMPLE, (uint16_t)1);
     TIFFSetField(tif, TIFFTAG_COMPRESSION, COMPRESSION_CCITTFAX4);// that's out default....
   } else {
-    TIFFSetField(tif, TIFFTAG_BITSPERSAMPLE, static_cast<uint16_t>(img.bps));
+    TIFFSetField(tif, TIFFTAG_BITSPERSAMPLE, static_cast<uint16_t>(img.getBps()));
     if (compression == "COMPRESSION_LZW") {
       TIFFSetField(tif, TIFFTAG_COMPRESSION, COMPRESSION_LZW);
     } else if (compression == "COMPRESSION_DEFLATE") {
       TIFFSetField(tif, TIFFTAG_COMPRESSION, COMPRESSION_DEFLATE);
     }
   }
-  TIFFSetField(tif, TIFFTAG_SAMPLESPERPIXEL, static_cast<uint16_t>(img.nc));
-  if (!img.es.empty()) {
+  TIFFSetField(tif, TIFFTAG_SAMPLESPERPIXEL, static_cast<uint16_t>(img.getNc()));
+  const std::vector<ExtraSamples> &basic_tags_es = img.getEs();
+  if (!basic_tags_es.empty()) {
     // libtiff expects uint16_t* for TIFFTAG_EXTRASAMPLES, not uint8_t*
-    std::vector<uint16_t> es_uint16(img.es.size());
-    for (size_t i = 0; i < img.es.size(); i++) { es_uint16[i] = static_cast<uint16_t>(img.es[i]); }
+    std::vector<uint16_t> es_uint16(basic_tags_es.size());
+    for (size_t i = 0; i < basic_tags_es.size(); i++) { es_uint16[i] = static_cast<uint16_t>(basic_tags_es[i]); }
     TIFFSetField(tif, TIFFTAG_EXTRASAMPLES, static_cast<uint16_t>(es_uint16.size()), es_uint16.data());
   }
-  TIFFSetField(tif, TIFFTAG_PHOTOMETRIC, img.photo);
+  TIFFSetField(tif, TIFFTAG_PHOTOMETRIC, img.getPhoto());
 }
 
 Result<void> SipiIOTiff::write(SipiImage *img, const OutputSink &sink, const SipiCompressionParams *params)
@@ -1792,24 +1737,25 @@ Result<void> SipiIOTiff::write(SipiImage *img, const OutputSink &sink, const Sip
   }
   TIFF *tif = tif_guard.get();
   MEMTIFF *memtif = memtif_guard.get();
-  TIFFSetField(tif, TIFFTAG_IMAGEWIDTH, static_cast<uint32_t>(img->nx));
-  TIFFSetField(tif, TIFFTAG_IMAGELENGTH, static_cast<uint32_t>(img->ny));
+  TIFFSetField(tif, TIFFTAG_IMAGEWIDTH, static_cast<uint32_t>(img->getNx()));
+  TIFFSetField(tif, TIFFTAG_IMAGELENGTH, static_cast<uint32_t>(img->getNy()));
   TIFFSetField(tif, TIFFTAG_ORIENTATION, ORIENTATION_TOPLEFT);
   TIFFSetField(tif, TIFFTAG_ROWSPERSTRIP, TIFFDefaultStripSize(tif, rowsperstrip));
   TIFFSetField(tif, TIFFTAG_ORIENTATION, ORIENTATION_TOPLEFT);
   TIFFSetField(tif, TIFFTAG_PLANARCONFIG, PLANARCONFIG_CONTIG);
   bool its_1_bit = false;
-  if ((img->photo == PhotometricInterpretation::MINISWHITE) || (img->photo == PhotometricInterpretation::MINISBLACK)) {
+  if ((img->getPhoto() == PhotometricInterpretation::MINISWHITE)
+      || (img->getPhoto() == PhotometricInterpretation::MINISBLACK)) {
     its_1_bit = true;
 
-    if (img->bps == 8) {
-      const byte *scan = img->pixels.data();
-      for (size_t i = 0; i < img->nx * img->ny; i++) {
+    if (img->getBps() == 8) {
+      const byte *scan = img->pixels_view().data();
+      for (size_t i = 0; i < img->getNx() * img->getNy(); i++) {
         if ((scan[i] != 0) && (scan[i] != 255)) { its_1_bit = false; }
       }
-    } else if (img->bps == 16) {
-      const word *scan = (const word *)img->pixels.data();
-      for (size_t i = 0; i < img->nx * img->ny; i++) {
+    } else if (img->getBps() == 16) {
+      const word *scan = (const word *)img->pixels_view().data();
+      for (size_t i = 0; i < img->getNx() * img->getNy(); i++) {
         if ((scan[i] != 0) && (scan[i] != 65535)) { its_1_bit = false; }
       }
     }
@@ -1818,106 +1764,113 @@ Result<void> SipiIOTiff::write(SipiImage *img, const OutputSink &sink, const Sip
       TIFFSetField(tif, TIFFTAG_BITSPERSAMPLE, (uint16_t)1);
       TIFFSetField(tif, TIFFTAG_COMPRESSION, COMPRESSION_CCITTFAX4);// that's out default....
     } else {
-      TIFFSetField(tif, TIFFTAG_BITSPERSAMPLE, (uint16_t)img->bps);
+      TIFFSetField(tif, TIFFTAG_BITSPERSAMPLE, (uint16_t)img->getBps());
     }
   } else {
-    TIFFSetField(tif, TIFFTAG_BITSPERSAMPLE, (uint16_t)img->bps);
+    TIFFSetField(tif, TIFFTAG_BITSPERSAMPLE, (uint16_t)img->getBps());
   }
-  if (img->photo == PhotometricInterpretation::CIELAB) {
-    if (img->bps == 8) {
-      for (size_t y = 0; y < img->ny; y++) {
-        for (size_t x = 0; x < img->nx; x++) {
+  if (img->getPhoto() == PhotometricInterpretation::CIELAB) {
+    const size_t cielab_nc = img->getNc();
+    const size_t cielab_nx = img->getNx();
+    const size_t cielab_ny = img->getNy();
+    if (img->getBps() == 8) {
+      byte *pix = img->pixels_writable().data();
+      for (size_t y = 0; y < cielab_ny; y++) {
+        for (size_t x = 0; x < cielab_nx; x++) {
           union {
             unsigned char u;
             signed char s;
           } v{};
-          v.s = img->pixels[img->nc * (y * img->nx + x) + 1] - 128;
-          img->pixels[img->nc * (y * img->nx + x) + 1] = v.u;
-          v.s = img->pixels[img->nc * (y * img->nx + x) + 2] - 128;
-          img->pixels[img->nc * (y * img->nx + x) + 2] = v.u;
+          v.s = pix[cielab_nc * (y * cielab_nx + x) + 1] - 128;
+          pix[cielab_nc * (y * cielab_nx + x) + 1] = v.u;
+          v.s = pix[cielab_nc * (y * cielab_nx + x) + 2] - 128;
+          pix[cielab_nc * (y * cielab_nx + x) + 2] = v.u;
         }
       }
-    } else if (img->bps == 16) {
-      for (size_t y = 0; y < img->ny; y++) {
-        for (size_t x = 0; x < img->nx; x++) {
-          auto *data = (unsigned short *)img->pixels.data();
+    } else if (img->getBps() == 16) {
+      auto *data = (unsigned short *)img->pixels_writable().data();
+      for (size_t y = 0; y < cielab_ny; y++) {
+        for (size_t x = 0; x < cielab_nx; x++) {
           union {
             unsigned short u;
             signed short s;
           } v{};
-          v.s = data[img->nc * (y * img->nx + x) + 1] - 32768;
-          data[img->nc * (y * img->nx + x) + 1] = v.u;
-          v.s = data[img->nc * (y * img->nx + x) + 2] - 32768;
-          data[img->nc * (y * img->nx + x) + 2] = v.u;
+          v.s = data[cielab_nc * (y * cielab_nx + x) + 1] - 32768;
+          data[cielab_nc * (y * cielab_nx + x) + 1] = v.u;
+          v.s = data[cielab_nc * (y * cielab_nx + x) + 2] - 32768;
+          data[cielab_nc * (y * cielab_nx + x) + 2] = v.u;
         }
       }
     } else {
       return std::unexpected(SipiValueError{
-        ErrorCode::kUnsupportedFormat, "Unsupported bits per sample (" + std::to_string(img->bps) + ")" });
+        ErrorCode::kUnsupportedFormat, "Unsupported bits per sample (" + std::to_string(img->getBps()) + ")" });
     }
 
-    // delete img->icc; we don't want to add the ICC profile in this case (doesn't make sense!)
-    img->icc = nullptr;
+    // We don't want to add the ICC profile in this case (doesn't make sense!)
+    img->set_icc(nullptr);
   }
-  TIFFSetField(tif, TIFFTAG_SAMPLESPERPIXEL, static_cast<uint16_t>(img->nc));
+  TIFFSetField(tif, TIFFTAG_SAMPLESPERPIXEL, static_cast<uint16_t>(img->getNc()));
 
-  if (img->es.size() > 0) {
+  const std::vector<ExtraSamples> &write_es = img->getEs();
+  if (write_es.size() > 0) {
     // libtiff expects uint16_t* for TIFFTAG_EXTRASAMPLES, not uint8_t*
-    std::vector<uint16_t> es_uint16(img->es.size());
-    for (size_t i = 0; i < img->es.size(); i++) { es_uint16[i] = static_cast<uint16_t>(img->es[i]); }
+    std::vector<uint16_t> es_uint16(write_es.size());
+    for (size_t i = 0; i < write_es.size(); i++) { es_uint16[i] = static_cast<uint16_t>(write_es[i]); }
     TIFFSetField(tif, TIFFTAG_EXTRASAMPLES, static_cast<uint16_t>(es_uint16.size()), es_uint16.data());
   }
 
-  TIFFSetField(tif, TIFFTAG_PHOTOMETRIC, img->photo);
+  TIFFSetField(tif, TIFFTAG_PHOTOMETRIC, img->getPhoto());
 
   //
   // let's get the TIFF metadata if there is some. We stored the TIFF metadata in the exifData member variable!
   //
-  if ((img->exif != nullptr) & static_cast<int>(!(img->skip_metadata & SkipMetadata::SKIP_EXIF))) {
+  std::shared_ptr<Exif> exif = img->getExif();
+  if ((exif != nullptr) & static_cast<int>(!(img->getSkipMetadata() & SkipMetadata::SKIP_EXIF))) {
     std::string value;
 
-    if (img->exif->getValByKey("Exif.Image.ImageDescription", value)) {
+    if (exif->getValByKey("Exif.Image.ImageDescription", value)) {
       TIFFSetField(tif, TIFFTAG_IMAGEDESCRIPTION, value.c_str());
     }
 
-    if (img->exif->getValByKey("Exif.Image.Make", value)) { TIFFSetField(tif, TIFFTAG_MAKE, value.c_str()); }
+    if (exif->getValByKey("Exif.Image.Make", value)) { TIFFSetField(tif, TIFFTAG_MAKE, value.c_str()); }
 
-    if (img->exif->getValByKey("Exif.Image.Model", value)) { TIFFSetField(tif, TIFFTAG_MODEL, value.c_str()); }
+    if (exif->getValByKey("Exif.Image.Model", value)) { TIFFSetField(tif, TIFFTAG_MODEL, value.c_str()); }
 
-    if (img->exif->getValByKey("Exif.Image.Software", value)) { TIFFSetField(tif, TIFFTAG_SOFTWARE, value.c_str()); }
+    if (exif->getValByKey("Exif.Image.Software", value)) { TIFFSetField(tif, TIFFTAG_SOFTWARE, value.c_str()); }
 
-    if (img->exif->getValByKey("Exif.Image.DateTime", value)) { TIFFSetField(tif, TIFFTAG_DATETIME, value.c_str()); }
+    if (exif->getValByKey("Exif.Image.DateTime", value)) { TIFFSetField(tif, TIFFTAG_DATETIME, value.c_str()); }
 
-    if (img->exif->getValByKey("Exif.Image.Artist", value)) { TIFFSetField(tif, TIFFTAG_ARTIST, value.c_str()); }
+    if (exif->getValByKey("Exif.Image.Artist", value)) { TIFFSetField(tif, TIFFTAG_ARTIST, value.c_str()); }
 
-    if (img->exif->getValByKey("Exif.Image.HostComputer", value)) {
+    if (exif->getValByKey("Exif.Image.HostComputer", value)) {
       TIFFSetField(tif, TIFFTAG_HOSTCOMPUTER, value.c_str());
     }
 
-    if (img->exif->getValByKey("Exif.Image.Copyright", value)) { TIFFSetField(tif, TIFFTAG_COPYRIGHT, value.c_str()); }
+    if (exif->getValByKey("Exif.Image.Copyright", value)) { TIFFSetField(tif, TIFFTAG_COPYRIGHT, value.c_str()); }
 
-    if (img->exif->getValByKey("Exif.Image.DocumentName", value)) {
+    if (exif->getValByKey("Exif.Image.DocumentName", value)) {
       TIFFSetField(tif, TIFFTAG_DOCUMENTNAME, value.c_str());
     }
 
     float f;
 
-    if (img->exif->getValByKey("Exif.Image.XResolution", f)) { TIFFSetField(tif, TIFFTAG_XRESOLUTION, f); }
+    if (exif->getValByKey("Exif.Image.XResolution", f)) { TIFFSetField(tif, TIFFTAG_XRESOLUTION, f); }
 
-    if (img->exif->getValByKey("Exif.Image.YResolution", f)) { TIFFSetField(tif, TIFFTAG_XRESOLUTION, f); }
+    if (exif->getValByKey("Exif.Image.YResolution", f)) { TIFFSetField(tif, TIFFTAG_XRESOLUTION, f); }
 
     short s;
 
-    if (img->exif->getValByKey("Exif.Image.ResolutionUnit", s)) { TIFFSetField(tif, TIFFTAG_RESOLUTIONUNIT, s); }
+    if (exif->getValByKey("Exif.Image.ResolutionUnit", s)) { TIFFSetField(tif, TIFFTAG_RESOLUTIONUNIT, s); }
   }
   Essentials es = img->essential_metadata();
-  if (((img->icc != nullptr) || es.fields().use_icc) & (!(img->skip_metadata & SKIP_ICC))) {
+  std::shared_ptr<Icc> icc = img->getIcc();
+  if (((icc != nullptr) || es.fields().use_icc) & (!(img->getSkipMetadata() & SKIP_ICC))) {
     std::vector<unsigned char> buf;
     try {
       if (es.fields().use_icc) {
         buf = es.fields().icc_profile;
       } else {
-        buf = img->icc->iccBytes();
+        buf = icc->iccBytes();
       }
 
       if (buf.size() > 0) { TIFFSetField(tif, TIFFTAG_ICCPROFILE, static_cast<uint32_t>(buf.size()), buf.data()); }
@@ -1928,9 +1881,10 @@ Result<void> SipiIOTiff::write(SipiImage *img, const OutputSink &sink, const Sip
   //
   // write IPTC data, if available
   //
-  if ((img->iptc != nullptr) & (!(img->skip_metadata & SKIP_IPTC))) {
+  std::shared_ptr<Iptc> iptc = img->getIptc();
+  if ((iptc != nullptr) & (!(img->getSkipMetadata() & SKIP_IPTC))) {
     try {
-      std::vector<unsigned char> buf = img->iptc->iptcBytes();
+      std::vector<unsigned char> buf = iptc->iptcBytes();
       if (buf.size() > 0) { TIFFSetField(tif, TIFFTAG_RICHTIFFIPTC, static_cast<uint32_t>(buf.size()), buf.data()); }
     } catch (SipiError &err) {
       log_err("%s", err.to_string().c_str());
@@ -1940,9 +1894,10 @@ Result<void> SipiIOTiff::write(SipiImage *img, const OutputSink &sink, const Sip
   //
   // write XMP data
   //
-  if ((img->xmp != nullptr) & (!(img->skip_metadata & SKIP_XMP))) {
+  std::shared_ptr<Xmp> xmp = img->getXmp();
+  if ((xmp != nullptr) & (!(img->getSkipMetadata() & SKIP_XMP))) {
     try {
-      std::string buf = img->xmp->xmpBytes();
+      std::string buf = xmp->xmpBytes();
       if (!buf.empty()) { TIFFSetField(tif, TIFFTAG_XMLPACKET, static_cast<uint32_t>(buf.size()), buf.c_str()); }
     } catch (SipiError &err) {
       log_err("%s", err.to_string().c_str());
@@ -1977,19 +1932,19 @@ Result<void> SipiIOTiff::write(SipiImage *img, const OutputSink &sink, const Sip
     if (!cvrt_result.has_value()) { return std::unexpected(std::move(cvrt_result).error()); }
     std::vector<unsigned char> buf = std::move(cvrt_result).value();
 
-    for (size_t i = 0; i < img->ny; i++) { TIFFWriteScanline(tif, buf.data() + i * sll, (int)i, 0); }
+    for (size_t i = 0; i < img->getNy(); i++) { TIFFWriteScanline(tif, buf.data() + i * sll, (int)i, 0); }
   } else {
     if (!pyramid) {
-      for (size_t i = 0; i < img->ny; i++) {
-        TIFFWriteScanline(tif, img->pixels.data() + i * img->nc * img->nx * (img->bps / 8), (int)i, 0);
-      }
+      byte *pixel_data = img->pixels_writable().data();
+      const size_t row_stride = img->getNc() * img->getNx() * (img->getBps() / 8);
+      for (size_t i = 0; i < img->getNy(); i++) { TIFFWriteScanline(tif, pixel_data + i * row_stride, (int)i, 0); }
     } else {
       for (int reduce = 0; reduce <= 5; reduce += 1) {
         SipiSize size(reduce);
         size_t nnx;
         size_t nny;
         bool redonly;
-        (void)size.get_size(img->nx, img->ny, nnx, nny, reduce, redonly);
+        (void)size.get_size(img->getNx(), img->getNy(), nnx, nny, reduce, redonly);
 
         if (std::min(nnx, nny) <= 32) break;
 
@@ -2002,7 +1957,7 @@ Result<void> SipiIOTiff::write(SipiImage *img, const OutputSink &sink, const Sip
   //
   // write exif data
   //
-  if (img->exif != nullptr) {
+  if (exif != nullptr) {
     TIFFWriteDirectory(tif);
     writeExif(img, tif);
   }
@@ -2082,7 +2037,7 @@ void SipiIOTiff::write_subfile(const SipiImage &img,
   size_t nny;
   bool redonly;
   /* try { */
-  (void)size.get_size(img.nx, img.ny, nnx, nny, level, redonly);
+  (void)size.get_size(img.getNx(), img.getNy(), nnx, nny, level, redonly);
   /* } catch (const IIIFSizeError &err) {} */
 
   write_basic_tags(img, tif, nnx, nny, false, compression);
@@ -2095,9 +2050,12 @@ void SipiIOTiff::write_subfile(const SipiImage &img,
   tsize_t tilesize = TIFFTileSize(tif);
 
   // reduce resolution of image: A reduce factor can be given, 0=no scaling, 1=0.5, 2=0.25, 3=0.125,...
-  std::vector<uint8_t> nbuf(img.pixels.data(), img.pixels.data() + img.nx * img.ny * img.nc * img.bps / 8);
+  const size_t subfile_nc = img.getNc();
+  std::span<const byte> subfile_pixels = img.pixels_view();
+  std::vector<uint8_t> nbuf(
+    subfile_pixels.data(), subfile_pixels.data() + img.getNx() * img.getNy() * subfile_nc * img.getBps() / 8);
 
-  if (level > 0) { nbuf = doReduce<uint8_t>(std::move(nbuf), level, img.nx, img.ny, img.nc, nnx, nny); }
+  if (level > 0) { nbuf = doReduce<uint8_t>(std::move(nbuf), level, img.getNx(), img.getNy(), subfile_nc, nnx, nny); }
 
   auto ntiles_x = static_cast<uint32_t>(ceilf(static_cast<float>(nnx) / static_cast<float>(tile_width)));
   auto ntiles_y = static_cast<uint32_t>(ceilf(static_cast<float>(nny) / static_cast<float>(tile_height)));
@@ -2107,13 +2065,13 @@ void SipiIOTiff::write_subfile(const SipiImage &img,
     for (uint32_t tx = 0; tx < ntiles_x; ++tx) {
       for (uint32_t y = 0; y < tile_height; ++y) {
         for (uint32_t x = 0; x < tile_width; ++x) {
-          for (uint32_t c = 0; c < img.nc; ++c) {
+          for (uint32_t c = 0; c < subfile_nc; ++c) {
             uint32_t xx = tx * tile_width + x;
             uint32_t yy = ty * tile_height + y;
             if ((xx < nnx) && (yy < nny)) {
-              tilebuf[img.nc * (y * tile_width + x) + c] = nbuf[img.nc * (yy * nnx + xx) + c];
+              tilebuf[subfile_nc * (y * tile_width + x) + c] = nbuf[subfile_nc * (yy * nnx + xx) + c];
             } else {
-              tilebuf[img.nc * (y * tile_width + x) + c] = 0;
+              tilebuf[subfile_nc * (y * tile_width + x) + c] = 0;
             }
           }
         }
@@ -2127,6 +2085,7 @@ void SipiIOTiff::write_subfile(const SipiImage &img,
 void SipiIOTiff::readExif(SipiImage *img, TIFF *tif, toff_t exif_offset)
 {
   uint16_t curdir = TIFFCurrentDirectory(tif);
+  auto exif = img->exif_writable();
 
   if (TIFFReadEXIFDirectory(tif, exif_offset)) {
     for (int i = 0; i < exiftag_list_len; i++) {
@@ -2136,7 +2095,7 @@ void SipiIOTiff::readExif(SipiImage *img, TIFF *tif, toff_t exif_offset)
         if (TIFFGetField(tif, exiftag_list[i].tag_id, &f)) {
           Exiv2::Rational r = Exif::toRational(f);
           try {
-            img->exif->addKeyVal(exiftag_list[i].tag_id, "Photo", r);
+            exif->addKeyVal(exiftag_list[i].tag_id, "Photo", r);
           } catch (const SipiError &err) {
             log_err("Error writing EXIF data: %s", err.to_string().c_str());
           }
@@ -2148,7 +2107,7 @@ void SipiIOTiff::readExif(SipiImage *img, TIFF *tif, toff_t exif_offset)
         unsigned char uc;
         if (TIFFGetField(tif, exiftag_list[i].tag_id, &uc)) {
           try {
-            img->exif->addKeyVal(exiftag_list[i].tag_id, "Photo", uc);
+            exif->addKeyVal(exiftag_list[i].tag_id, "Photo", uc);
           } catch (const SipiError &err) {
             log_err("Error writing EXIF data: %s", err.to_string().c_str());
           }
@@ -2160,7 +2119,7 @@ void SipiIOTiff::readExif(SipiImage *img, TIFF *tif, toff_t exif_offset)
         unsigned short us;
         if (TIFFGetField(tif, exiftag_list[i].tag_id, &us)) {
           try {
-            img->exif->addKeyVal(exiftag_list[i].tag_id, "Photo", us);
+            exif->addKeyVal(exiftag_list[i].tag_id, "Photo", us);
           } catch (const SipiError &err) {
             log_err("Error writing EXIF data: %s", err.to_string().c_str());
           }
@@ -2172,7 +2131,7 @@ void SipiIOTiff::readExif(SipiImage *img, TIFF *tif, toff_t exif_offset)
         unsigned int ui;
         if (TIFFGetField(tif, exiftag_list[i].tag_id, &ui)) {
           try {
-            img->exif->addKeyVal(exiftag_list[i].tag_id, "Photo", ui);
+            exif->addKeyVal(exiftag_list[i].tag_id, "Photo", ui);
           } catch (const SipiError &err) {
             log_err("Error writing EXIF data: %s", err.to_string().c_str());
           }
@@ -2184,7 +2143,7 @@ void SipiIOTiff::readExif(SipiImage *img, TIFF *tif, toff_t exif_offset)
         char *tmpstr = nullptr;
         if (TIFFGetField(tif, exiftag_list[i].tag_id, &tmpstr)) {
           try {
-            img->exif->addKeyVal(exiftag_list[i].tag_id, "Photo", std::string(tmpstr));
+            exif->addKeyVal(exiftag_list[i].tag_id, "Photo", std::string(tmpstr));
           } catch (const SipiError &err) {
             log_err("Error writing EXIF data: %s", err.to_string().c_str());
           }
@@ -2211,7 +2170,7 @@ void SipiIOTiff::readExif(SipiImage *img, TIFF *tif, toff_t exif_offset)
           auto r = std::make_unique<Exiv2::Rational[]>(len);
           for (int j = 0; j < len; j++) { r[j] = Exif::toRational(tmpbuf[j]); }
           try {
-            img->exif->addKeyVal(exiftag_list[i].tag_id, "Photo", r.get(), len);
+            exif->addKeyVal(exiftag_list[i].tag_id, "Photo", r.get(), len);
           } catch (const SipiError &err) {
             log_err("Error writing EXIF data: %s", err.to_string().c_str());
           }
@@ -2225,7 +2184,7 @@ void SipiIOTiff::readExif(SipiImage *img, TIFF *tif, toff_t exif_offset)
 
         if (TIFFGetField(tif, exiftag_list[i].tag_id, &len, &tmpbuf)) {
           try {
-            img->exif->addKeyVal(exiftag_list[i].tag_id, "Photo", tmpbuf, len);
+            exif->addKeyVal(exiftag_list[i].tag_id, "Photo", tmpbuf, len);
           } catch (const SipiError &err) {
             log_err("Error writing EXIF data: %s", err.to_string().c_str());
           }
@@ -2238,7 +2197,7 @@ void SipiIOTiff::readExif(SipiImage *img, TIFF *tif, toff_t exif_offset)
         uint16_t len;// in bytes !!
         if (TIFFGetField(tif, exiftag_list[i].tag_id, &len, &tmpbuf)) {
           try {
-            img->exif->addKeyVal(exiftag_list[i].tag_id, "Photo", tmpbuf, len);
+            exif->addKeyVal(exiftag_list[i].tag_id, "Photo", tmpbuf, len);
           } catch (const SipiError &err) {
             log_err("Error writing EXIF data: %s", err.to_string().c_str());
           }
@@ -2251,7 +2210,7 @@ void SipiIOTiff::readExif(SipiImage *img, TIFF *tif, toff_t exif_offset)
         uint16_t len;
         if (TIFFGetField(tif, exiftag_list[i].tag_id, &len, &tmpbuf)) {
           try {
-            img->exif->addKeyVal(exiftag_list[i].tag_id, "Photo", tmpbuf, len);
+            exif->addKeyVal(exiftag_list[i].tag_id, "Photo", tmpbuf, len);
           } catch (const SipiError &err) {
             log_err("Error writing EXIF data: %s", err.to_string().c_str());
           }
@@ -2266,7 +2225,7 @@ void SipiIOTiff::readExif(SipiImage *img, TIFF *tif, toff_t exif_offset)
         if (exiftag_list[i].len == 0) {
           if (TIFFGetField(tif, exiftag_list[i].tag_id, &len, &tmpbuf)) {
             try {
-              img->exif->addKeyVal(exiftag_list[i].tag_id, "Photo", tmpbuf, len);
+              exif->addKeyVal(exiftag_list[i].tag_id, "Photo", tmpbuf, len);
             } catch (const SipiError &err) {
               log_err("Error writing EXIF data: %s", err.to_string().c_str());
             }
@@ -2275,7 +2234,7 @@ void SipiIOTiff::readExif(SipiImage *img, TIFF *tif, toff_t exif_offset)
           len = exiftag_list[i].len;
           if (TIFFGetField(tif, exiftag_list[i].tag_id, &tmpbuf)) {
             try {
-              img->exif->addKeyVal(exiftag_list[i].tag_id, "Photo", tmpbuf, len);
+              exif->addKeyVal(exiftag_list[i].tag_id, "Photo", tmpbuf, len);
             } catch (const SipiError &err) {
               log_err("Error writing EXIF data: %s", err.to_string().c_str());
             }
@@ -2303,7 +2262,7 @@ void SipiIOTiff::writeExif(SipiImage *img, TIFF *tif)
   // const TIFFFieldArray *exif_fields = _TIFFGetExifFields();
   //_TIFFMergeFields(tif, exif_fields->fields, exif_fields->count);
 
-
+  std::shared_ptr<Exif> exif = img->getExif();
   TIFFCreateEXIFDirectory(tif);
   int count = 0;
   for (int i = 0; i < exiftag_list_len; i++) {
@@ -2311,7 +2270,7 @@ void SipiIOTiff::writeExif(SipiImage *img, TIFF *tif)
     case EXIF_DT_RATIONAL: {
       Exiv2::Rational r;
 
-      if (img->exif->getValByKey(exiftag_list[i].tag_id, "Photo", r)) {
+      if (exif->getValByKey(exiftag_list[i].tag_id, "Photo", r)) {
         float f = (float)r.first / (float)r.second;
         TIFFSetField(tif, exiftag_list[i].tag_id, f);
         count++;
@@ -2323,7 +2282,7 @@ void SipiIOTiff::writeExif(SipiImage *img, TIFF *tif)
     case EXIF_DT_UINT8: {
       uint8_t uc;
 
-      if (img->exif->getValByKey(exiftag_list[i].tag_id, "Photo", uc)) {
+      if (exif->getValByKey(exiftag_list[i].tag_id, "Photo", uc)) {
         TIFFSetField(tif, exiftag_list[i].tag_id, uc);
         count++;
       }
@@ -2334,7 +2293,7 @@ void SipiIOTiff::writeExif(SipiImage *img, TIFF *tif)
     case EXIF_DT_UINT16: {
       uint16_t us;
 
-      if (img->exif->getValByKey(exiftag_list[i].tag_id, "Photo", us)) {
+      if (exif->getValByKey(exiftag_list[i].tag_id, "Photo", us)) {
         TIFFSetField(tif, exiftag_list[i].tag_id, us);
         count++;
       }
@@ -2345,7 +2304,7 @@ void SipiIOTiff::writeExif(SipiImage *img, TIFF *tif)
     case EXIF_DT_UINT32: {
       uint32_t ui;
 
-      if (img->exif->getValByKey(exiftag_list[i].tag_id, "Photo", ui)) {
+      if (exif->getValByKey(exiftag_list[i].tag_id, "Photo", ui)) {
         TIFFSetField(tif, exiftag_list[i].tag_id, ui);
         count++;
       }
@@ -2355,7 +2314,7 @@ void SipiIOTiff::writeExif(SipiImage *img, TIFF *tif)
 
     case EXIF_DT_STRING: {
       std::string tmpstr;
-      if (img->exif->getValByKey(exiftag_list[i].tag_id, "Photo", tmpstr)) {
+      if (exif->getValByKey(exiftag_list[i].tag_id, "Photo", tmpstr)) {
         TIFFSetField(tif, exiftag_list[i].tag_id, tmpstr.c_str());
         count++;
       }
@@ -2370,7 +2329,7 @@ void SipiIOTiff::writeExif(SipiImage *img, TIFF *tif)
       // we actually allocated. Skip with a warning when the source EXIF data
       // doesn't match the fixed count, otherwise libtiff reads past `f.get()`.
       std::vector<Exiv2::Rational> vr;
-      if (img->exif->getValByKey(exiftag_list[i].tag_id, "Photo", vr)) {
+      if (exif->getValByKey(exiftag_list[i].tag_id, "Photo", vr)) {
         const auto len = vr.size();
         if (exiftag_list[i].len != 0 && len != static_cast<size_t>(exiftag_list[i].len)) {
           log_warn("EXIF tag 0x%04x: source has %zu rationals, spec requires %d — skipping write",
@@ -2396,7 +2355,7 @@ void SipiIOTiff::writeExif(SipiImage *img, TIFF *tif)
     case EXIF_DT_UINT8_PTR: {
       std::vector<uint8_t> vuc;
 
-      if (img->exif->getValByKey(exiftag_list[i].tag_id, "Photo", vuc)) {
+      if (exif->getValByKey(exiftag_list[i].tag_id, "Photo", vuc)) {
         int len = vuc.size();
         TIFFSetField(tif, exiftag_list[i].tag_id, len, vuc.data());
         count++;
@@ -2407,7 +2366,7 @@ void SipiIOTiff::writeExif(SipiImage *img, TIFF *tif)
 
     case EXIF_DT_UINT16_PTR: {
       std::vector<uint16_t> vus;
-      if (img->exif->getValByKey(exiftag_list[i].tag_id, "Photo", vus)) {
+      if (exif->getValByKey(exiftag_list[i].tag_id, "Photo", vus)) {
         int len = vus.size();
         TIFFSetField(tif, exiftag_list[i].tag_id, len, vus.data());
         count++;
@@ -2418,7 +2377,7 @@ void SipiIOTiff::writeExif(SipiImage *img, TIFF *tif)
     case EXIF_DT_UINT32_PTR: {
       std::vector<uint32_t> vui;
 
-      if (img->exif->getValByKey(exiftag_list[i].tag_id, "Photo", vui)) {
+      if (exif->getValByKey(exiftag_list[i].tag_id, "Photo", vui)) {
         int len = vui.size();
         TIFFSetField(tif, exiftag_list[i].tag_id, len, vui.data());
         count++;
@@ -2430,7 +2389,7 @@ void SipiIOTiff::writeExif(SipiImage *img, TIFF *tif)
     case EXIF_DT_PTR: {
       std::vector<unsigned char> vuc;
 
-      if (img->exif->getValByKey(exiftag_list[i].tag_id, "Photo", vuc)) {
+      if (exif->getValByKey(exiftag_list[i].tag_id, "Photo", vuc)) {
         int len = vuc.size();
         TIFFSetField(tif, exiftag_list[i].tag_id, len, vuc.data());
         count++;
@@ -2457,7 +2416,8 @@ void SipiIOTiff::writeExif(SipiImage *img, TIFF *tif)
 
 // cvrt1BitTo8Bit removed — read_standard_data<uint8_t>() converts bilevel to
 // 8-bit on-the-fly via one2eight<T>(). The post-read conversion path was dead
-// code (img->bps was already 8 by the time those call sites executed).
+// code (the image already reported 8 bits per sample by the time those call
+// sites executed).
 //============================================================================
 
 Result<std::vector<unsigned char>> SipiIOTiff::cvrt8BitTo1bit(const SipiImage &img, unsigned int &sll)
@@ -2466,32 +2426,36 @@ Result<std::vector<unsigned char>> SipiIOTiff::cvrt8BitTo1bit(const SipiImage &i
 
   unsigned int x, y;
 
-  if ((img.photo != PhotometricInterpretation::MINISWHITE) && (img.photo != PhotometricInterpretation::MINISBLACK)) {
+  if ((img.getPhoto() != PhotometricInterpretation::MINISWHITE)
+      && (img.getPhoto() != PhotometricInterpretation::MINISBLACK)) {
     return std::unexpected(SipiValueError{ ErrorCode::kUnsupportedFormat,
       "Photometric interpretation is not MINISWHITE or  MINISBLACK" });
   }
 
-  if (img.bps != 8) {
+  if (img.getBps() != 8) {
     return std::unexpected(SipiValueError{ ErrorCode::kUnsupportedFormat,
-      "Bits per sample is not 8 but: " + std::to_string(img.bps) });
+      "Bits per sample is not 8 but: " + std::to_string(img.getBps()) });
   }
 
-  sll = (img.nx + 7) / 8;
+  const size_t nx = img.getNx();
+  const size_t ny = img.getNy();
+  std::span<const byte> pix = img.pixels_view();
+  sll = (nx + 7) / 8;
 
-  if (img.photo == PhotometricInterpretation::MINISBLACK) {
-    std::vector<unsigned char> outbuf(sll * img.ny, 0x00);
-    for (y = 0; y < img.ny; y++) {
-      for (x = 0; x < img.nx; x++) {
-        outbuf[y * sll + (x / 8)] |= (img.pixels[y * img.nx + x] > 128) ? mask[x % 8] : !mask[x % 8];
+  if (img.getPhoto() == PhotometricInterpretation::MINISBLACK) {
+    std::vector<unsigned char> outbuf(sll * ny, 0x00);
+    for (y = 0; y < ny; y++) {
+      for (x = 0; x < nx; x++) {
+        outbuf[y * sll + (x / 8)] |= (pix[y * nx + x] > 128) ? mask[x % 8] : !mask[x % 8];
       }
     }
     return outbuf;
   }
   // must be MINISWHITE
-  std::vector<unsigned char> outbuf(sll * img.ny, 0xff);
-  for (y = 0; y < img.ny; y++) {
-    for (x = 0; x < img.nx; x++) {
-      outbuf[y * sll + (x / 8)] |= (img.pixels[y * img.nx + x] > 128) ? !mask[x % 8] : mask[x % 8];
+  std::vector<unsigned char> outbuf(sll * ny, 0xff);
+  for (y = 0; y < ny; y++) {
+    for (x = 0; x < nx; x++) {
+      outbuf[y * sll + (x / 8)] |= (pix[y * nx + x] > 128) ? !mask[x % 8] : mask[x % 8];
     }
   }
   return outbuf;

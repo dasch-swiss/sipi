@@ -191,16 +191,14 @@ Result<bool> SipiIOPng::read(SipiImage *img,
   png_uint_32 width, height;
   int color_type, bit_depth, interlace_type;
   png_get_IHDR(png_ptr, info_ptr, &width, &height, &bit_depth, &color_type, &interlace_type, NULL, NULL);
-  img->nx = width;
-  img->ny = height;
-  img->orientation = TOPLEFT;
+  img->setOrientation(TOPLEFT);
 
   png_set_packing(png_ptr);
 
   png_uint_32 res_x, res_y;
   int unit_type;
   if (png_get_pHYs(png_ptr, info_ptr, &res_x, &res_y, &unit_type)) {
-    img->exif = std::make_shared<Exif>();
+    auto exif = img->exif_writable();
     float fres_x, fres_y;
     if (unit_type == PNG_RESOLUTION_METER) {
       fres_x = res_x / 39.37007874015748;
@@ -209,35 +207,35 @@ Result<bool> SipiIOPng::read(SipiImage *img,
       fres_x = res_x;
       fres_y = res_y;
     }
-    img->exif->addKeyVal("Exif.Image.XResolution", Exif::toRational(fres_x));
-    img->exif->addKeyVal("Exif.Image.YResolution", Exif::toRational(fres_y));
-    img->exif->addKeyVal("Exif.Image.ResolutionUnit", 2);// DPI
+    exif->addKeyVal("Exif.Image.XResolution", Exif::toRational(fres_x));
+    exif->addKeyVal("Exif.Image.YResolution", Exif::toRational(fres_y));
+    exif->addKeyVal("Exif.Image.ResolutionUnit", 2);// DPI
   }
 
   switch (color_type) {
   case PNG_COLOR_TYPE_GRAY: {// implies nc = 1, (bit depths 1, 2, 4, 8, 16)
     png_set_expand_gray_1_2_4_to_8(png_ptr);
-    img->photo = PhotometricInterpretation::MINISBLACK;
+    img->setPhoto(PhotometricInterpretation::MINISBLACK);
     break;
   }
   case PNG_COLOR_TYPE_GRAY_ALPHA: {// implies nc = 2, (bit depths 8, 16)
     png_set_expand_gray_1_2_4_to_8(png_ptr);
-    img->photo = PhotometricInterpretation::MINISBLACK;
-    img->es.push_back(ExtraSamples::ASSOCALPHA);
+    img->setPhoto(PhotometricInterpretation::MINISBLACK);
+    img->addEs(ExtraSamples::ASSOCALPHA);
     break;
   }
   case PNG_COLOR_TYPE_PALETTE: {// might have an alpha channel – we check further below...
     png_set_palette_to_rgb(png_ptr);
-    img->photo = PhotometricInterpretation::RGB;
+    img->setPhoto(PhotometricInterpretation::RGB);
     break;
   }
   case PNG_COLOR_TYPE_RGB: {// implies nc = 3 (standard case :-), (bit_depths 8, 16)
-    img->photo = PhotometricInterpretation::RGB;
+    img->setPhoto(PhotometricInterpretation::RGB);
     break;
   }
   case PNG_COLOR_TYPE_RGBA: {// implies nc = 4, (bit_depths 8, 16)
-    img->photo = PhotometricInterpretation::RGB;
-    img->es.push_back(ExtraSamples::ASSOCALPHA);
+    img->setPhoto(PhotometricInterpretation::RGB);
+    img->addEs(ExtraSamples::ASSOCALPHA);
     break;
   }
   }
@@ -250,23 +248,24 @@ Result<bool> SipiIOPng::read(SipiImage *img,
 
   png_read_update_info(png_ptr, info_ptr);
 
-  img->bps = png_get_bit_depth(png_ptr, info_ptr);
-  img->nc = png_get_channels(png_ptr, info_ptr);
-  validate_decode_dims(img->nx, img->ny, img->nc, static_cast<int>(img->bps), filepath);
+  const size_t decoded_bps = png_get_bit_depth(png_ptr, info_ptr);
+  const size_t decoded_nc = png_get_channels(png_ptr, info_ptr);
+  validate_decode_dims(width, height, decoded_nc, static_cast<int>(decoded_bps), filepath);
+  img->set_geometry(width, height, decoded_nc, decoded_bps);
 
   //
   // check for ICC profiles...
   //
   int srgb_intent;
   if (png_get_sRGB(png_ptr, info_ptr, &srgb_intent) != 0) {
-    img->icc = std::make_shared<Icc>(icc_sRGB);
+    img->set_icc(std::make_shared<Icc>(icc_sRGB));
   } else {
     png_charp name;
     int compression_type = PNG_COMPRESSION_TYPE_BASE;
     png_bytep profile;
     png_uint_32 proflen;
     if (png_get_iCCP(png_ptr, info_ptr, &name, &compression_type, &profile, &proflen) != 0) {
-      img->icc = std::make_shared<Icc>((unsigned char *)profile, (int)proflen);
+      img->set_icc(std::make_shared<Icc>((unsigned char *)profile, (int)proflen));
     }
   }
   png_text *png_texts;
@@ -274,17 +273,17 @@ Result<bool> SipiIOPng::read(SipiImage *img,
 
   for (int i = 0; i < num_comments; i++) {
     if (strcmp(png_texts[i].key, xmp_tag) == 0) {
-      img->xmp = std::make_shared<Xmp>((char *)png_texts[i].text, (int)png_texts[i].text_length);
+      img->set_xmp(std::make_shared<Xmp>((char *)png_texts[i].text, (int)png_texts[i].text_length));
     } else if (strcmp(png_texts[i].key, exif_tag) == 0) {
       try {
-        img->exif =
-          std::make_shared<Exif>((unsigned char *)png_texts[i].text, (unsigned int)png_texts[i].text_length);
+        img->set_exif(
+          std::make_shared<Exif>((unsigned char *)png_texts[i].text, (unsigned int)png_texts[i].text_length));
       } catch (SipiError &err) {
         // TODO: better error handling – now we nothing at all
       }
     } else if (strcmp(png_texts[i].key, iptc_tag) == 0) {
-      img->iptc =
-        std::make_shared<Iptc>((unsigned char *)png_texts[i].text, (unsigned int)png_texts[i].text_length);
+      img->set_iptc(
+        std::make_shared<Iptc>((unsigned char *)png_texts[i].text, (unsigned int)png_texts[i].text_length));
     } else if (strcmp(png_texts[i].key, sipi_tag) == 0) {
       Essentials se = Essentials::parse_legacy(png_texts[i].text);
       img->essential_metadata(se);
@@ -297,19 +296,19 @@ Result<bool> SipiIOPng::read(SipiImage *img,
   buffer.resize(height * sll);
 
   row_pointers.resize(height);
-  for (size_t i = 0; i < img->ny; i++) { row_pointers[i] = (buffer.data() + i * sll); }
+  for (size_t i = 0; i < img->getNy(); i++) { row_pointers[i] = (buffer.data() + i * sll); }
 
   png_read_image(png_ptr, row_pointers.data());
   png_read_end(png_ptr, info_ptr);
-  if (color_type == PNG_COLOR_TYPE_PALETTE && img->nc == 4) { img->es.push_back(ExtraSamples::ASSOCALPHA); }
+  if (color_type == PNG_COLOR_TYPE_PALETTE && img->getNc() == 4) { img->addEs(ExtraSamples::ASSOCALPHA); }
 
   png_destroy_read_struct(&png_ptr, &info_ptr, nullptr);
 
-  if (img->bps == 16) {
+  if (img->getBps() == 16) {
     auto *tmp = (unsigned short *)buffer.data();
-    for (size_t i = 0; i < static_cast<size_t>(img->nx) * img->ny * img->nc; i++) { tmp[i] = ntohs(tmp[i]); }
+    for (size_t i = 0; i < img->getNx() * img->getNy() * img->getNc(); i++) { tmp[i] = ntohs(tmp[i]); }
   }
-  img->pixels = std::move(buffer);
+  img->set_pixels(std::move(buffer), img->getNx(), img->getNy(), img->getNc(), img->getBps());
 
   infile.reset();
 
@@ -324,7 +323,7 @@ Result<bool> SipiIOPng::read(SipiImage *img,
     size_t nnx, nny;
     int reduce = -1;
     bool redonly;
-    SipiSize::SizeType rtype = size->get_size(img->nx, img->ny, nnx, nny, reduce, redonly);
+    SipiSize::SizeType rtype = size->get_size(img->getNx(), img->getNy(), nnx, nny, reduce, redonly);
     if (rtype != SipiSize::FULL) {
       switch (scaling_quality.png) {
       case ScalingMethod::HIGH:
@@ -533,31 +532,30 @@ Result<void> SipiIOPng::write(SipiImage *img, const OutputSink &sink, const Sipi
   }
 
   int color_type;
-  if (img->nc == 1) {// grey value
+  if (img->getNc() == 1) {// grey value
     color_type = PNG_COLOR_TYPE_GRAY;
-  } else if ((img->nc == 2) && (img->es.size() == 1)) {// grey value with alpha
+  } else if ((img->getNc() == 2) && (img->getNalpha() == 1)) {// grey value with alpha
     color_type = PNG_COLOR_TYPE_GRAY_ALPHA;
-  } else if (img->nc == 3) {// RGB
+  } else if (img->getNc() == 3) {// RGB
     color_type = PNG_COLOR_TYPE_RGB;
-  } else if ((img->nc == 4) && (img->es.size() == 1)) {// RGB + ALPHA
+  } else if ((img->getNc() == 4) && (img->getNalpha() == 1)) {// RGB + ALPHA
     color_type = PNG_COLOR_TYPE_RGB_ALPHA;
-  } else if (img->nc == 4) {
+  } else if (img->getNc() == 4) {
     processing::convertToIcc(*img, Icc(Sipi::PredefinedProfiles::icc_sRGB), 8);
     color_type = PNG_COLOR_TYPE_RGB;
-    img->nc = 3;
-    img->bps = 8;
+    img->set_geometry(img->getNx(), img->getNy(), 3, 8);
   } else {
     png_free_data(png_ptr, info_ptr, PNG_FREE_ALL, -1);
     return std::unexpected(SipiValueError{ ErrorCode::kUnsupportedFormat,
-      "Error writing PNG file \"" + filepath + "\": unsupported number of channels (" + std::to_string(img->nc)
+      "Error writing PNG file \"" + filepath + "\": unsupported number of channels (" + std::to_string(img->getNc())
         + "), expected 1, 2, 3, or 4" });
   }
 
   png_set_IHDR(png_ptr,
     info_ptr,
-    img->nx,
-    img->ny,
-    img->bps,
+    img->getNx(),
+    img->getNy(),
+    img->getBps(),
     color_type,
     PNG_INTERLACE_NONE,
     PNG_COMPRESSION_TYPE_DEFAULT,
@@ -567,16 +565,18 @@ Result<void> SipiIOPng::write(SipiImage *img, const OutputSink &sink, const Sipi
   // ICC profile handfling is special...
   //
   Essentials es = img->essential_metadata();
-  if ((img->icc != nullptr) || es.fields().use_icc) {
-    if ((img->icc != nullptr) && (img->icc->getProfileType() == icc_LAB)) {
-      processing::convertToIcc(*img, Icc(Sipi::PredefinedProfiles::icc_sRGB), img->bps);
+  std::shared_ptr<Icc> icc = img->getIcc();
+  if ((icc != nullptr) || es.fields().use_icc) {
+    if ((icc != nullptr) && (icc->getProfileType() == icc_LAB)) {
+      processing::convertToIcc(*img, Icc(Sipi::PredefinedProfiles::icc_sRGB), img->getBps());
+      icc = img->getIcc();
     }
     std::vector<unsigned char> icc_buf;
     try {
       if (es.fields().use_icc) {
         icc_buf = es.fields().icc_profile;
       } else {
-        icc_buf = img->icc->iccBytes();
+        icc_buf = icc->iccBytes();
       }
       png_set_iCCP(png_ptr, info_ptr, "ICC", PNG_COMPRESSION_TYPE_BASE, icc_buf.data(), icc_buf.size());
     } catch (SipiError &err) {
@@ -591,20 +591,23 @@ Result<void> SipiIOPng::write(SipiImage *img, const OutputSink &sink, const Sipi
   //
 
   std::vector<unsigned char> exif_buf;
-  if (img->exif) {
-    exif_buf = img->exif->exifBytes();
+  std::shared_ptr<Exif> exif = img->getExif();
+  if (exif) {
+    exif_buf = exif->exifBytes();
     chunk_ptr.add_zTXt(exif_tag, (char *)exif_buf.data(), exif_buf.size());
   }
 
   std::vector<unsigned char> iptc_buf;
-  if (img->iptc) {
-    iptc_buf = img->iptc->iptcBytes();
+  std::shared_ptr<Iptc> iptc = img->getIptc();
+  if (iptc) {
+    iptc_buf = iptc->iptcBytes();
     chunk_ptr.add_zTXt(iptc_tag, (char *)iptc_buf.data(), iptc_buf.size());
   }
 
   std::string xmp_buf;
-  if (img->xmp != nullptr) {
-    xmp_buf = img->xmp->xmpBytes();
+  std::shared_ptr<Xmp> xmp = img->getXmp();
+  if (xmp != nullptr) {
+    xmp_buf = xmp->xmpBytes();
     chunk_ptr.add_iTXt(xmp_tag, (char *)xmp_buf.data(), xmp_buf.size());
   }
 
@@ -616,12 +619,13 @@ Result<void> SipiIOPng::write(SipiImage *img, const OutputSink &sink, const Sipi
 
   if (chunk_ptr.num() > 0) { png_set_text(png_ptr, info_ptr, chunk_ptr.ptr(), chunk_ptr.num()); }
 
-  png_bytep *row_pointers = (png_bytep *)png_malloc(png_ptr, img->ny * sizeof(png_byte *));
+  png_bytep *row_pointers = (png_bytep *)png_malloc(png_ptr, img->getNy() * sizeof(png_byte *));
 
-  if (img->bps == 8) {
-    for (size_t i = 0; i < img->ny; i++) { row_pointers[i] = (img->pixels.data() + i * img->nx * img->nc); }
-  } else if (img->bps == 16) {
-    for (size_t i = 0; i < img->ny; i++) { row_pointers[i] = (img->pixels.data() + 2 * i * img->nx * img->nc); }
+  png_bytep pixel_data = img->pixels_writable().data();
+  if (img->getBps() == 8) {
+    for (size_t i = 0; i < img->getNy(); i++) { row_pointers[i] = (pixel_data + i * img->getNx() * img->getNc()); }
+  } else if (img->getBps() == 16) {
+    for (size_t i = 0; i < img->getNy(); i++) { row_pointers[i] = (pixel_data + 2 * i * img->getNx() * img->getNc()); }
   }
 
   png_set_rows(png_ptr, info_ptr, row_pointers);

@@ -108,19 +108,6 @@ protected:
   Essentials emdata;//!< Metadata to be stored in file header
   SkipMetadata skip_metadata;//!< If true, all metadata is stripped off
 
-  /*!
-   * Adobe APP14 JPEG marker transform flag. Encodes the Photoshop "Unknown"
-   * convention for CMYK/YCCK polarity:
-   *   255 = no APP14 marker present (default; raw CMYK or non-JPEG formats)
-   *     0 = Adobe "Unknown / CMYK" — when nc==4, libjpeg-turbo produces
-   *         inverted CMYK that SipiIOJpeg re-inverts before ICC conversion
-   *     1 = YCbCr (converted to RGB by libjpeg-turbo — no inversion)
-   *     2 = YCCK (libjpeg-turbo produces inverted CMYK that must be re-inverted)
-   * Only read/written by the JPEG handler; default-initialized to 255 so all
-   * non-JPEG paths treat images as "no APP14" and skip the inversion branch.
-   */
-  uint8_t app14_transform = 255;
-
 public:
   //
   /*!
@@ -199,6 +186,12 @@ public:
    * \return XMP metadata, or nullptr if not set
    */
   [[nodiscard]] std::shared_ptr<Xmp> getXmp() const { return xmp; }
+
+  /**
+   * Get the IPTC metadata of the image.
+   * \return IPTC metadata, or nullptr if not set
+   */
+  [[nodiscard]] std::shared_ptr<Iptc> getIptc() const { return iptc; }
 
   /*!
    * Get orientation
@@ -302,6 +295,11 @@ public:
    */
   void setSkipMetadata(SkipMetadata smd) { skip_metadata = smd; };
 
+  /*!
+   * Getter for the metadata-skip bitmask set by `setSkipMetadata()`.
+   */
+  [[nodiscard]] SkipMetadata getSkipMetadata() const { return skip_metadata; }
+
   void essential_metadata(const Essentials &emdata_p) { emdata = emdata_p; }
 
   [[nodiscard]] Essentials essential_metadata() const { return emdata; }
@@ -321,6 +319,27 @@ public:
    * \throws SipiImageError if buf's size does not match the given geometry
    */
   void set_pixels(std::vector<byte> &&buf, size_t nx_p, size_t ny_p, size_t nc_p, size_t bps_p);
+
+  /*!
+   * Set the image geometry alone, without touching the pixel buffer. Serves
+   * the decode phase, where a container's geometry is parsed before the
+   * pixel buffer exists, and the rare encode-side geometry change that
+   * doesn't move a buffer. `set_pixels()` remains the only size-checked path
+   * that keeps buffer and geometry in lockstep — use it whenever a buffer is
+   * available.
+   *
+   * \param[in] nx_p New width
+   * \param[in] ny_p New height
+   * \param[in] nc_p New channel count
+   * \param[in] bps_p New bits per sample (8 or 16)
+   */
+  void set_geometry(size_t nx_p, size_t ny_p, size_t nc_p, size_t bps_p)
+  {
+    nx = nx_p;
+    ny = ny_p;
+    nc = nc_p;
+    bps = bps_p;
+  }
 
   /*!
    * Mutable view over the pixel buffer at its current size. A `span`
@@ -348,6 +367,12 @@ public:
   void setEs(std::vector<ExtraSamples> es_p) { es = std::move(es_p); }
 
   /*!
+   * Appends a single entry to the extra-samples (channel-meaning) vector,
+   * for decode paths that discover one extra channel's meaning at a time.
+   */
+  void addEs(ExtraSamples es_p) { es.push_back(es_p); }
+
+  /*!
    * Setter for the photometric interpretation. Kept independent of
    * `set_pixels()` for the same reason as `setEs()`.
    */
@@ -358,6 +383,21 @@ public:
    * getter/setter shape.
    */
   void set_icc(std::shared_ptr<Icc> icc_p) { icc = std::move(icc_p); }
+
+  /*!
+   * Setter for the XMP metadata, mirroring `set_icc()`'s shape.
+   */
+  void set_xmp(std::shared_ptr<Xmp> xmp_p) { xmp = std::move(xmp_p); }
+
+  /*!
+   * Setter for the IPTC metadata, mirroring `set_icc()`'s shape.
+   */
+  void set_iptc(std::shared_ptr<Iptc> iptc_p) { iptc = std::move(iptc_p); }
+
+  /*!
+   * Setter for the Exif metadata, mirroring `set_icc()`'s shape.
+   */
+  void set_exif(std::shared_ptr<Exif> exif_p) { exif = std::move(exif_p); }
 
   /*!
    * Returns the image's Exif metadata, lazily allocating an empty `Exif`
@@ -486,11 +526,6 @@ public:
    * \returns Returns ostream object
    */
   friend std::ostream &operator<<(std::ostream &lhs, const SipiImage &rhs);
-
-  friend class SipiIOTiff;//!< I/O class for the TIFF file format
-  friend class SipiIOJ2k;//!< I/O class for the JPEG2000 file format
-  friend class SipiIOJpeg;//!< I/O class for the JPEG file format
-  friend class SipiIOPng;//!< I/O class for the PNG file format
 };
 }// namespace Sipi
 
