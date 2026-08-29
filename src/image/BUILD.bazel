@@ -119,6 +119,7 @@ cc_test(
     }),
     deps = [
         ":image",
+        "//src/error",
         "//src/format_handlers:format_handlers",
         "//src/image_processing",
         "//src/observability:observability",
