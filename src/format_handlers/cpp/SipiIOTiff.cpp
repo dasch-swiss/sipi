@@ -2437,47 +2437,6 @@ void SipiIOTiff::writeExif(SipiImage *img, TIFF *tif)
 }
 //============================================================================
 
-void SipiIOTiff::separateToContig(SipiImage *img, unsigned int sll)
-{
-  //
-  // rearrange RRRRRR...GGGGG...BBBBB data  to RGBRGBRGB…RGB
-  //
-  if (img->bps == 8) {
-    const byte *dataptr = img->pixels.data();
-    std::vector<byte> tmp_v(img->nc * img->ny * img->nx);
-    byte *tmpptr = tmp_v.data();
-
-    for (unsigned int k = 0; k < img->nc; k++) {
-      for (unsigned int j = 0; j < img->ny; j++) {
-        for (unsigned int i = 0; i < img->nx; i++) {
-          tmpptr[img->nc * (j * img->nx + i) + k] = dataptr[k * img->ny * sll + j * img->nx + i];
-        }
-      }
-    }
-
-    img->pixels = std::move(tmp_v);
-  } else if (img->bps == 16) {
-    const word *dataptr = (const word *)img->pixels.data();
-    std::vector<byte> tmp_v(2 * img->nc * img->ny * img->nx);
-    word *tmpptr = (word *)tmp_v.data();
-
-    for (unsigned int k = 0; k < img->nc; k++) {
-      for (unsigned int j = 0; j < img->ny; j++) {
-        for (unsigned int i = 0; i < img->nx; i++) {
-          tmpptr[img->nc * (j * img->nx + i) + k] = dataptr[k * img->ny * sll + j * img->nx + i];
-        }
-      }
-    }
-
-    img->pixels = std::move(tmp_v);
-  } else {
-    std::string msg = "Bits per sample not supported: " + std::to_string(-img->bps);
-    throw Sipi::SipiImageError(msg);
-  }
-}
-//============================================================================
-
-
 // cvrt1BitTo8Bit removed — read_standard_data<uint8_t>() converts bilevel to
 // 8-bit on-the-fly via one2eight<T>(). The post-read conversion path was dead
 // code (img->bps was already 8 by the time those call sites executed).
