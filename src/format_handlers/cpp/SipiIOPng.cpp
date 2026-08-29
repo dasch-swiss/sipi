@@ -268,7 +268,10 @@ Result<bool> SipiIOPng::read(SipiImage *img,
     png_uint_32 proflen;
     if (png_get_iCCP(png_ptr, info_ptr, &name, &compression_type, &profile, &proflen) != 0) {
       auto icc = Icc::parse((unsigned char *)profile, (int)proflen);
-      if (!icc) { return std::unexpected(icc.error()); }
+      if (!icc) {
+        png_destroy_read_struct(&png_ptr, &info_ptr, nullptr);
+        return std::unexpected(icc.error());
+      }
       img->set_icc(*icc);
     }
   }
@@ -288,6 +291,7 @@ Result<bool> SipiIOPng::read(SipiImage *img,
       if (auto iptc = Iptc::parse((unsigned char *)png_texts[i].text, (unsigned int)png_texts[i].text_length)) {
         img->set_iptc(*iptc);
       } else {
+        png_destroy_read_struct(&png_ptr, &info_ptr, nullptr);
         return std::unexpected(iptc.error());
       }
     } else if (strcmp(png_texts[i].key, sipi_tag) == 0) {
