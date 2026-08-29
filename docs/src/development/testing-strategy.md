@@ -370,17 +370,20 @@ Behavior that *is* HTTP-observable belongs in Rust e2e — not in C++ unit tests
 | `proptest` (Rust) | `test/e2e/tests/proptest_iiif_uri.rs` | Property-based coverage of the Rust IIIF URI parser (`parse_request`) |
 | Corpus regression (Rust) | `src/iiifparser/rust/corpus_regression_test.rs` | Fixed sweep of the 241-file shared corpus through `parse_request` — the per-PR net |
 | libFuzzer (`rules_fuzzing` + FFI shim) | `src/iiifparser/fuzz/` → `//src/iiifparser/fuzz:parse_request_fuzz` | Coverage-guided fuzzing of `//src/iiifparser/rust:iiif_parser` (`parse_request`) |
+| libFuzzer (codec decode harnesses) | `src/format_handlers/fuzz/` → `//src/format_handlers/fuzz:{tiff,jpeg,png,j2k}_decode_fuzz` | Coverage-guided fuzzing of the four `SipiIO` codec decode entry points (DEV-7066) |
 
-**Status: shipped.** The fuzz target has two modes from one definition. By
+**Status: shipped.** Every fuzz target has two modes from one definition. By
 default (`rules_fuzzing`'s `replay` engine, no libFuzzer runtime) it is a
 corpus-replay regression test that builds and runs on every platform and rides
 along in the `//src/...` sweeps — including the sanitizer leg. `--config=fuzz`
-arms the real libFuzzer engine plus SanitizerCoverage on the Rust crate graph;
-that mode is Linux-only and runs nightly.
+arms the real libFuzzer engine plus SanitizerCoverage on the Rust crate graph
+(for `parse_request_fuzz`) or the C++ codec handlers (for the four
+`format_handlers` decode harnesses); that mode is Linux-only and runs nightly.
 
 ```bash
-bazel test //src/iiifparser/fuzz:parse_request_fuzz   # corpus replay, any platform
-just fuzz -max_total_time=60                          # mutation loop, Linux
+bazel test //src/iiifparser/fuzz:parse_request_fuzz          # corpus replay, any platform
+bazel test //src/format_handlers/fuzz:tiff_decode_fuzz       # corpus replay, any platform
+just fuzz -max_total_time=60                                 # mutation loop, Linux
 ```
 
 The retired C++ libFuzzer harness (`//fuzz/handlers`) fuzzed the oracle-only C++
@@ -390,7 +393,7 @@ seam, the corpus policy, and the nightly workflow.
 **What belongs here:**
 
 - IIIF URI parser (`//src/iiifparser/rust:iiif_parser` (`parse_request`))
-- Image format header parsing
+- Image format header parsing (`//src/format_handlers/fuzz:{tiff,jpeg,png,j2k}_decode_fuzz`, the `SipiIO` decode entry points)
 - Any function that processes untrusted input
 
 ## Test Decision Tree
@@ -795,8 +798,8 @@ insta::assert_json_snapshot!(info_json, {
 | Differential parity | *(retired)* | — | The strangler parity gate and the retained C++ oracle server it compared against have been removed; the Rust shell is the sole production surface |
 | Hurl contract tests | *(retired)* | — | Folded into Rust e2e (`tests/http_contracts.rs` + `iiif_compliance.rs`) |
 | Python e2e tests | *(retired)* | — | Replaced by Rust e2e tests |
-| Fuzz corpus replay | `just bazel-test` / `bazel-test-unit` / `bazel-test-sanitized` / `bazel-coverage` | PR CI, all platforms | `//src/iiifparser/fuzz:parse_request_fuzz` under `rules_fuzzing`'s default `replay` engine; picked up by the `//src/...` wildcard |
-| Fuzz mutation loop | `just bazel-build-fuzz` + the runner-local loop (`just fuzz` locally) | nightly (`fuzz.yml`), Linux only | libFuzzer + SanitizerCoverage on the Rust parser via the `//src/iiifparser/fuzz` shim; see [Fuzzing](fuzzing.md) |
+| Fuzz corpus replay | `just bazel-test` / `bazel-test-unit` / `bazel-test-sanitized` / `bazel-coverage` | PR CI, all platforms | `//src/iiifparser/fuzz:parse_request_fuzz` and `//src/format_handlers/fuzz:{tiff,jpeg,png,j2k}_decode_fuzz` under `rules_fuzzing`'s default `replay` engine; picked up by the `//src/...` wildcard |
+| Fuzz mutation loop | `just bazel-build-fuzz` + the runner-local loop (`just fuzz` locally) | nightly (`fuzz.yml`), Linux only | libFuzzer + SanitizerCoverage on the Rust parser via the `//src/iiifparser/fuzz` shim and on the C++ codec handlers via `//src/format_handlers/fuzz`; see [Fuzzing](fuzzing.md) |
 | Sanitizer builds | `just bazel-build-sanitized` (`bazel build --config=asan --config=ubsan //src/cli:sipi`) | PR | ASan+UBSan; e2e suite against `bazel-bin/src/cli/sipi` with `.lsan_suppressions.txt` |
 
 ## Python Test Deprecation — Parity Checklist
