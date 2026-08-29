@@ -142,6 +142,7 @@ cc_test(
         "cpp/jpeg_format_regression_test.cpp",
         "cpp/jpeg_marker_regression_test.cpp",
         "cpp/jpeg_write_test.cpp",
+        "cpp/png_metadata_roundtrip_test.cpp",
         "cpp/select_pyramid_level_test.cpp",
         "cpp/tiff_bilevel_regression_test.cpp",
     ],
