@@ -759,6 +759,11 @@ fn size_no_upscale_beyond_original() {
 }
 
 #[test]
+fn size_degenerate_target_dimensions() {
+    assert_iiif_status("/unit/lena512.jp2/full/1,1/0/default.jpg", 400);
+}
+
+#[test]
 fn size_after_region() {
     assert_iiif_status("/unit/lena512.jp2/0,0,200,200/100,/0/default.jpg", 200);
 }

@@ -469,6 +469,8 @@ SipiStatus status_for(const SipiValueError &err)
   switch (policy_for(err.code()).http_status_class) {
   case HttpStatusClass::kInternalError:
     return SipiStatus::InternalError;
+  case HttpStatusClass::kClientError:
+    return SipiStatus::BadRequest;
   }
 }
 

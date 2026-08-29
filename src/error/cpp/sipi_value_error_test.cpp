@@ -69,6 +69,12 @@ TEST(PolicyFor, MatchesErrorModelTable)
     EXPECT_EQ(p.sentry_policy, SentryPolicy::kReport);
     EXPECT_EQ(p.metric_hint, MetricHint::kNone);
   }
+  {
+    const auto p = policy_for(ErrorCode::kInvalidRequestParameter);
+    EXPECT_EQ(p.http_status_class, HttpStatusClass::kClientError);
+    EXPECT_EQ(p.sentry_policy, SentryPolicy::kSkip);
+    EXPECT_EQ(p.metric_hint, MetricHint::kNone);
+  }
 }
 
 TEST(PolicyFor, IsUsableAtCompileTime)
