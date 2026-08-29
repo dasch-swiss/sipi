@@ -85,15 +85,19 @@ replay engine sets it), falling back to the platform temp directory otherwise.
 
 ### Expected-reject vs finding
 
-Each call to `read_shape` and `read` is wrapped in its own try/catch, so a
-clean rejection from `read_shape` still lets `read` run. A thrown
-`SipiImageError` (or any other `std::exception`) is the codec correctly
-rejecting malformed input — not a finding, and it is swallowed. Findings are
-what escapes both catch blocks entirely: SIGSEGV, SIGABRT, sanitizer reports.
-The harness also has a bare `catch (...)` alongside `catch (const
-std::exception &)`, because Kakadu's `kdu_exception` is an `int`-like type,
-not a `std::exception` — without it, a Kakadu-thrown rejection on a malformed
-JP2 would itself register as an uncaught-exception finding.
+Each call to `read_shape` and `read` returns a `Result`, and the harness
+checks it only for presence: a codec rejecting malformed input reports that
+through the `Result` holding no value, not through an exception — so a clean
+rejection from `read_shape` still lets `read` run. Each call is additionally
+wrapped in its own try/catch, because a decoder can still throw en route to
+producing that `Result`: `std::bad_alloc`, the allocation-guard throws that
+stay exception-based by design (`checked_buf_size_or_throw`, `memTiffOpen`'s
+raw `malloc` failures), and Kakadu's `kdu_exception`. Findings are what
+escapes both catch blocks entirely: SIGSEGV, SIGABRT, sanitizer reports. The
+harness also has a bare `catch (...)` alongside `catch (const std::exception
+&)`, because `kdu_exception` is an `int`-like type, not a `std::exception` —
+without it, a Kakadu-thrown rejection on a malformed JP2 would itself register
+as an uncaught-exception finding.
 
 ### Per-target knobs
 
