@@ -421,15 +421,42 @@ void SipiIOJpeg::parse_photoshop(SipiImage *img, char *data, int length)
 
     switch (id) {
     case 0x0404: {
-      if (img->getIptc() == nullptr) img->set_iptc(std::make_shared<Iptc>((unsigned char *)ptr, datalen));
+      if (img->getIptc() == nullptr) {
+        if (auto iptc = Iptc::parse((unsigned char *)ptr, datalen)) {
+          img->set_iptc(*iptc);
+        } else {
+          // Mirrors the callers' catch handler: log and abandon the rest of this
+          // Photoshop resource block scan, leaving the image without IPTC data.
+          log_warn("Failed to parse Photoshop APP13 resource block: %s", iptc.error().diagnostic_message().c_str());
+          return;
+        }
+      }
       break;
     }
     case 0x040f: {
-      if (img->getIcc() == nullptr) img->set_icc(std::make_shared<Icc>((unsigned char *)ptr, datalen));
+      if (img->getIcc() == nullptr) {
+        if (auto icc = Icc::parse((unsigned char *)ptr, datalen)) {
+          img->set_icc(*icc);
+        } else {
+          // Mirrors the callers' catch handler: log and abandon the rest of this
+          // Photoshop resource block scan, leaving the image without an ICC profile.
+          log_warn("Failed to parse Photoshop APP13 resource block: %s", icc.error().diagnostic_message().c_str());
+          return;
+        }
+      }
       break;
     }
     case 0x0422: {
-      if (img->getExif() == nullptr) img->set_exif(std::make_shared<Exif>((unsigned char *)ptr, datalen));
+      if (img->getExif() == nullptr) {
+        if (auto exif = Exif::parse((unsigned char *)ptr, datalen)) {
+          img->set_exif(*exif);
+        } else {
+          // Mirrors the callers' catch handler: log and abandon the rest of this
+          // Photoshop resource block scan, leaving the image without EXIF data.
+          log_warn("Failed to parse Photoshop APP13 resource block: %s", exif.error().diagnostic_message().c_str());
+          return;
+        }
+      }
       uint16_t ori;
       if (img->getExif()->getValByKey("Exif.Image.Orientation", ori)) { img->setOrientation(Orientation(ori)); }
       break;
@@ -607,17 +634,16 @@ Result<bool> SipiIOJpeg::read(SipiImage *img,
       //
       auto *pos = static_cast<unsigned char *>(memmem(marker->data, marker->data_length, "Exif\000\000", 6));
       if (pos != nullptr) {
-        // Wrap in try/catch so malformed EXIF from legacy Photoshop files
-        // (e.g. APP13-before-APP1 with non-ASCII IPTC) does not abort the
-        // whole read.
-        try {
-          img->set_exif(std::make_shared<Exif>(pos + 6, marker->data_length - (pos - marker->data) - 6));
+        // A malformed EXIF blob from legacy Photoshop files (e.g.
+        // APP13-before-APP1 with non-ASCII IPTC) does not abort the whole read.
+        if (auto exif = Exif::parse(pos + 6, marker->data_length - (pos - marker->data) - 6)) {
+          img->set_exif(*exif);
           uint16_t ori;
           if (img->getExif()->getValByKey("Exif.Image.Orientation", ori)) {
             img->setOrientation(static_cast<Orientation>(ori));
           }
-        } catch (const std::exception &err) {
-          log_warn("Failed to parse EXIF metadata from JPEG: %s", err.what());
+        } else {
+          log_warn("Failed to parse EXIF metadata from JPEG: %s", exif.error().diagnostic_message().c_str());
         }
       }
 
@@ -678,9 +704,9 @@ Result<bool> SipiIOJpeg::read(SipiImage *img,
       }
     } else if (marker->marker == JPEG_APP0 + 13) {
       // PHOTOSHOP MARKER....
-      // Wrapped in try/catch so a malformed IPTC / EXIF / XMP inside the
-      // Photoshop resource block does not prevent the image from being read.
-      // TODO(SipiReport-style-guide): refactor Iptc / Exif / Xmp
+      // Wrapped in try/catch so a malformed XMP inside the Photoshop
+      // resource block does not prevent the image from being read.
+      // TODO(SipiReport-style-guide): refactor Xmp
       // constructors to return std::expected<T, E> and delete this try/catch.
       if (marker->data_length >= 14 && strncmp("Photoshop 3.0", (char *)marker->data, 14) == 0) {
         try {
@@ -708,9 +734,14 @@ Result<bool> SipiIOJpeg::read(SipiImage *img,
     marker = marker->next;
   }
   if (icc_buffer != nullptr) {
-    img->set_icc(std::make_shared<Icc>(icc_buffer, icc_buffer_len));
-    free(icc_buffer);// Icc constructor copies the data
+    auto icc = Icc::parse(icc_buffer, icc_buffer_len);
+    free(icc_buffer);// Icc::parse copies the data
     icc_buffer = nullptr;  // prevent double-free if longjmp fires later
+    if (!icc) {
+      jpeg_destroy_decompress(&cinfo);
+      return std::unexpected(icc.error());
+    }
+    img->set_icc(*icc);
   }
 
   // icc_buffer is freed and nulled above; errors → longjmp → setjmp handler
@@ -935,7 +966,12 @@ Result<SipiImgInfo> SipiIOJpeg::read_shape(const std::string &filepath)
       //
       auto *pos = (unsigned char *)memmem(marker->data, marker->data_length, "Exif\000\000", 6);
       if (pos != nullptr) {
-        img.set_exif(std::make_shared<Exif>(pos + 6, marker->data_length - (pos - marker->data) - 6));
+        auto exif = Exif::parse(pos + 6, marker->data_length - (pos - marker->data) - 6);
+        if (!exif) {
+          jpeg_destroy_decompress(&cinfo);
+          return std::unexpected(exif.error());
+        }
+        img.set_exif(*exif);
       }
 
       //
@@ -962,8 +998,8 @@ Result<SipiImgInfo> SipiIOJpeg::read_shape(const std::string &filepath)
       }
     } else if (marker->marker == JPEG_APP0 + 13) {
       // PHOTOSHOP MARKER....
-      // Wrapped like the main read path: a malformed IPTC / EXIF / XMP inside
-      // the Photoshop resource block must not abort the shape probe (and must
+      // Wrapped like the main read path: a malformed XMP inside the
+      // Photoshop resource block must not abort the shape probe (and must
       // not unwind past the live decompress struct).
       if (marker->data_length >= 14 && strncmp("Photoshop 3.0", (char *)marker->data, 14) == 0) {
         try {

@@ -265,7 +265,9 @@ Result<bool> SipiIOPng::read(SipiImage *img,
     png_bytep profile;
     png_uint_32 proflen;
     if (png_get_iCCP(png_ptr, info_ptr, &name, &compression_type, &profile, &proflen) != 0) {
-      img->set_icc(std::make_shared<Icc>((unsigned char *)profile, (int)proflen));
+      auto icc = Icc::parse((unsigned char *)profile, (int)proflen);
+      if (!icc) { return std::unexpected(icc.error()); }
+      img->set_icc(*icc);
     }
   }
   png_text *png_texts;
@@ -275,15 +277,17 @@ Result<bool> SipiIOPng::read(SipiImage *img,
     if (strcmp(png_texts[i].key, xmp_tag) == 0) {
       img->set_xmp(std::make_shared<Xmp>((char *)png_texts[i].text, (int)png_texts[i].text_length));
     } else if (strcmp(png_texts[i].key, exif_tag) == 0) {
-      try {
-        img->set_exif(
-          std::make_shared<Exif>((unsigned char *)png_texts[i].text, (unsigned int)png_texts[i].text_length));
-      } catch (SipiError &err) {
-        // TODO: better error handling – now we nothing at all
+      // An unparseable EXIF chunk is ignored; the image still decodes.
+      if (auto exif = Exif::parse((unsigned char *)png_texts[i].text, (unsigned int)png_texts[i].text_length)) {
+        img->set_exif(*exif);
       }
     } else if (strcmp(png_texts[i].key, iptc_tag) == 0) {
-      img->set_iptc(
-        std::make_shared<Iptc>((unsigned char *)png_texts[i].text, (unsigned int)png_texts[i].text_length));
+      // A PNG whose IPTC block does not parse is not decoded.
+      if (auto iptc = Iptc::parse((unsigned char *)png_texts[i].text, (unsigned int)png_texts[i].text_length)) {
+        img->set_iptc(*iptc);
+      } else {
+        return std::unexpected(iptc.error());
+      }
     } else if (strcmp(png_texts[i].key, sipi_tag) == 0) {
       Essentials se = Essentials::parse_legacy(png_texts[i].text);
       img->essential_metadata(se);

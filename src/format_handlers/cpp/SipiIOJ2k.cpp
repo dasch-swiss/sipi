@@ -380,19 +380,19 @@ Result<bool> SipiIOJ2k::read(SipiImage *img,
             auto iptc_len = box.get_remaining_bytes();
             auto iptc_buf = std::make_unique<unsigned char[]>(iptc_len);
             box.read(iptc_buf.get(), iptc_len);
-            try {
-              img->set_iptc(std::make_shared<Iptc>(iptc_buf.get(), iptc_len));
-            } catch (SipiError &err) {
-              log_err("%s", err.to_string().c_str());
+            if (auto iptc = Iptc::parse(iptc_buf.get(), iptc_len)) {
+              img->set_iptc(*iptc);
+            } else {
+              log_err("%s", iptc.error().diagnostic_message().c_str());
             }
           } else if (memcmp(buf, exif_uuid, 16) == 0) {
             auto exif_len = box.get_remaining_bytes();
             auto exif_buf = std::make_unique<unsigned char[]>(exif_len);
             box.read(exif_buf.get(), exif_len);
-            try {
-              img->set_exif(std::make_shared<Exif>(exif_buf.get(), exif_len));
-            } catch (SipiError &err) {
-              log_err("%s", err.to_string().c_str());
+            if (auto exif = Exif::parse(exif_buf.get(), exif_len)) {
+              img->set_exif(*exif);
+            } else {
+              log_err("%s", exif.error().diagnostic_message().c_str());
             }
           } else if (memcmp(buf, sipi_essentials_uuid, 16) == 0) {
             // SIPI Essentials carrier (ADR-0005 / DEV-6410). New on-disk
@@ -594,14 +594,22 @@ Result<bool> SipiIOJ2k::read(SipiImage *img,
         float whitepoint[] = { 0.3127, 0.3290 };
         float primaries[] = { 0.630, 0.340, 0.310, 0.595, 0.155, 0.070 };
         img->setPhoto(PhotometricInterpretation::YCBCR);
-        img->set_icc(std::make_shared<Icc>(whitepoint, primaries));
+        if (auto icc = Icc::createRGB(whitepoint, primaries)) {
+          img->set_icc(*icc);
+        } else {
+          return std::unexpected(icc.error());
+        }
         break;
       }
       case kdu_supp::JP2_iccRGB_SPACE: {
         img->setPhoto(PhotometricInterpretation::RGB);
         int icc_len;
         const unsigned char *icc_buf = colinfo.get_icc_profile(&icc_len);
-        img->set_icc(std::make_shared<Icc>(icc_buf, icc_len));
+        if (auto icc = Icc::parse(icc_buf, icc_len)) {
+          img->set_icc(*icc);
+        } else {
+          return std::unexpected(icc.error());
+        }
         break;
       }
       case kdu_supp::JP2_iccANY_SPACE: {
@@ -618,7 +626,11 @@ Result<bool> SipiIOJ2k::read(SipiImage *img,
         }
         int icc_len;
         const unsigned char *icc_buf = colinfo.get_icc_profile(&icc_len);
-        img->set_icc(std::make_shared<Icc>(icc_buf, icc_len));
+        if (auto icc = Icc::parse(icc_buf, icc_len)) {
+          img->set_icc(*icc);
+        } else {
+          return std::unexpected(icc.error());
+        }
         break;
       }
       case kdu_supp::JP2_sLUM_SPACE: {

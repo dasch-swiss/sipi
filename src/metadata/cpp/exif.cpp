@@ -20,18 +20,26 @@ Exif::Exif()
 //============================================================================
 
 
-Exif::Exif(const unsigned char *exif, unsigned int len)
+Exif::Exif(Exiv2::ExifData data, Exiv2::ByteOrder order, std::vector<unsigned char> binary)
+  : binaryExif(std::move(binary)), exifData(std::move(data)), byteorder(order)
+{}
+//============================================================================
+
+Result<std::shared_ptr<Exif>> Exif::parse(const unsigned char *exif, unsigned int len)
 {
+  Exiv2::ExifData data;
+  Exiv2::ByteOrder order;
   try {
-    byteorder = Exiv2::ExifParser::decode(exifData, exif, (uint32_t)len);
+    order = Exiv2::ExifParser::decode(data, exif, (uint32_t)len);
   } catch (Exiv2::Error &exiverr) {
-    throw SipiError(exiverr.what());
+    return std::unexpected(SipiValueError{ ErrorCode::kMetadataParseFailed, exiverr.what() });
   }
 
   //
   // we save the binary exif... we use it later for constructing a binary exif again!
   //
-  binaryExif.assign(exif, exif + len);
+  std::vector<unsigned char> binary(exif, exif + len);
+  return std::shared_ptr<Exif>(new Exif(std::move(data), order, std::move(binary)));
 }
 //============================================================================
 

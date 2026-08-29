@@ -1143,10 +1143,10 @@ Result<bool> SipiIOTiff::read(SipiImage *img,
     unsigned char *iptc_content = nullptr;
 
     if (TIFFGetField(tif, TIFFTAG_RICHTIFFIPTC, &iptc_length, &iptc_content) != 0) {
-      try {
-        img->set_iptc(std::make_shared<Iptc>(iptc_content, iptc_length));
-      } catch (SipiError &err) {
-        log_err("%s", err.to_string().c_str());
+      if (auto iptc = Iptc::parse(iptc_content, iptc_length)) {
+        img->set_iptc(*iptc);
+      } else {
+        log_err("%s", iptc.error().diagnostic_message().c_str());
       }
     }
 
@@ -1183,10 +1183,10 @@ Result<bool> SipiIOTiff::read(SipiImage *img,
     float whitepoint[2];
 
     if (1 == TIFFGetField(tif, TIFFTAG_ICCPROFILE, &icc_len, &icc_buf)) {
-      try {
-        img->set_icc(std::make_shared<Icc>(icc_buf, icc_len));
-      } catch (SipiError &err) {
-        log_err("%s", err.to_string().c_str());
+      if (auto icc = Icc::parse(icc_buf, icc_len)) {
+        img->set_icc(*icc);
+      } else {
+        log_err("%s", icc.error().diagnostic_message().c_str());
       }
     } else if (1 == TIFFGetField(tif, TIFFTAG_WHITEPOINT, &whitepoint_ti)) {
       whitepoint[0] = whitepoint_ti[0];
@@ -1264,11 +1264,19 @@ Result<bool> SipiIOTiff::read(SipiImage *img,
           tfunc_len = static_cast<unsigned int>(table_len);
         }
 
-        img->set_icc(std::make_shared<Icc>(
-          whitepoint, primaries, has_tfunc ? tfunc.get() : nullptr, has_tfunc ? tfunc_len : 0));
+        if (auto icc =
+              Icc::createRGB(whitepoint, primaries, has_tfunc ? tfunc.get() : nullptr, has_tfunc ? tfunc_len : 0)) {
+          img->set_icc(*icc);
+        } else {
+          log_err("%s", icc.error().diagnostic_message().c_str());
+        }
       } else {
         // bilevel / 4-bit / non-standard — no transfer function
-        img->set_icc(std::make_shared<Icc>(whitepoint, primaries, nullptr, 0));
+        if (auto icc = Icc::createRGB(whitepoint, primaries, nullptr, 0)) {
+          img->set_icc(*icc);
+        } else {
+          log_err("%s", icc.error().diagnostic_message().c_str());
+        }
       }
     }
 

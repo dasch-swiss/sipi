@@ -10,6 +10,7 @@
 #define SIPI_METADATA_EXIF_H
 
 
+#include <memory>
 #include <string>
 #include <vector>
 
@@ -20,6 +21,7 @@
 #include <exiv2/value.hpp>
 
 #include "error/SipiError.h"
+#include "error/SipiValueError.h"
 
 namespace Sipi {
 
@@ -66,20 +68,22 @@ private:
   static bool assign_val(Exiv2::Value::UniquePtr &v, Exiv2::Rational &val);
   static bool assign_val(Exiv2::Value::UniquePtr &v, std::vector<Exiv2::Rational> &val);
 
+  explicit Exif(Exiv2::ExifData data, Exiv2::ByteOrder order, std::vector<unsigned char> binary);
+
 public:
   /*!
    * Constructor (default)
    */
   Exif();
 
-
   /*!
-   * Constructor using an EXIF blob
+   * Parses a buffer of EXIF data in native format.
    *
    * \param[in] exif Buffer containing the EXIF data
-   * \Param[in] len Length of the EXIF buffer
+   * \param[in] len Length of the EXIF buffer
+   * \return The parsed Exif instance, or a SipiValueError if the buffer does not hold valid EXIF data.
    */
-  Exif(const unsigned char *exif, unsigned int len);
+  [[nodiscard]] static Result<std::shared_ptr<Exif>> parse(const unsigned char *exif, unsigned int len);
 
   /*!
    * Returns the bytes of the EXIF data as a vector.

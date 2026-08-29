@@ -22,6 +22,7 @@
 
 #include <lcms2.h>
 
+#include "error/SipiValueError.h"
 #include "photometric_interpretation.h"
 
 
@@ -58,6 +59,14 @@ private:
   ProfilePtr icc_profile{};//!< Owning handle of the littleCMS profile data
   PredefinedProfiles profile_type{ icc_undefined };//!< Profile type that is represented
 
+  /*!
+   * Private constructor taking already-valid profile state. Every fallible
+   * factory below builds into locals and only reaches this constructor once
+   * the littleCMS profile has been opened successfully, so no Icc can exist
+   * half-built.
+   */
+  Icc(ProfilePtr profile, PredefinedProfiles type);
+
 public:
   /*!
    * Constructor (default) which results in empty, undefined profile
@@ -65,11 +74,12 @@ public:
   Icc() = default;
 
   /*!
-   * Constructor which takes a blob that contains the ICC profile
+   * Parses a buffer that contains an ICC profile.
    * \param[in] buf Buffer holding the binary profile data
-   * \param]in len Length of the buffer
+   * \param[in] len Length of the buffer
+   * \return The parsed Icc instance, or a SipiValueError if the buffer does not hold a valid ICC profile.
    */
-  Icc(const unsigned char *buf, int len);
+  [[nodiscard]] static Result<std::shared_ptr<Icc>> parse(const unsigned char *buf, int len);
 
   /*!
    * Copy constructor. Uses deep copy and allocates new data buffers.
@@ -78,10 +88,11 @@ public:
   Icc(const Icc &icc_p);
 
   /*!
-   * Constructor using littleCMS profile
+   * Builds an Icc from an existing littleCMS profile handle by re-serializing it.
    * \param[in] icc_profile_p LittleCMS profile
+   * \return The built Icc instance, or a SipiValueError if the profile does not re-serialize.
    */
-  explicit Icc(cmsHPROFILE &icc_profile_p);
+  [[nodiscard]] static Result<std::shared_ptr<Icc>> createFromProfile(cmsHPROFILE &icc_profile_p);
 
   /**
    * Constructor to create a predefined profile
@@ -90,14 +101,16 @@ public:
   explicit Icc(PredefinedProfiles predef);
 
   /**
-   * Constructor of an ICC RGB profile using white point, primaries and transfer function (if available),
+   * Builds an ICC RGB profile using white point, primaries and transfer function (if available),
    * otherwise a curve with gamma = 2.2 is assumed. The parameters must be given as retrieved by libtiff!
    * \param[in] white_point Array of 2 floats giving the x and y of the whitepoint
    * \param[in] primaries Array of 6 floats giving the x and y of each red, green and blue primaries
    * \param[in] tfunc Transfer function tables as retrieved by libtiff with either (1 << bitspersample) or 3*(1 <<
    * bitspersample) entries \param[in] Length of tranfer function table
+   * \return The built Icc instance.
    */
-  Icc(float white_point_p[], float primaries_p[], const unsigned short *tfunc = nullptr, int tfunc_len = 0);
+  [[nodiscard]] static Result<std::shared_ptr<Icc>>
+    createRGB(float white_point_p[], float primaries_p[], const unsigned short *tfunc = nullptr, int tfunc_len = 0);
 
   Icc(Icc &&) = default;
 
