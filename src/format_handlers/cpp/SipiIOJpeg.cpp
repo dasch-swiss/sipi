@@ -822,7 +822,9 @@ Result<bool> SipiIOJpeg::read(SipiImage *img,
     //
     // let's first crop the region (we read the full size image in this case)
     //
-    (void)Sipi::processing::crop(*img, region);
+    if (const auto cropped = Sipi::processing::crop(*img, region); !cropped) {
+      return std::unexpected(cropped.error());
+    }
 
     //
     // no we scale the region to the desired size

@@ -46,6 +46,7 @@ cc_library(
     strip_include_prefix = "/src/image_processing/cpp",
     copts = ["-fexceptions"],
     deps = [
+        "//src/error",
         "//src/image",
         "//src/logging:logging",
         "//src/metadata:metadata",
@@ -102,6 +103,7 @@ cc_test(
     env = {"SIPI_WORKSPACE_ROOT": "."},
     deps = [
         ":image_processing",
+        "//src/error",
         "//src/format_handlers:format_handlers",
         "//test:test_paths",
         "@googletest//:gtest_main",

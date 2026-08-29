@@ -19,6 +19,7 @@
 #include <string>
 #include <vector>
 
+#include "error/SipiValueError.h"
 #include "image/SipiImage.h"
 
 namespace Sipi {
@@ -40,16 +41,20 @@ namespace processing {
  * \param[in] y Vertical start position of region. If negative, it's set to 0, and the height is adjusted
  * \param[in] width Width of the region. If the region goes beyond the image dimensions, it's adjusted.
  * \param[in] height Height of the region. If the region goes beyond the image dimensions, it's adjusted
+ * \returns an error if the requested region is degenerate (e.g. entirely
+ *          outside the image), success otherwise (including the case where
+ *          the region already covers the whole image and no crop is needed)
  */
-bool crop(SipiImage &img, int x, int y, size_t width = 0, size_t height = 0);
+[[nodiscard]] Result<void> crop(SipiImage &img, int x, int y, size_t width = 0, size_t height = 0);
 
 /*!
  * Crops an image to a region.
  *
  * \param[in] img Image to crop, mutated in place
  * \param[in] region Pointer to SipiRegion
+ * \returns an error if the requested region is degenerate, success otherwise
  */
-bool crop(SipiImage &img, const std::shared_ptr<SipiRegion> &region);
+[[nodiscard]] Result<void> crop(SipiImage &img, const std::shared_ptr<SipiRegion> &region);
 
 /*!
  * Resize an image using a high speed algorithm which may result in poor image quality

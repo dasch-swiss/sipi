@@ -15,12 +15,14 @@
 
 #include <gtest/gtest.h>
 
+#include "error/SipiValueError.h"
 #include "image/SipiImage.h"
 #include "image/SipiImageError.h"
 #include "image_processing/processing.h"
 
 namespace {
 
+using Sipi::ErrorCode;
 using Sipi::PhotometricInterpretation;
 using Sipi::SipiImage;
 using Sipi::SipiImageError;
@@ -50,13 +52,17 @@ TEST(OverflowRegression, ConstructorRejectsOverflowingChannelCount)
 TEST(CropRegression, NegativeXBeyondRequestedWidthIsRejected)
 {
   SipiImage img(4, 4, 1, 8, PhotometricInterpretation::MINISBLACK);
-  EXPECT_FALSE(Sipi::processing::crop(img, -100, 0, 5, 4));
+  const auto result = Sipi::processing::crop(img, -100, 0, 5, 4);
+  ASSERT_FALSE(result.has_value());
+  EXPECT_EQ(result.error().code(), ErrorCode::kMalformedInput);
 }
 
 TEST(CropRegression, NegativeYBeyondRequestedHeightIsRejected)
 {
   SipiImage img(4, 4, 1, 8, PhotometricInterpretation::MINISBLACK);
-  EXPECT_FALSE(Sipi::processing::crop(img, 0, -100, 4, 5));
+  const auto result = Sipi::processing::crop(img, 0, -100, 4, 5);
+  ASSERT_FALSE(result.has_value());
+  EXPECT_EQ(result.error().code(), ErrorCode::kMalformedInput);
 }
 
 }// namespace

@@ -187,7 +187,7 @@ void BM_Crop1024(benchmark::State &state)
     state.PauseTiming();
     Sipi::SipiImage img(leaves8());
     state.ResumeTiming();
-    Sipi::processing::crop(img, 512, 512, 1024, 1024);
+    if (!Sipi::processing::crop(img, 512, 512, 1024, 1024)) { std::abort(); }
     benchmark::DoNotOptimize(img.getNx());
     benchmark::ClobberMemory();
   }
