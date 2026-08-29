@@ -333,18 +333,20 @@ Result<bool> SipiIOPng::read(SipiImage *img,
     if (rtype != SipiSize::FULL) {
       switch (scaling_quality.png) {
       case ScalingMethod::HIGH:
-        Sipi::processing::scale(*img, nnx, nny);
+        if (auto r = Sipi::processing::scale(*img, nnx, nny); !r) { return std::unexpected(r.error()); }
         break;
       case ScalingMethod::MEDIUM:
-        Sipi::processing::scaleMedium(*img, nnx, nny);
+        if (auto r = Sipi::processing::scaleMedium(*img, nnx, nny); !r) { return std::unexpected(r.error()); }
         break;
       case ScalingMethod::LOW:
-        Sipi::processing::scaleFast(*img, nnx, nny);
+        if (auto r = Sipi::processing::scaleFast(*img, nnx, nny); !r) { return std::unexpected(r.error()); }
       }
     }
   }
 
-  if (force_bps_8) { processing::to8bps(*img); }
+  if (force_bps_8) {
+    if (auto r = processing::to8bps(*img); !r) { return std::unexpected(r.error()); }
+  }
   return true;
 };
 
@@ -534,7 +536,10 @@ Result<void> SipiIOPng::write(SipiImage *img, const OutputSink &sink, const Sipi
 
   // PNG does not support alpha channels, so we have to remove them if they are present
   if ((img->getNc() > 3) && (img->getNalpha() > 0)) {// we have an alpha channel and possibly a CMYK image
-    processing::removeExtraSamples(*img);
+    if (auto r = processing::removeExtraSamples(*img); !r) {
+      png_free_data(png_ptr, info_ptr, PNG_FREE_ALL, -1);
+      return std::unexpected(r.error());
+    }
   }
 
   int color_type;
@@ -547,7 +552,10 @@ Result<void> SipiIOPng::write(SipiImage *img, const OutputSink &sink, const Sipi
   } else if ((img->getNc() == 4) && (img->getNalpha() == 1)) {// RGB + ALPHA
     color_type = PNG_COLOR_TYPE_RGB_ALPHA;
   } else if (img->getNc() == 4) {
-    processing::convertToIcc(*img, Icc(Sipi::PredefinedProfiles::icc_sRGB), 8);
+    if (auto r = processing::convertToIcc(*img, Icc(Sipi::PredefinedProfiles::icc_sRGB), 8); !r) {
+      png_free_data(png_ptr, info_ptr, PNG_FREE_ALL, -1);
+      return std::unexpected(r.error());
+    }
     color_type = PNG_COLOR_TYPE_RGB;
     img->set_geometry(img->getNx(), img->getNy(), 3, 8);
   } else {
@@ -574,7 +582,10 @@ Result<void> SipiIOPng::write(SipiImage *img, const OutputSink &sink, const Sipi
   std::shared_ptr<Icc> icc = img->getIcc();
   if ((icc != nullptr) || es.fields().use_icc) {
     if ((icc != nullptr) && (icc->getProfileType() == icc_LAB)) {
-      processing::convertToIcc(*img, Icc(Sipi::PredefinedProfiles::icc_sRGB), img->getBps());
+      if (auto r = processing::convertToIcc(*img, Icc(Sipi::PredefinedProfiles::icc_sRGB), img->getBps()); !r) {
+        png_free_data(png_ptr, info_ptr, PNG_FREE_ALL, -1);
+        return std::unexpected(r.error());
+      }
       icc = img->getIcc();
     }
     std::vector<unsigned char> icc_buf;

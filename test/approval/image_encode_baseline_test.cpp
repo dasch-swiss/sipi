@@ -96,7 +96,10 @@ void encode(const std::string &in_path,
 {
   Sipi::SipiImage img;
   img.read(in_path, region, size);
-  if (rotation != 0.0f || mirror) Sipi::processing::rotate(img, rotation, mirror);
+  if (rotation != 0.0f || mirror) {
+    const auto rotated = Sipi::processing::rotate(img, rotation, mirror);
+    ASSERT_TRUE(rotated.has_value());
+  }
   img.write(format, out_path);
 }
 

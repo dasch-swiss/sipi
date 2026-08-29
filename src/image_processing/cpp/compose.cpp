@@ -38,11 +38,13 @@ size_t checked_buf_size_or_throw(size_t nx_, size_t ny_, size_t nc_, size_t elem
 
 namespace processing {
 
-void add_watermark(SipiImage &img, const std::string &wmfilename)
+Result<void> add_watermark(SipiImage &img, const std::string &wmfilename)
 {
   int wm_nx, wm_ny, wm_nc;
   std::vector<unsigned char> wm = read_watermark(wmfilename, wm_nx, wm_ny, wm_nc);
-  if (wm.empty()) { throw SipiImageError("Cannot read watermark file " + wmfilename); }
+  if (wm.empty()) {
+    return std::unexpected(SipiValueError{ ErrorCode::kDecodeFailed, "Cannot read watermark file " + wmfilename });
+  }
   byte *wmbuf = wm.data();
 
   const size_t nx = img.getNx();
@@ -84,6 +86,8 @@ void add_watermark(SipiImage &img, const std::string &wmfilename)
   } else if (bps == 16) {
     // 16bps support was never really finished, left unimplemented
   }
+
+  return {};
 }
 
 /*==========================================================================*/
@@ -265,7 +269,9 @@ SipiImage &operator-=(SipiImage &lhs, const SipiImage &rhs)
   const SipiImage *rhs_ptr = &rhs;
   if ((nx != rhs.getNx()) || (ny != rhs.getNy())) {
     new_rhs_guard = std::make_unique<SipiImage>(rhs);
-    processing::scale(*new_rhs_guard, nx, ny);
+    if (auto scaled = processing::scale(*new_rhs_guard, nx, ny); !scaled) {
+      throw SipiImageError(scaled.error().raw_message(), scaled.error().errnum(), scaled.error().location());
+    }
     rhs_ptr = new_rhs_guard.get();
   }
 
@@ -401,7 +407,9 @@ SipiImage &operator+=(SipiImage &lhs, const SipiImage &rhs)
   const SipiImage *rhs_ptr = &rhs;
   if ((nx != rhs.getNx()) || (ny != rhs.getNy())) {
     new_rhs_guard = std::make_unique<SipiImage>(rhs);
-    processing::scale(*new_rhs_guard, nx, ny);
+    if (auto scaled = processing::scale(*new_rhs_guard, nx, ny); !scaled) {
+      throw SipiImageError(scaled.error().raw_message(), scaled.error().errnum(), scaled.error().location());
+    }
     rhs_ptr = new_rhs_guard.get();
   }
 

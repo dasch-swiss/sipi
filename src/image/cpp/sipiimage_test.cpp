@@ -337,7 +337,7 @@ TEST(SipiImage, WrongRotation)
   // EXPECT_EQ(img.getNy(), 2448);
   // EXPECT_EQ(img.getNc(), 3);
   EXPECT_EQ(img.getOrientation(), Sipi::RIGHTTOP);
-  ASSERT_NO_THROW(Sipi::processing::set_topleft(img));
+  EXPECT_TRUE(Sipi::processing::set_topleft(img).has_value());
   // EXPECT_EQ(img.getNx(), 2448);
   // EXPECT_EQ(img.getNy(), 3264);
   // EXPECT_EQ(img.getNc(), 3);
@@ -363,14 +363,14 @@ TEST(SipiImage, Watermark)
   EXPECT_TRUE(exists_file(gradstars));
 
   ASSERT_NO_THROW(img1.read(cielab));
-  EXPECT_NO_THROW(Sipi::processing::add_watermark(img1, watermark_correct));
+  EXPECT_TRUE(Sipi::processing::add_watermark(img1, watermark_correct).has_value());
 
   ASSERT_NO_THROW(img2.read(cielab16));
-  EXPECT_NO_THROW(Sipi::processing::add_watermark(img2, watermark_correct));
+  EXPECT_TRUE(Sipi::processing::add_watermark(img2, watermark_correct).has_value());
 
   ASSERT_NO_THROW(img3.read(maori));
 
-  EXPECT_NO_THROW(Sipi::processing::add_watermark(img3, gradstars));
+  EXPECT_TRUE(Sipi::processing::add_watermark(img3, gradstars).has_value());
   /* ASSERT_NO_THROW(img3.write("jpg", maoriWater)); */
 
   ASSERT_NO_THROW(img4.read(maoriWater));
@@ -379,7 +379,7 @@ TEST(SipiImage, Watermark)
   ASSERT_NO_THROW(img3.read(maori));
   EXPECT_TRUE(Sipi::processing::compare(img4, img3) > 0.017);// 0.0174
 
-  ASSERT_NO_THROW(Sipi::processing::rotate(img3, 90));
+  EXPECT_TRUE(Sipi::processing::rotate(img3, 90).has_value());
 }
 
 TEST(SipiImage, CMYK_With_Alpha_Conversion)

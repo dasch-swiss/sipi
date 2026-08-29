@@ -106,7 +106,7 @@ void report_error(const observability::ImageContext &ctx,
   if (json_output) { emit_json_report(std::cout, ctx, message, phase); }
 }
 
-bool apply_orientation_topleft(SipiImage &img)
+[[nodiscard]] Result<void> apply_orientation_topleft(SipiImage &img)
 {
   Orientation orientation = img.getOrientation();
   auto exif = img.getExif();
@@ -116,49 +116,44 @@ bool apply_orientation_topleft(SipiImage &img)
       orientation = static_cast<Orientation>(ori);
     }
   }
+  Result<void> r;
   switch (orientation) {
   case TOPLEFT: break;
-  case TOPRIGHT: Sipi::processing::rotate(img, 0., true); break;
-  case BOTRIGHT: Sipi::processing::rotate(img, 180., false); break;
-  case BOTLEFT: Sipi::processing::rotate(img, 180., true); break;
-  case LEFTTOP: Sipi::processing::rotate(img, 270., true); break;
-  case RIGHTTOP: Sipi::processing::rotate(img, 90., false); break;
-  case RIGHTBOT: Sipi::processing::rotate(img, 90., true); break;
-  case LEFTBOT: Sipi::processing::rotate(img, 270., false); break;
+  case TOPRIGHT: r = Sipi::processing::rotate(img, 0., true); break;
+  case BOTRIGHT: r = Sipi::processing::rotate(img, 180., false); break;
+  case BOTLEFT: r = Sipi::processing::rotate(img, 180., true); break;
+  case LEFTTOP: r = Sipi::processing::rotate(img, 270., true); break;
+  case RIGHTTOP: r = Sipi::processing::rotate(img, 90., false); break;
+  case RIGHTBOT: r = Sipi::processing::rotate(img, 90., true); break;
+  case LEFTBOT: r = Sipi::processing::rotate(img, 270., false); break;
   default: break;
   }
+  if (!r) { return r; }
   if (exif != nullptr) {
     exif->addKeyVal("Exif.Image.Orientation", static_cast<unsigned short>(TOPLEFT));
   }
   img.setOrientation(TOPLEFT);
-  return true;
+  return {};
 }
 
-void apply_icc(SipiImage &img, const std::string &icc)
+[[nodiscard]] Result<void> apply_icc(SipiImage &img, const std::string &icc)
 {
-  if (icc == "sRGB") {
-    Sipi::processing::convertToIcc(img, Icc(PredefinedProfiles::icc_sRGB), img.getBps());
-    return;
-  }
+  if (icc == "sRGB") { return Sipi::processing::convertToIcc(img, Icc(PredefinedProfiles::icc_sRGB), img.getBps()); }
   if (icc == "AdobeRGB") {
-    Sipi::processing::convertToIcc(img, Icc(PredefinedProfiles::icc_AdobeRGB), img.getBps());
-    return;
+    return Sipi::processing::convertToIcc(img, Icc(PredefinedProfiles::icc_AdobeRGB), img.getBps());
   }
   if (icc == "GRAY") {
-    Sipi::processing::convertToIcc(img, Icc(PredefinedProfiles::icc_GRAY_D50), img.getBps());
-    return;
+    return Sipi::processing::convertToIcc(img, Icc(PredefinedProfiles::icc_GRAY_D50), img.getBps());
   }
+  return {};
 }
 
-void apply_rotate_mirror(SipiImage &img, float rotate, const std::string &mirror)
+[[nodiscard]] Result<void> apply_rotate_mirror(SipiImage &img, float rotate, const std::string &mirror)
 {
-  if (mirror == "vertical") {
-    Sipi::processing::rotate(img, rotate + 180.0F, true);
-  } else if (mirror == "horizontal") {
-    Sipi::processing::rotate(img, rotate, true);
-  } else if (rotate != 0.0F) {
-    Sipi::processing::rotate(img, rotate, false);
-  }
+  if (mirror == "vertical") { return Sipi::processing::rotate(img, rotate + 180.0F, true); }
+  if (mirror == "horizontal") { return Sipi::processing::rotate(img, rotate, true); }
+  if (rotate != 0.0F) { return Sipi::processing::rotate(img, rotate, false); }
+  return {};
 }
 
 }// namespace
@@ -200,8 +195,16 @@ int cmd_convert_access_file(const ConvertAccessFileArgs &args)
   try {
     img.readSource(args.input_path, region, size);
     if (format == "jpg") {
-      Sipi::processing::to8bps(img);
-      Sipi::processing::convertToIcc(img, Icc(PredefinedProfiles::icc_sRGB), 8);
+      if (auto r = Sipi::processing::to8bps(img); !r) {
+        observability::populate_from_image(sentry_ctx, img);
+        report_error(sentry_ctx, "read", r.error().diagnostic_message(), args.json_output);
+        return EXIT_FAILURE;
+      }
+      if (auto r = Sipi::processing::convertToIcc(img, Icc(PredefinedProfiles::icc_sRGB), 8); !r) {
+        observability::populate_from_image(sentry_ctx, img);
+        report_error(sentry_ctx, "read", r.error().diagnostic_message(), args.json_output);
+        return EXIT_FAILURE;
+      }
     }
   } catch (const SipiImageError &err) {
     observability::populate_from_image(sentry_ctx, img);
@@ -235,12 +238,34 @@ int cmd_convert_access_file(const ConvertAccessFileArgs &args)
   // Apply transformations.
   //
   try {
-    if (args.set_topleft) { apply_orientation_topleft(img); }
-    if (!args.icc.empty() && args.icc != "none") { apply_icc(img, args.icc); }
-    if (!args.mirror.empty() || args.rotate != 0.0F) {
-      apply_rotate_mirror(img, args.rotate, args.mirror);
+    if (args.set_topleft) {
+      if (auto r = apply_orientation_topleft(img); !r) {
+        observability::populate_from_image(sentry_ctx, img);
+        report_error(sentry_ctx, "convert", r.error().diagnostic_message(), args.json_output);
+        return EXIT_FAILURE;
+      }
     }
-    if (!args.watermark.empty()) { Sipi::processing::add_watermark(img, args.watermark); }
+    if (!args.icc.empty() && args.icc != "none") {
+      if (auto r = apply_icc(img, args.icc); !r) {
+        observability::populate_from_image(sentry_ctx, img);
+        report_error(sentry_ctx, "convert", r.error().diagnostic_message(), args.json_output);
+        return EXIT_FAILURE;
+      }
+    }
+    if (!args.mirror.empty() || args.rotate != 0.0F) {
+      if (auto r = apply_rotate_mirror(img, args.rotate, args.mirror); !r) {
+        observability::populate_from_image(sentry_ctx, img);
+        report_error(sentry_ctx, "convert", r.error().diagnostic_message(), args.json_output);
+        return EXIT_FAILURE;
+      }
+    }
+    if (!args.watermark.empty()) {
+      if (auto r = Sipi::processing::add_watermark(img, args.watermark); !r) {
+        observability::populate_from_image(sentry_ctx, img);
+        report_error(sentry_ctx, "convert", r.error().diagnostic_message(), args.json_output);
+        return EXIT_FAILURE;
+      }
+    }
   } catch (const SipiImageError &err) {
     observability::populate_from_image(sentry_ctx, img);
     report_error(sentry_ctx, "convert", err.what(), args.json_output);

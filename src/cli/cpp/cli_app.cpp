@@ -318,8 +318,22 @@ extern "C" int sipi_cli_main(int argc, char **argv)
     try {
       img.readSource(optInFile, region, size);
       if (format == "jpg") {
-        Sipi::processing::to8bps(img);
-        Sipi::processing::convertToIcc(img, Sipi::Icc(Sipi::PredefinedProfiles::icc_sRGB), 8);
+        if (auto r = Sipi::processing::to8bps(img); !r) {
+          Sipi::observability::populate_from_image(sentry_ctx, img);
+          log_err("Error reading image: %s", r.error().diagnostic_message().c_str());
+          if (optJsonOutput) {
+            Sipi::emit_json_report(std::cout, sentry_ctx, r.error().diagnostic_message(), std::string{ "read" });
+          }
+          return EXIT_FAILURE;
+        }
+        if (auto r = Sipi::processing::convertToIcc(img, Sipi::Icc(Sipi::PredefinedProfiles::icc_sRGB), 8); !r) {
+          Sipi::observability::populate_from_image(sentry_ctx, img);
+          log_err("Error reading image: %s", r.error().diagnostic_message().c_str());
+          if (optJsonOutput) {
+            Sipi::emit_json_report(std::cout, sentry_ctx, r.error().diagnostic_message(), std::string{ "read" });
+          }
+          return EXIT_FAILURE;
+        }
       }
     } catch (const Sipi::SipiImageError &err) {
       Sipi::observability::populate_from_image(sentry_ctx, img);
@@ -344,16 +358,25 @@ extern "C" int sipi_cli_main(int argc, char **argv)
           unsigned short ori;
           if (exif->getValByKey("Exif.Image.Orientation", ori)) { orientation = static_cast<Sipi::Orientation>(ori); }
         }
+        Sipi::Result<void> r;
         switch (orientation) {
         case Sipi::TOPLEFT: break;
-        case Sipi::TOPRIGHT: Sipi::processing::rotate(img, 0., true); break;
-        case Sipi::BOTRIGHT: Sipi::processing::rotate(img, 180., false); break;
-        case Sipi::BOTLEFT: Sipi::processing::rotate(img, 180., true); break;
-        case Sipi::LEFTTOP: Sipi::processing::rotate(img, 270., true); break;
-        case Sipi::RIGHTTOP: Sipi::processing::rotate(img, 90., false); break;
-        case Sipi::RIGHTBOT: Sipi::processing::rotate(img, 90., true); break;
-        case Sipi::LEFTBOT: Sipi::processing::rotate(img, 270., false); break;
+        case Sipi::TOPRIGHT: r = Sipi::processing::rotate(img, 0., true); break;
+        case Sipi::BOTRIGHT: r = Sipi::processing::rotate(img, 180., false); break;
+        case Sipi::BOTLEFT: r = Sipi::processing::rotate(img, 180., true); break;
+        case Sipi::LEFTTOP: r = Sipi::processing::rotate(img, 270., true); break;
+        case Sipi::RIGHTTOP: r = Sipi::processing::rotate(img, 90., false); break;
+        case Sipi::RIGHTBOT: r = Sipi::processing::rotate(img, 90., true); break;
+        case Sipi::LEFTBOT: r = Sipi::processing::rotate(img, 270., false); break;
         default:;
+        }
+        if (!r) {
+          Sipi::observability::populate_from_image(sentry_ctx, img);
+          log_err("Error processing image: %s", r.error().diagnostic_message().c_str());
+          if (optJsonOutput) {
+            Sipi::emit_json_report(std::cout, sentry_ctx, r.error().diagnostic_message(), std::string{ "convert" });
+          }
+          return EXIT_FAILURE;
         }
         exif->addKeyVal("Exif.Image.Orientation", static_cast<unsigned short>(Sipi::TOPLEFT));
         img.setOrientation(Sipi::TOPLEFT);
@@ -369,20 +392,45 @@ extern "C" int sipi_cli_main(int argc, char **argv)
         case OptIcc::GRAY: icc = Sipi::Icc(Sipi::PredefinedProfiles::icc_GRAY_D50); break;
         case OptIcc::none: break;
         }
-        Sipi::processing::convertToIcc(img, icc, img.getBps());
-      }
-
-      if (user_set("--mirror") || user_set("--rotate")) {
-        switch (optMirror) {
-        case OptMirror::vertical: Sipi::processing::rotate(img, optRotate + 180.0F, true); break;
-        case OptMirror::horizontal: Sipi::processing::rotate(img, optRotate, true); break;
-        case OptMirror::none:
-          if (optRotate != 0.0F) { Sipi::processing::rotate(img, optRotate, false); }
-          break;
+        if (auto r = Sipi::processing::convertToIcc(img, icc, img.getBps()); !r) {
+          Sipi::observability::populate_from_image(sentry_ctx, img);
+          log_err("Error processing image: %s", r.error().diagnostic_message().c_str());
+          if (optJsonOutput) {
+            Sipi::emit_json_report(std::cout, sentry_ctx, r.error().diagnostic_message(), std::string{ "convert" });
+          }
+          return EXIT_FAILURE;
         }
       }
 
-      if (user_set("--watermark")) { Sipi::processing::add_watermark(img, optWatermark); }
+      if (user_set("--mirror") || user_set("--rotate")) {
+        Sipi::Result<void> r;
+        switch (optMirror) {
+        case OptMirror::vertical: r = Sipi::processing::rotate(img, optRotate + 180.0F, true); break;
+        case OptMirror::horizontal: r = Sipi::processing::rotate(img, optRotate, true); break;
+        case OptMirror::none:
+          if (optRotate != 0.0F) { r = Sipi::processing::rotate(img, optRotate, false); }
+          break;
+        }
+        if (!r) {
+          Sipi::observability::populate_from_image(sentry_ctx, img);
+          log_err("Error processing image: %s", r.error().diagnostic_message().c_str());
+          if (optJsonOutput) {
+            Sipi::emit_json_report(std::cout, sentry_ctx, r.error().diagnostic_message(), std::string{ "convert" });
+          }
+          return EXIT_FAILURE;
+        }
+      }
+
+      if (user_set("--watermark")) {
+        if (auto r = Sipi::processing::add_watermark(img, optWatermark); !r) {
+          Sipi::observability::populate_from_image(sentry_ctx, img);
+          log_err("Error processing image: %s", r.error().diagnostic_message().c_str());
+          if (optJsonOutput) {
+            Sipi::emit_json_report(std::cout, sentry_ctx, r.error().diagnostic_message(), std::string{ "convert" });
+          }
+          return EXIT_FAILURE;
+        }
+      }
     } catch (const Sipi::SipiImageError &err) {
       Sipi::observability::populate_from_image(sentry_ctx, img);
       log_err("Error processing image: %s", err.what());

@@ -101,16 +101,21 @@ int cmd_convert_service_file(const ConvertServiceFileArgs &args)
           orientation = static_cast<Sipi::Orientation>(ori);
         }
       }
+      Sipi::Result<void> r;
       switch (orientation) {
       case Sipi::TOPLEFT: break;
-      case Sipi::TOPRIGHT: Sipi::processing::rotate(img, 0., true); break;
-      case Sipi::BOTRIGHT: Sipi::processing::rotate(img, 180., false); break;
-      case Sipi::BOTLEFT: Sipi::processing::rotate(img, 180., true); break;
-      case Sipi::LEFTTOP: Sipi::processing::rotate(img, 270., true); break;
-      case Sipi::RIGHTTOP: Sipi::processing::rotate(img, 90., false); break;
-      case Sipi::RIGHTBOT: Sipi::processing::rotate(img, 90., true); break;
-      case Sipi::LEFTBOT: Sipi::processing::rotate(img, 270., false); break;
+      case Sipi::TOPRIGHT: r = Sipi::processing::rotate(img, 0., true); break;
+      case Sipi::BOTRIGHT: r = Sipi::processing::rotate(img, 180., false); break;
+      case Sipi::BOTLEFT: r = Sipi::processing::rotate(img, 180., true); break;
+      case Sipi::LEFTTOP: r = Sipi::processing::rotate(img, 270., true); break;
+      case Sipi::RIGHTTOP: r = Sipi::processing::rotate(img, 90., false); break;
+      case Sipi::RIGHTBOT: r = Sipi::processing::rotate(img, 90., true); break;
+      case Sipi::LEFTBOT: r = Sipi::processing::rotate(img, 270., false); break;
       default: break;
+      }
+      if (!r) {
+        log_err("convert service-file: orientation normalization failed: %s", r.error().diagnostic_message().c_str());
+        return EXIT_FAILURE;
       }
       if (exif != nullptr) {
         exif->addKeyVal("Exif.Image.Orientation", static_cast<unsigned short>(Sipi::TOPLEFT));

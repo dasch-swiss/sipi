@@ -827,20 +827,20 @@ Result<bool> SipiIOJ2k::read(SipiImage *img,
     img->set_pixels(std::move(tmpbuf), nx_val, ny_val, numcol, img->getBps());
   }
   if (img->getPhoto() == PhotometricInterpretation::YCBCR) {
-    processing::convertYCC2RGB(*img);
+    if (auto r = processing::convertYCC2RGB(*img); !r) { return std::unexpected(r.error()); }
     img->setPhoto(PhotometricInterpretation::RGB);
   }
 
   if ((size != nullptr) && (!redonly)) {
     switch (scaling_quality.jk2) {
     case ScalingMethod::HIGH:
-      Sipi::processing::scale(*img, nnx, nny);
+      if (auto r = Sipi::processing::scale(*img, nnx, nny); !r) { return std::unexpected(r.error()); }
       break;
     case ScalingMethod::MEDIUM:
-      Sipi::processing::scaleMedium(*img, nnx, nny);
+      if (auto r = Sipi::processing::scaleMedium(*img, nnx, nny); !r) { return std::unexpected(r.error()); }
       break;
     case ScalingMethod::LOW:
-      Sipi::processing::scaleFast(*img, nnx, nny);
+      if (auto r = Sipi::processing::scaleFast(*img, nnx, nny); !r) { return std::unexpected(r.error()); }
       break;
     }
   }

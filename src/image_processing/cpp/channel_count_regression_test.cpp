@@ -73,7 +73,8 @@ TEST(ConvertYcc, ConvertYcc16BitDoesNotOverflow)
     }
   }
 
-  ASSERT_NO_THROW(Sipi::processing::convertYCC2RGB(img));
+  const auto result = Sipi::processing::convertYCC2RGB(img);
+  ASSERT_TRUE(result.has_value());
 
   EXPECT_EQ(img.getNc(), nc);
   for (size_t y = 0; y < ny; ++y) {
@@ -127,7 +128,8 @@ TEST(RemoveChannel, RemoveNonTerminalChannel)
     }
   }
 
-  ASSERT_NO_THROW(Sipi::processing::removeChannel(img, 4, false));
+  const auto result = Sipi::processing::removeChannel(img, 4, false);
+  ASSERT_TRUE(result.has_value());
 
   ASSERT_EQ(img.getNc(), 5u);
   ASSERT_EQ(img.getNalpha(), 1u);
