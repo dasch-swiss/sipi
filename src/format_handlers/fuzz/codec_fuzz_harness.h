@@ -43,6 +43,35 @@ inline const std::string &fuzz_temp_path(const char *suffix)
   return path;
 }
 
+// Fuzzing budget for the second (full `read`) decode step, not a codec limit.
+// `validate_decode_dims` (`SipiIO.h`) caps each dimension and the channel
+// count individually, but never their product, so a header can claim a
+// multi-gigabyte decode buffer and still pass the guard. In production such a
+// claim is bounded by the full-lane decode memory budget acquired at the FFI
+// seam (`MemoryBudgetGuard` in `src/ffi/cpp/serve_image.cpp`); this harness
+// has no such budget, so a header-claimed allocation this large would just
+// burn the fuzz leg on an OOM that says nothing about codec correctness. The
+// shape probe (`read_shape`) still runs unconditionally on every input — it
+// is where the container/header parsing coverage lives — only the second,
+// full `read` step is skipped once the probe's geometry implies a buffer
+// above this budget.
+inline constexpr std::uint64_t kMaxHarnessDecodeBytes = 512ULL * 1024 * 1024;
+
+// Estimates the decode buffer size implied by a shape probe's geometry.
+// `nc`/`bps` are 0 when only `DIMS` (not `ALL`) is known, so a zero channel
+// count is treated as 1 and a zero bit depth as 8. Any negative field (the
+// members are `int`) is treated as "unknown", returning 0 so the caller lets
+// the decode run rather than folding it into a huge unsigned value.
+inline std::uint64_t estimated_decode_bytes(const Sipi::SipiImgInfo &info)
+{
+  if (info.width < 0 || info.height < 0 || info.nc < 0 || info.bps < 0) { return 0; }
+  const std::uint64_t width = static_cast<std::uint64_t>(info.width);
+  const std::uint64_t height = static_cast<std::uint64_t>(info.height);
+  const std::uint64_t nc = static_cast<std::uint64_t>(info.nc == 0 ? 1 : info.nc);
+  const std::uint64_t bps = static_cast<std::uint64_t>(info.bps == 0 ? 8 : info.bps);
+  return width * height * nc * ((bps + 7) / 8);
+}
+
 // Writes `data`/`size` to the per-process temp file, then drives `Handler`'s
 // `read_shape` and `read` entry points over it. Each call is wrapped in its
 // own try/catch so a clean rejection from `read_shape` still lets `read` run.
@@ -70,12 +99,17 @@ template<typename Handler> int run_decode(const uint8_t *data, size_t size, cons
   }
 
   Handler handler;
+  bool skip_full_read = false;
 
   try {
-    if (const auto r = handler.read_shape(path); !r) { /* a rejection is a valid fuzz outcome */ }
+    if (const auto r = handler.read_shape(path); r) {
+      skip_full_read = estimated_decode_bytes(*r) > kMaxHarnessDecodeBytes;
+    }
   } catch (const std::exception &) {
   } catch (...) {
   }
+
+  if (skip_full_read) { return 0; }
 
   try {
     Sipi::SipiImage img;
