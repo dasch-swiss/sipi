@@ -118,6 +118,13 @@ public:
   /*!
    * Copy constructor. Makes a deep copy of the image
    *
+   * Assumes `img_p` is a well-formed image whose geometry was already
+   * validated at its own construction (the dimensioned constructor, or
+   * `set_pixels()`'s size check). Recomputing the buffer size here is a
+   * defensive re-check of that already-established invariant, not a parse
+   * of new input: it throws only if the source object's internal state is
+   * corrupt, the same class of failure as `std::bad_alloc`.
+   *
    * \param[in] img_p An existing instance if SipiImage
    */
   SipiImage(const SipiImage &img_p);
@@ -135,11 +142,19 @@ public:
   /*!
    * Create an empty image with the pixel buffer available, but all pixels set to 0
    *
+   * The caller states the geometry directly, not a file's decoded shape:
+   * every argument must already be a self-consistent combination. Passing
+   * one that isn't is a programming error, not a fallible parse of external
+   * input, so it throws rather than returning a value.
+   *
    * \param[in] nx_p Dimension in x direction
    * \param[in] ny_p Dimension in y direction
    * \param[in] nc_p Number of channels
    * \param[in] bps_p Bits per sample, either 8 or 16 are allowed
    * \param[in] photo_p The photometric interpretation
+   * \throws SipiImageError if `photo_p` and `nc_p` are an unsupported combination,
+   *   `bps_p` is neither 8 nor 16, or the resulting buffer would be empty
+   *   (`nx_p`, `ny_p`, or `nc_p` is zero)
    */
   SipiImage(size_t nx_p, size_t ny_p, size_t nc_p, size_t bps_p, PhotometricInterpretation photo_p);
 
