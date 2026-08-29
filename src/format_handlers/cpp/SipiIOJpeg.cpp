@@ -769,12 +769,14 @@ Result<bool> SipiIOJpeg::read(SipiImage *img,
     break;
   }
   case JCS_UNKNOWN: {
+    jpeg_destroy_decompress(&cinfo);
     return std::unexpected(SipiValueError{ ErrorCode::kUnsupportedFormat,
       "Unsupported JPEG colorspace JCS_UNKNOWN in file \"" + filepath
         + "\" (dimensions: " + std::to_string(img->getNx()) + "x" + std::to_string(img->getNy())
         + ", components: " + std::to_string(cinfo.output_components) + ")" });
   }
   default: {
+    jpeg_destroy_decompress(&cinfo);
     return std::unexpected(SipiValueError{ ErrorCode::kUnsupportedFormat,
       "Unsupported JPEG colorspace (code: " + std::to_string(colspace) + ") in file \"" + filepath
         + "\" (dimensions: " + std::to_string(img->getNx()) + "x" + std::to_string(img->getNy())

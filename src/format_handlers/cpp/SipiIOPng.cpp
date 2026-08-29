@@ -337,6 +337,7 @@ Result<bool> SipiIOPng::read(SipiImage *img,
   const size_t decoded_bps = png_get_bit_depth(png_ptr, info_ptr);
   const size_t decoded_nc = png_get_channels(png_ptr, info_ptr);
   if (auto r = validate_decode_dims(width, height, decoded_nc, static_cast<int>(decoded_bps), filepath); !r) {
+    png_destroy_read_struct(&png_ptr, &info_ptr, nullptr);
     return std::unexpected(r.error());
   }
   img->set_geometry(width, height, decoded_nc, decoded_bps);
