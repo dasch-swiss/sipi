@@ -42,8 +42,9 @@ namespace processing {
  * \param[in] width Width of the region. If the region goes beyond the image dimensions, it's adjusted.
  * \param[in] height Height of the region. If the region goes beyond the image dimensions, it's adjusted
  * \returns an error if the requested region is degenerate (e.g. entirely
- *          outside the image), success otherwise (including the case where
- *          the region already covers the whole image and no crop is needed)
+ *          outside the image) or the image's bits/sample is not 8 or 16,
+ *          success otherwise (including the case where the region already
+ *          covers the whole image and no crop is needed)
  */
 [[nodiscard]] Result<void> crop(SipiImage &img, int x, int y, size_t width = 0, size_t height = 0);
 
@@ -52,7 +53,8 @@ namespace processing {
  *
  * \param[in] img Image to crop, mutated in place
  * \param[in] region Pointer to SipiRegion
- * \returns an error if the requested region is degenerate, success otherwise
+ * \returns an error if the requested region is degenerate or the image's
+ *          bits/sample is not 8 or 16, success otherwise
  */
 [[nodiscard]] Result<void> crop(SipiImage &img, const std::shared_ptr<SipiRegion> &region);
 

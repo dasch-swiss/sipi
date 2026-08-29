@@ -65,4 +65,21 @@ TEST(CropRegression, NegativeYBeyondRequestedHeightIsRejected)
   EXPECT_EQ(result.error().code(), ErrorCode::kMalformedInput);
 }
 
+// crop(): every currently-registered read path normalizes bits/sample to 8
+// or 16 before pixel content ever reaches this function, so an unsupported
+// bps is a defensive case, not a reachable one. It must still be rejected
+// rather than silently skipping the crop: SipiImage's constructor only
+// accepts 8 or 16, so an image with an unsupported bps is built via
+// set_pixels() (which does not itself constrain bps), matching a
+// hypothetical decoder that has not normalized its output.
+TEST(CropRegression, UnsupportedBitsPerSampleIsRejected)
+{
+  SipiImage img(4, 4, 1, 8, PhotometricInterpretation::MINISBLACK);
+  std::vector<Sipi::byte> buf(4 * 4 * 1 * 4, 0);
+  img.set_pixels(std::move(buf), 4, 4, 1, 32);
+  const auto result = Sipi::processing::crop(img, 0, 0, 2, 2);
+  ASSERT_FALSE(result.has_value());
+  EXPECT_EQ(result.error().code(), ErrorCode::kMalformedInput);
+}
+
 }// namespace

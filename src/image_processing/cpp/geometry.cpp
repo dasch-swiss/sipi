@@ -300,7 +300,8 @@ Result<void> crop(SipiImage &img, int x, int y, size_t width, size_t height)
 
     img.set_pixels(std::move(outbuf_v), width, height, nc, bps);
   } else {
-    // clean up and throw exception
+    return std::unexpected(SipiValueError{ ErrorCode::kMalformedInput,
+      "Cannot crop image with unsupported bits/sample (" + std::to_string(bps) + "), only 8 and 16 are supported" });
   }
 
   return {};
@@ -350,7 +351,8 @@ Result<void> crop(SipiImage &img, const std::shared_ptr<SipiRegion> &region)
 
     img.set_pixels(std::move(outbuf_v), width, height, nc, bps);
   } else {
-    // clean up and throw exception
+    return std::unexpected(SipiValueError{ ErrorCode::kMalformedInput,
+      "Cannot crop image with unsupported bits/sample (" + std::to_string(bps) + "), only 8 and 16 are supported" });
   }
 
   return {};
