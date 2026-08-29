@@ -23,18 +23,6 @@ class SipiIOJpeg : public SipiIO
 private:
   static void parse_photoshop(SipiImage *img, char *data, int length);
 
-  /*! Decodes a JPEG file into img, reporting failure as a Result value. */
-  [[nodiscard]] static Result<bool> read_impl(SipiImage *img,
-    const std::string &filepath,
-    std::shared_ptr<SipiRegion> region,
-    std::shared_ptr<SipiSize> size,
-    bool force_bps_8,
-    ScalingQuality scaling_quality);
-
-  /*! Encodes img to the given sink, reporting failure as a Result value. */
-  [[nodiscard]] static Result<void>
-    write_impl(SipiImage *img, const OutputSink &sink, const SipiCompressionParams *params);
-
 public:
   ~SipiIOJpeg() override = default;
   ;
@@ -48,7 +36,7 @@ public:
    * only reads part of the data returning an image with reduces resolution.
    * If the value is 1, only half the resolution is returned. If it is 2, only one forth etc.
    */
-  bool read(SipiImage *img,
+  [[nodiscard]] Result<bool> read(SipiImage *img,
     const std::string &filepath,
     std::shared_ptr<SipiRegion> region,
     std::shared_ptr<SipiSize> size,
@@ -62,7 +50,7 @@ public:
    * \param[out] width Width of the image in pixels
    * \param[out] height Height of the image in pixels
    */
-  Sipi::SipiImgInfo read_shape(const std::string &filepath) override;
+  [[nodiscard]] Result<SipiImgInfo> read_shape(const std::string &filepath) override;
 
   /*!
    * Write a JPEG image to the given OutputSink (file/stdout, or a streamed
@@ -71,7 +59,9 @@ public:
    * \param *img Pointer to SipiImage instance
    * \param sink Where the encoded bytes go.
    */
-  void write(SipiImage *img, const OutputSink &sink, const SipiCompressionParams *params) override;
+  [[nodiscard]] Result<void> write(SipiImage *img,
+    const OutputSink &sink,
+    const SipiCompressionParams *params) override;
 };
 
 }// namespace Sipi

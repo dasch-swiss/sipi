@@ -947,7 +947,7 @@ std::ostream &operator<<(std::ostream &os, const SubImageInfo &s)
  * "II" for little-endian (a.k.a. "Intel byte ordering" or "MM" for big-endian (a.k.a. "Motorola byte ordering" byte
  * ordering. I don't see where this is handled in the code.
  */
-Result<bool> SipiIOTiff::read_impl(SipiImage *img,
+Result<bool> SipiIOTiff::read(SipiImage *img,
   const std::string &filepath,
   std::shared_ptr<SipiRegion> region,
   std::shared_ptr<SipiSize> size,
@@ -1573,31 +1573,12 @@ Result<bool> SipiIOTiff::read_impl(SipiImage *img,
   }
   return false;
 }
-
-bool SipiIOTiff::read(SipiImage *img,
-  const std::string &filepath,
-  std::shared_ptr<SipiRegion> region,
-  std::shared_ptr<SipiSize> size,
-  bool force_bps_8,
-  ScalingQuality scaling_quality)
-{
-  auto result = read_impl(img, filepath, region, size, force_bps_8, scaling_quality);
-  if (!result) {
-    const auto &err = result.error();
-    throw SipiImageError(err.raw_message(), err.errnum(), err.location());
-  }
-  return *result;
-}
 //============================================================================
 
 
-namespace {
-
 // The shape probe proper: reports a missing width/height tag as a
-// SipiValueError value rather than by throwing. File-local: it touches no
-// SipiImage state, only a local SipiImgInfo, read_resolutions, and the
-// observability counters.
-[[nodiscard]] Result<SipiImgInfo> read_shape_impl(const std::string &filepath)
+// SipiValueError value.
+Result<SipiImgInfo> SipiIOTiff::read_shape(const std::string &filepath)
 {
   SIPI_ZONE_N("SipiIOTiff::read_shape");
   SipiImgInfo info;
@@ -1720,18 +1701,6 @@ namespace {
   }
   return info;
 }
-
-}// namespace
-
-SipiImgInfo SipiIOTiff::read_shape(const std::string &filepath)
-{
-  auto result = read_shape_impl(filepath);
-  if (!result) {
-    const auto &err = result.error();
-    throw SipiImageError(err.raw_message(), err.errnum(), err.location());
-  }
-  return *result;
-}
 //============================================================================
 
 void SipiIOTiff::write_basic_tags(const SipiImage &img,
@@ -1766,7 +1735,7 @@ void SipiIOTiff::write_basic_tags(const SipiImage &img,
   TIFFSetField(tif, TIFFTAG_PHOTOMETRIC, img.photo);
 }
 
-Result<void> SipiIOTiff::write_impl(SipiImage *img, const OutputSink &sink, const SipiCompressionParams *params)
+Result<void> SipiIOTiff::write(SipiImage *img, const OutputSink &sink, const SipiCompressionParams *params)
 {
   SIPI_ZONE_N("SipiIOTiff::write");
   // A streamed sink (callback/tee) and stdout both need an in-memory TIFF
@@ -2044,18 +2013,6 @@ Result<void> SipiIOTiff::write_impl(SipiImage *img, const OutputSink &sink, cons
     }
   }
   return {};
-}
-
-void SipiIOTiff::write(SipiImage *img, const OutputSink &sink, const SipiCompressionParams *params)
-{
-  auto result = write_impl(img, sink, params);
-  if (!result) {
-    const auto &err = result.error();
-    if (err.code() == ErrorCode::kClientAbort) {
-      throw SipiImageClientAbortError(err.raw_message(), err.errnum(), err.location());
-    }
-    throw SipiImageError(err.raw_message(), err.errnum(), err.location());
-  }
 }
 //============================================================================
 

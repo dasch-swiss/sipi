@@ -42,19 +42,6 @@ namespace Sipi {
 /*! Class which implements the JPEG2000-reader/writer */
 class SipiIOJ2k : public SipiIO
 {
-private:
-  /*! Decodes a JPEG2000 file into img, reporting failure as a Result value. */
-  [[nodiscard]] static Result<bool> read_impl(SipiImage *img,
-    const std::string &filepath,
-    std::shared_ptr<SipiRegion> region,
-    std::shared_ptr<SipiSize> size,
-    bool force_bps_8,
-    ScalingQuality scaling_quality);
-
-  /*! Encodes img as a JPEG2000 file to sink, reporting failure as a Result value. */
-  [[nodiscard]] static Result<void>
-    write_impl(SipiImage *img, const OutputSink &sink, const SipiCompressionParams *params);
-
 public:
   ~SipiIOJ2k() override = default;
   ;
@@ -68,7 +55,7 @@ public:
    * \param force_bps_8 Force the image to be read as 8 bits per sample
    * \param scaling_quality Scaling quality for the different formats
    */
-  bool read(SipiImage *img,
+  [[nodiscard]] Result<bool> read(SipiImage *img,
     const std::string &filepath,
     std::shared_ptr<SipiRegion> region,
     std::shared_ptr<SipiSize> size,
@@ -80,7 +67,7 @@ public:
    *
    * \param filepath Pathname of the image file
    */
-  Sipi::SipiImgInfo read_shape(const std::string &filepath) override;
+  [[nodiscard]] Result<SipiImgInfo> read_shape(const std::string &filepath) override;
 
   /*!
    * Write a JPEG2000 image to the given OutputSink (file/stdout, or a streamed
@@ -89,7 +76,9 @@ public:
    * \param *img Pointer to SipiImage instance
    * \param sink Where the encoded bytes go.
    */
-  void write(SipiImage *img, const OutputSink &sink, const SipiCompressionParams *params) override;
+  [[nodiscard]] Result<void> write(SipiImage *img,
+    const OutputSink &sink,
+    const SipiCompressionParams *params) override;
 };
 }// namespace Sipi
 

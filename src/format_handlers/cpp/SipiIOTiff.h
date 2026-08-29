@@ -50,14 +50,6 @@ private:
    */
   static void readExif(SipiImage *img, TIFF *tif, toff_t exif_offset);
 
-  /*! Decodes a TIFF file into img, reporting failure as a Result value. */
-  [[nodiscard]] static Result<bool> read_impl(SipiImage *img,
-    const std::string &filepath,
-    std::shared_ptr<SipiRegion> region,
-    std::shared_ptr<SipiSize> size,
-    bool force_bps_8,
-    ScalingQuality scaling_quality);
-
   /*!
    * Write the EXIF data to the TIFF file
    * \param img Pointer to SipiImage instance
@@ -97,10 +89,6 @@ private:
    */
   [[nodiscard]] static Result<std::vector<unsigned char>> cvrt8BitTo1bit(const SipiImage &img, unsigned int &sll);
 
-  /*! Encodes img to the given sink, reporting failure as a Result value. */
-  [[nodiscard]] static Result<void>
-    write_impl(SipiImage *img, const OutputSink &sink, const SipiCompressionParams *params);
-
 public:
   virtual ~SipiIOTiff(){};
 
@@ -116,7 +104,7 @@ public:
    * \param force_bps_8 Convert the file to 8 bits/sample on reading thus enforcing an 8 bit image
    * \param scaling_quality Quality of the scaling algorithm
    */
-  bool read(SipiImage *img,
+  [[nodiscard]] Result<bool> read(SipiImage *img,
     const std::string &filepath,
     std::shared_ptr<SipiRegion> region,
     std::shared_ptr<SipiSize> size,
@@ -129,7 +117,7 @@ public:
    * \param[in] filepath Pathname of the image file
    * \return Image information
    */
-  SipiImgInfo read_shape(const std::string &filepath) override;
+  [[nodiscard]] Result<SipiImgInfo> read_shape(const std::string &filepath) override;
 
   /*!
    * Write a TIFF image to a file, stdout or to a memory buffer
@@ -142,7 +130,9 @@ public:
    * \param sink Where the encoded bytes go (ADR-0006): a FilePath (file or
    * stdout via "-"/"stdout:"), or a streamed CallbackSink / TeeSink.
    */
-  void write(SipiImage *img, const OutputSink &sink, const SipiCompressionParams *params) override;
+  [[nodiscard]] Result<void> write(SipiImage *img,
+    const OutputSink &sink,
+    const SipiCompressionParams *params) override;
 };
 }// namespace Sipi
 

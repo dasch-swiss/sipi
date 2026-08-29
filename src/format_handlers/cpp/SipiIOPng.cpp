@@ -131,7 +131,7 @@ void sipi_warning_fn(png_structp png_ptr, png_const_charp warning_msg)
   log_warn("PNG warning: %s", warning_msg);
 }
 
-Result<bool> SipiIOPng::read_impl(SipiImage *img,
+Result<bool> SipiIOPng::read(SipiImage *img,
   const std::string &filepath,
   std::shared_ptr<SipiRegion> region,
   std::shared_ptr<SipiSize> size,
@@ -343,30 +343,12 @@ Result<bool> SipiIOPng::read_impl(SipiImage *img,
   return true;
 };
 
-bool SipiIOPng::read(SipiImage *img,
-  const std::string &filepath,
-  std::shared_ptr<SipiRegion> region,
-  std::shared_ptr<SipiSize> size,
-  bool force_bps_8,
-  ScalingQuality scaling_quality)
-{
-  auto result = read_impl(img, filepath, region, size, force_bps_8, scaling_quality);
-  if (!result) {
-    const auto &err = result.error();
-    throw SipiImageError(err.raw_message(), err.errnum(), err.location());
-  }
-  return *result;
-}
-
 /*==========================================================================*/
 
 
-namespace {
-
 // The shape probe proper: reports a libpng struct-allocation failure as a
-// SipiValueError value rather than by throwing. File-local: it touches no
-// SipiImage state.
-[[nodiscard]] Result<SipiImgInfo> read_shape_impl(const std::string &filepath)
+// SipiValueError value.
+Result<SipiImgInfo> SipiIOPng::read_shape(const std::string &filepath)
 {
   SIPI_ZONE_N("SipiIOPng::read_shape");
   SipiImgInfo info;
@@ -423,18 +405,6 @@ namespace {
 
   return info;
 }
-
-}// namespace
-
-SipiImgInfo SipiIOPng::read_shape(const std::string &filepath)
-{
-  auto result = read_shape_impl(filepath);
-  if (!result) {
-    const auto &err = result.error();
-    throw SipiImageError(err.raw_message(), err.errnum(), err.location());
-  }
-  return *result;
-}
 /*==========================================================================*/
 
 
@@ -488,7 +458,7 @@ static void conn_flush_data(png_structp /*png_ptr*/)
 
 /*==========================================================================*/
 
-Result<void> SipiIOPng::write_impl(SipiImage *img, const OutputSink &sink, const SipiCompressionParams *params)
+Result<void> SipiIOPng::write(SipiImage *img, const OutputSink &sink, const SipiCompressionParams *params)
 {
   SIPI_ZONE_N("SipiIOPng::write");
   // A streamed sink (callback/tee) is driven through SinkStream via libpng's
@@ -512,7 +482,7 @@ Result<void> SipiIOPng::write_impl(SipiImage *img, const OutputSink &sink, const
   }
 
   // Streamed-write context: SinkStream and http_ctx are kept alive for the
-  // whole of SipiIOPng::write_impl so their addresses stay valid across longjmp.
+  // whole of SipiIOPng::write so their addresses stay valid across longjmp.
   // For a FilePath we leave them unused and let libpng's native file writer run.
   std::unique_ptr<SinkStream> sink_stream;
   PngHttpCtx http_ctx{ nullptr, false };
@@ -670,18 +640,6 @@ Result<void> SipiIOPng::write_impl(SipiImage *img, const OutputSink &sink, const
   png_ptr = nullptr;
   info_ptr = nullptr;
   return {};
-}
-
-void SipiIOPng::write(SipiImage *img, const OutputSink &sink, const SipiCompressionParams *params)
-{
-  auto result = write_impl(img, sink, params);
-  if (!result) {
-    const auto &err = result.error();
-    if (err.code() == ErrorCode::kClientAbort) {
-      throw SipiImageClientAbortError(err.raw_message(), err.errnum(), err.location());
-    }
-    throw SipiImageError(err.raw_message(), err.errnum(), err.location());
-  }
 }
 
 }

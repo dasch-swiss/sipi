@@ -21,6 +21,7 @@
 #include "logging/logger.h"
 #include "SipiImage.h"
 #include "SipiImageError.h"
+#include "error/SipiValueError.h"
 #include "observability/metrics.h"
 #include "observability/profiling.h"
 #include "util/checked_arith.h"
@@ -39,6 +40,18 @@ size_t checked_buf_size_or_throw(size_t nx_, size_t ny_, size_t nc_, size_t elem
   if (const auto sz = checked_buf_size(nx_, ny_, nc_, elem_)) { return *sz; }
   throw SipiImageError("Pixel buffer size overflow (dimensions=" + std::to_string(nx_) + "x" + std::to_string(ny_)
                         + ", channels=" + std::to_string(nc_) + ", elem=" + std::to_string(elem_) + ")");
+}
+
+// The single conversion point from a handler's `Result` failure to the
+// exception `SipiImage::read` / `read_shape` / `write` promise their callers:
+// a `SipiValueError` becomes a `SipiImageError` carrying the same message,
+// errno, and source location. `SipiImage::write` additionally checks for
+// `ErrorCode::kClientAbort` first, throwing the `SipiImageClientAbortError`
+// subtype for that one code and falling through to this helper for every
+// other failure.
+[[noreturn]] void throw_from_value_error(const SipiValueError &err)
+{
+  throw SipiImageError(err.raw_message(), err.errnum(), err.location());
 }
 
 }// namespace
@@ -274,9 +287,11 @@ void SipiImage::set_pixels(std::vector<byte> &&buf, size_t nx_p, size_t ny_p, si
 
 
 /*!
- * Reads the image from a file by calling the appropriate reader.
- * The readers return either boolean or throw an exception,
- * so in any case wrap the call to this method in a try/catch block.
+ * Reads the image from a file by calling the appropriate reader, selected by
+ * the file's extension and falling back to every registered handler in turn
+ * on a mismatch. Throws `SipiImageError` if no handler recognises the file,
+ * or immediately propagates a handler's decode failure as `SipiImageError`
+ * without considering the fallback handlers.
  */
 void SipiImage::read(const std::string &filepath,
   const std::shared_ptr<SipiRegion> &region,
@@ -293,19 +308,27 @@ void SipiImage::read(const std::string &filepath,
   _fext.resize(fext.size());
   std::transform(fext.begin(), fext.end(), _fext.begin(), ::tolower);
 
+  auto dispatch_read = [&](const std::string &key) {
+    auto result = io[key]->read(this, filepath, region, size, force_bps_8, scaling_quality);
+    if (!result) { throw_from_value_error(result.error()); }
+    return *result;
+  };
+
   if ((_fext == "tif") || (_fext == "tiff")) {
-    got_file = io[std::string("tif")]->read(this, filepath, region, size, force_bps_8, scaling_quality);
+    got_file = dispatch_read("tif");
   } else if ((_fext == "jpg") || (_fext == "jpeg")) {
-    got_file = io[std::string("jpg")]->read(this, filepath, region, size, force_bps_8, scaling_quality);
+    got_file = dispatch_read("jpg");
   } else if (_fext == "png") {
-    got_file = io[std::string("png")]->read(this, filepath, region, size, force_bps_8, scaling_quality);
+    got_file = dispatch_read("png");
   } else if ((_fext == "jp2") || (_fext == "jpx") || (_fext == "j2k")) {
-    got_file = io[std::string("jpx")]->read(this, filepath, region, size, force_bps_8, scaling_quality);
+    got_file = dispatch_read("jpx");
   }
 
   if (!got_file) {
     for (auto const &iterator : io) {
-      if ((got_file = iterator.second->read(this, filepath, region, size, force_bps_8, scaling_quality))) break;
+      auto result = iterator.second->read(this, filepath, region, size, force_bps_8, scaling_quality);
+      if (!result) { throw_from_value_error(result.error()); }
+      if ((got_file = *result)) break;
     }
   }
 
@@ -373,21 +396,29 @@ SipiImgInfo SipiImage::read_shape(const std::string &filepath) const
   std::string mimetype = shttps::Parsing::getFileMimetype(filepath).first;
   info.internalmimetype = mimetype;
 
+  auto dispatch_read_shape = [&](const std::string &key) {
+    auto result = io[key]->read_shape(filepath);
+    if (!result) { throw_from_value_error(result.error()); }
+    return *result;
+  };
+
   if ((mimetype == "image/tiff") || (mimetype == "image/x-tiff")) {
-    info = io[std::string("tif")]->read_shape(filepath);
+    info = dispatch_read_shape("tif");
   } else if ((mimetype == "image/jpeg") || (mimetype == "image/pjpeg")) {
-    info = io[std::string("jpg")]->read_shape(filepath);
+    info = dispatch_read_shape("jpg");
   } else if (mimetype == "image/png") {
-    info = io[std::string("png")]->read_shape(filepath);
+    info = dispatch_read_shape("png");
   } else if ((mimetype == "image/jp2") || (mimetype == "image/jpx")) {
-    info = io[std::string("jpx")]->read_shape(filepath);
+    info = dispatch_read_shape("jpx");
   } else {
     throw SipiImageError("unknown mimetype: \"" + mimetype + "\"!");
   }
 
   if (info.success == SipiImgInfo::FAILURE) {
     for (auto const &iterator : io) {
-      info = iterator.second->read_shape(filepath);
+      auto result = iterator.second->read_shape(filepath);
+      if (!result) { throw_from_value_error(result.error()); }
+      info = *result;
       if (info.success != SipiImgInfo::FAILURE) break;
     }
   }
@@ -413,7 +444,17 @@ void SipiImage::write(const std::string &ftype, const OutputSink &sink, const Si
   // handler and segfault on the virtual call. Callers pass validated
   // format strings; the historical write() docstring advertised "j2k"
   // (the map key is "jpx"), which is exactly how this fired.
-  io.at(ftype)->write(this, sink, params);
+  auto result = io.at(ftype)->write(this, sink, params);
+  if (!result) {
+    const auto &err = result.error();
+    // The HTTP seam dispatches on the exception type to skip Sentry capture
+    // for a client-initiated disconnect; every other write failure is a
+    // genuine server-side error.
+    if (err.code() == ErrorCode::kClientAbort) {
+      throw SipiImageClientAbortError(err.raw_message(), err.errnum(), err.location());
+    }
+    throw_from_value_error(err);
+  }
 }
 
 void SipiImage::write(const std::string &ftype, const std::string &filepath, const SipiCompressionParams *params)
