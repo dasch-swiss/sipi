@@ -585,8 +585,9 @@ Result<void> SipiIOPng::write(SipiImage *img, const OutputSink &sink, const Sipi
     if (auto r = processing::convertToIcc(*img, Icc(Sipi::PredefinedProfiles::icc_sRGB), 8); !r) {
       return std::unexpected(r.error());
     }
+    // convertToIcc() moves in a freshly sized 3-channel/8-bit buffer via set_pixels(),
+    // so the image geometry already matches; only the PNG colour type needs selecting.
     color_type = PNG_COLOR_TYPE_RGB;
-    img->set_geometry(img->getNx(), img->getNy(), 3, 8);
   } else {
     return std::unexpected(SipiValueError{ ErrorCode::kUnsupportedFormat,
       "Error writing PNG file \"" + filepath + "\": unsupported number of channels (" + std::to_string(img->getNc())
