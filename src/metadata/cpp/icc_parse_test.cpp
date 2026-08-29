@@ -16,6 +16,7 @@
 #include "gtest/gtest.h"
 
 #include <memory>
+#include <sstream>
 #include <vector>
 
 namespace {
@@ -78,4 +79,42 @@ TEST(SipiIccParse, SRgbProfileParsesAsSRgb)
   auto icc = Sipi::Icc::parse(buf.data(), static_cast<int>(buf.size()));
   ASSERT_TRUE(icc.has_value());
   EXPECT_EQ((*icc)->getProfileType(), Sipi::icc_sRGB);
+}
+
+// Regression test for operator<<(std::ostream &, Icc &) (DEV-7078): the
+// manufacturer/model/copyright tags are optional and routinely absent from
+// real-world profiles. Streaming a profile with none of the four ASCII info
+// tags must not read a zero-length, non-NUL-terminated buffer as a C string.
+TEST(SipiIccStream, ProfileWithoutOptionalTagsStreamsSafely)
+{
+  ProfilePtr profile(cmsCreate_sRGBProfile());
+  ASSERT_NE(profile, nullptr);
+
+  // Erase whichever of these tags cmsCreate_sRGBProfile() set (description is
+  // always present; manufacturer/model/copyright are not, on this built-in
+  // profile, so cmsWriteTag's delete-if-present has nothing to do for them).
+  ASSERT_TRUE(cmsWriteTag(profile.get(), cmsSigProfileDescriptionTag, nullptr));
+  cmsWriteTag(profile.get(), cmsSigDeviceMfgDescTag, nullptr);
+  cmsWriteTag(profile.get(), cmsSigDeviceModelDescTag, nullptr);
+  cmsWriteTag(profile.get(), cmsSigCopyrightTag, nullptr);
+
+  // Sanity: all four reads really are len == 0, i.e. this test drives the
+  // buffer-underflow path in operator<<.
+  ASSERT_EQ(cmsGetProfileInfoASCII(profile.get(), cmsInfoDescription, cmsNoLanguage, cmsNoCountry, nullptr, 0), 0u);
+  ASSERT_EQ(cmsGetProfileInfoASCII(profile.get(), cmsInfoManufacturer, cmsNoLanguage, cmsNoCountry, nullptr, 0), 0u);
+  ASSERT_EQ(cmsGetProfileInfoASCII(profile.get(), cmsInfoModel, cmsNoLanguage, cmsNoCountry, nullptr, 0), 0u);
+  ASSERT_EQ(cmsGetProfileInfoASCII(profile.get(), cmsInfoCopyright, cmsNoLanguage, cmsNoCountry, nullptr, 0), 0u);
+
+  auto buf = serialize(profile.get());
+
+  auto icc = Sipi::Icc::parse(buf.data(), static_cast<int>(buf.size()));
+  ASSERT_TRUE(icc.has_value());
+
+  std::ostringstream out;
+  out << **icc;
+
+  EXPECT_NE(out.str().find("ICC-Description   :"), std::string::npos);
+  EXPECT_NE(out.str().find("ICC-Manufacturer  :"), std::string::npos);
+  EXPECT_NE(out.str().find("ICC-Model         :"), std::string::npos);
+  EXPECT_NE(out.str().find("ICC-Copyright     :"), std::string::npos);
 }

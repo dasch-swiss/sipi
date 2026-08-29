@@ -50,6 +50,19 @@ std::optional<std::time_t> read_source_date_epoch() noexcept
   return cached;
 }
 
+// cmsGetProfileInfoASCII returns 0 when the requested tag is absent from the
+// profile (manufacturer/model/copyright are optional and routinely omitted);
+// std::make_unique<char[]>(0) then yields a zero-length, non-NUL-terminated
+// buffer that must never be read as a C string.
+std::string icc_profile_info(cmsHPROFILE profile, cmsInfoType type)
+{
+  unsigned int len = cmsGetProfileInfoASCII(profile, type, cmsNoLanguage, cmsNoCountry, nullptr, 0);
+  if (len == 0) return {};
+  auto buf = std::make_unique<char[]>(len);
+  cmsGetProfileInfoASCII(profile, type, cmsNoLanguage, cmsNoCountry, buf.get(), len);
+  return std::string(buf.get());
+}
+
 }// namespace
 
 void icc_error_logger(cmsContext ContextID, cmsUInt32Number ErrorCode, const char *Text)
@@ -371,26 +384,10 @@ unsigned int Icc::iccFormatter(int bps, int nc, PhotometricInterpretation photo)
 
 std::ostream &operator<<(std::ostream &outstr, Icc &rhs)
 {
-  unsigned int len =
-    cmsGetProfileInfoASCII(rhs.icc_profile.get(), cmsInfoDescription, cmsNoLanguage, cmsNoCountry, nullptr, 0);
-  auto buf = std::make_unique<char[]>(len);
-  cmsGetProfileInfoASCII(rhs.icc_profile.get(), cmsInfoDescription, cmsNoLanguage, cmsNoCountry, buf.get(), len);
-  outstr << "ICC-Description   : " << buf.get() << std::endl;
-
-  len = cmsGetProfileInfoASCII(rhs.icc_profile.get(), cmsInfoManufacturer, cmsNoLanguage, cmsNoCountry, nullptr, 0);
-  buf = std::make_unique<char[]>(len);
-  cmsGetProfileInfoASCII(rhs.icc_profile.get(), cmsInfoManufacturer, cmsNoLanguage, cmsNoCountry, buf.get(), len);
-  outstr << "ICC-Manufacturer  : " << buf.get() << std::endl;
-
-  len = cmsGetProfileInfoASCII(rhs.icc_profile.get(), cmsInfoModel, cmsNoLanguage, cmsNoCountry, nullptr, 0);
-  buf = std::make_unique<char[]>(len);
-  cmsGetProfileInfoASCII(rhs.icc_profile.get(), cmsInfoModel, cmsNoLanguage, cmsNoCountry, buf.get(), len);
-  outstr << "ICC-Model         : " << buf.get() << std::endl;
-
-  len = cmsGetProfileInfoASCII(rhs.icc_profile.get(), cmsInfoCopyright, cmsNoLanguage, cmsNoCountry, nullptr, 0);
-  buf = std::make_unique<char[]>(len);
-  cmsGetProfileInfoASCII(rhs.icc_profile.get(), cmsInfoCopyright, cmsNoLanguage, cmsNoCountry, buf.get(), len);
-  outstr << "ICC-Copyright     : " << buf.get() << std::endl;
+  outstr << "ICC-Description   : " << icc_profile_info(rhs.icc_profile.get(), cmsInfoDescription) << std::endl;
+  outstr << "ICC-Manufacturer  : " << icc_profile_info(rhs.icc_profile.get(), cmsInfoManufacturer) << std::endl;
+  outstr << "ICC-Model         : " << icc_profile_info(rhs.icc_profile.get(), cmsInfoModel) << std::endl;
+  outstr << "ICC-Copyright     : " << icc_profile_info(rhs.icc_profile.get(), cmsInfoCopyright) << std::endl;
 
   struct tm datetime
   {
