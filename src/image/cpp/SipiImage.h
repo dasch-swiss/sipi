@@ -62,7 +62,7 @@ enum SkipMetadata : std::uint8_t {
  * (`max_x`, `max_y`); `mean_abs` is the mean |Δ| over every sample.
  *
  * `max_x`/`max_y` are row-major (`y * nx + x`) pixel coordinates, matching
- * the layout used by `operator-=`, the format handlers, and
+ * the layout used by `processing::subtract`, the format handlers, and
  * `getPixel`/`setPixel` — so they may be fed back into those accessors.
  */
 struct PixelDelta

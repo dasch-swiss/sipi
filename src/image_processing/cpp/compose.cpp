@@ -147,7 +147,7 @@ std::optional<PixelDelta> maxPixelDelta(const SipiImage &lhs, const SipiImage &r
   const size_t bps = lhs.getBps();
 
   // Read the raw pixel store directly in row-major order (`y * nx + x`),
-  // matching operator-=, the format handlers, and getPixel/setPixel.
+  // matching processing::subtract, the format handlers, and getPixel/setPixel.
   double sum_abs = 0.;
   int max_abs = 0;
   size_t max_x = 0, max_y = 0;
@@ -251,7 +251,9 @@ bool operator==(const SipiImage &lhs, const SipiImage &rhs)
 
 /*==========================================================================*/
 
-SipiImage &operator-=(SipiImage &lhs, const SipiImage &rhs)
+namespace processing {
+
+Result<void> subtract(SipiImage &lhs, const SipiImage &rhs)
 {
   if ((lhs.getNc() != rhs.getNc()) || (lhs.getBps() != rhs.getBps()) || (lhs.getPhoto() != rhs.getPhoto())) {
     std::stringstream ss;
@@ -260,7 +262,7 @@ SipiImage &operator-=(SipiImage &lhs, const SipiImage &rhs)
        << std::endl;
     ss << "Image 2:  nc: " << rhs.getNc() << " bps: " << rhs.getBps() << " photo: " << shttps::as_integer(rhs.getPhoto())
        << std::endl;
-    throw SipiImageError(ss.str());
+    return std::unexpected(SipiValueError{ ErrorCode::kMalformedInput, ss.str() });
   }
 
   const size_t nx = lhs.getNx();
@@ -273,9 +275,7 @@ SipiImage &operator-=(SipiImage &lhs, const SipiImage &rhs)
   const SipiImage *rhs_ptr = &rhs;
   if ((nx != rhs.getNx()) || (ny != rhs.getNy())) {
     new_rhs_guard = std::make_unique<SipiImage>(rhs);
-    if (auto scaled = processing::scale(*new_rhs_guard, nx, ny); !scaled) {
-      throw SipiImageError(scaled.error().raw_message(), scaled.error().errnum(), scaled.error().location());
-    }
+    if (auto scaled = processing::scale(*new_rhs_guard, nx, ny); !scaled) { return std::unexpected(scaled.error()); }
     rhs_ptr = new_rhs_guard.get();
   }
 
@@ -320,8 +320,8 @@ SipiImage &operator-=(SipiImage &lhs, const SipiImage &rhs)
   }
 
   default: {
-    throw SipiImageError(
-      "Unsupported bits/sample (" + std::to_string(bps) + ") for image diff operation, only 8 and 16 are supported");
+    return std::unexpected(SipiValueError{ ErrorCode::kUnsupportedFormat,
+      "Unsupported bits/sample (" + std::to_string(bps) + ") for image diff operation, only 8 and 16 are supported" });
   }
   }
 
@@ -368,157 +368,15 @@ SipiImage &operator-=(SipiImage &lhs, const SipiImage &rhs)
   }
 
   default: {
-    throw SipiImageError(
-      "Unsupported bits/sample (" + std::to_string(bps) + ") for image diff operation, only 8 and 16 are supported");
+    return std::unexpected(SipiValueError{ ErrorCode::kUnsupportedFormat,
+      "Unsupported bits/sample (" + std::to_string(bps) + ") for image diff operation, only 8 and 16 are supported" });
   }
   }
 
   // RAII: diffbuf and new_rhs_guard auto-freed on scope exit
-  return lhs;
+  return {};
 }
 
-/*==========================================================================*/
-
-// R14: Return by value — compiler applies RVO/NRVO
-SipiImage operator-(const SipiImage &lhs, const SipiImage &rhs)
-{
-  SipiImage result(lhs);
-  result -= rhs;
-  return result;
-}
-
-/*==========================================================================*/
-
-SipiImage &operator+=(SipiImage &lhs, const SipiImage &rhs)
-{
-  if ((lhs.getNc() != rhs.getNc()) || (lhs.getBps() != rhs.getBps()) || (lhs.getPhoto() != rhs.getPhoto())) {
-    std::stringstream ss;
-    ss << "Image op: images not compatible" << std::endl;
-    ss << "Image 1:  nc: " << lhs.getNc() << " bps: " << lhs.getBps() << " photo: " << shttps::as_integer(lhs.getPhoto())
-       << std::endl;
-    ss << "Image 2:  nc: " << rhs.getNc() << " bps: " << rhs.getBps() << " photo: " << shttps::as_integer(rhs.getPhoto())
-       << std::endl;
-    throw SipiImageError(ss.str());
-  }
-
-  const size_t nx = lhs.getNx();
-  const size_t ny = lhs.getNy();
-  const size_t nc = lhs.getNc();
-  const size_t bps = lhs.getBps();
-
-  // R15: RAII for temporary resources (also fixes new_rhs leak)
-  std::unique_ptr<SipiImage> new_rhs_guard;
-  const SipiImage *rhs_ptr = &rhs;
-  if ((nx != rhs.getNx()) || (ny != rhs.getNy())) {
-    new_rhs_guard = std::make_unique<SipiImage>(rhs);
-    if (auto scaled = processing::scale(*new_rhs_guard, nx, ny); !scaled) {
-      throw SipiImageError(scaled.error().raw_message(), scaled.error().errnum(), scaled.error().location());
-    }
-    rhs_ptr = new_rhs_guard.get();
-  }
-
-  const size_t diffbuf_bytes = checked_buf_size_or_throw(nx, ny, nc, sizeof(int));
-  auto diffbuf = std::make_unique<int[]>(diffbuf_bytes / sizeof(int));
-  int *dbuf = diffbuf.get();
-
-  switch (bps) {
-  case 8: {
-    byte *ltmp = lhs.pixels_writable().data();
-    const byte *rtmp = rhs_ptr->pixels_view().data();
-
-    for (size_t j = 0; j < ny; j++) {
-      for (size_t i = 0; i < nx; i++) {
-        for (size_t k = 0; k < nc; k++) {
-          if (ltmp[nc * (j * nx + i) + k] != rtmp[nc * (j * nx + i) + k]) {
-            dbuf[nc * (j * nx + i) + k] = ltmp[nc * (j * nx + i) + k] + rtmp[nc * (j * nx + i) + k];
-          }
-        }
-      }
-    }
-    break;
-  }
-
-  case 16: {
-    word *ltmp = reinterpret_cast<word *>(lhs.pixels_writable().data());
-    const word *rtmp = reinterpret_cast<const word *>(rhs_ptr->pixels_view().data());
-
-    for (size_t j = 0; j < ny; j++) {
-      for (size_t i = 0; i < nx; i++) {
-        for (size_t k = 0; k < nc; k++) {
-          if (ltmp[nc * (j * nx + i) + k] != rtmp[nc * (j * nx + i) + k]) {
-            // BUG FIX: was subtraction (copy-paste from operator-=), should be addition
-            dbuf[nc * (j * nx + i) + k] = ltmp[nc * (j * nx + i) + k] + rtmp[nc * (j * nx + i) + k];
-          }
-        }
-      }
-    }
-
-    break;
-  }
-
-  default: {
-    throw SipiImageError(
-      "Unsupported bits/sample (" + std::to_string(bps) + ") for image add operation, only 8 and 16 are supported");
-  }
-  }
-
-  int max = INT_MIN;
-
-  for (size_t j = 0; j < ny; j++) {
-    for (size_t i = 0; i < nx; i++) {
-      for (size_t k = 0; k < nc; k++) {
-        if (dbuf[nc * (j * nx + i) + k] > max) max = dbuf[nc * (j * nx + i) + k];
-      }
-    }
-  }
-
-  switch (bps) {
-  case 8: {
-    byte *ltmp = lhs.pixels_writable().data();
-
-    for (size_t j = 0; j < ny; j++) {
-      for (size_t i = 0; i < nx; i++) {
-        for (size_t k = 0; k < nc; k++) {
-          ltmp[nc * (j * nx + i) + k] = (byte)(dbuf[nc * (j * nx + i) + k] * UCHAR_MAX / max);
-        }
-      }
-    }
-
-    break;
-  }
-
-  case 16: {
-    word *ltmp = reinterpret_cast<word *>(lhs.pixels_writable().data());
-
-    for (size_t j = 0; j < ny; j++) {
-      for (size_t i = 0; i < nx; i++) {
-        for (size_t k = 0; k < nc; k++) {
-          ltmp[nc * (j * nx + i) + k] = (word)(dbuf[nc * (j * nx + i) + k] * USHRT_MAX / max);
-        }
-      }
-    }
-
-    break;
-  }
-
-  default: {
-    throw SipiImageError(
-      "Unsupported bits/sample (" + std::to_string(bps) + ") for image add operation, only 8 and 16 are supported");
-  }
-  }
-
-  // RAII: diffbuf and new_rhs_guard auto-freed on scope exit
-  return lhs;
-}
-
-/*==========================================================================*/
-
-// R14: Return by value — compiler applies RVO/NRVO
-SipiImage operator+(const SipiImage &lhs, const SipiImage &rhs)
-{
-  SipiImage result(lhs);
-  result += rhs;
-  return result;
-}
+}// namespace processing
 
 }// namespace Sipi

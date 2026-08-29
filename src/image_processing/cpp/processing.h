@@ -218,7 +218,7 @@ std::optional<double> compare(const SipiImage &lhs, const SipiImage &rhs);
 
 /*!
  * Computes the per-channel absolute pixel-difference statistics between two
- * images. Unlike `operator-=` (which rescales the signed diff into a
+ * images. Unlike `subtract` (which rescales the signed diff into a
  * displayable visualization), this reads the raw samples and reports the
  * true mean and maximum |Δ| plus the location of the maximum. Used by
  * `sipi compare` as the codec-rebaseline tolerance metric.
@@ -230,6 +230,30 @@ std::optional<double> compare(const SipiImage &lhs, const SipiImage &rhs);
  */
 [[nodiscard]] std::optional<PixelDelta> maxPixelDelta(const SipiImage &lhs, const SipiImage &rhs);
 
+/*!
+ * Rewrites `lhs` in place into the rescaled signed pixel difference between
+ * `lhs` and `rhs` — the diff-visualisation step behind the `compare` verb.
+ * Not an operator: mutating `lhs` in place is not the value semantics a
+ * compound-assignment operator would imply, and the operation is fallible.
+ *
+ * The difference between the two Images can contain (and usually will) negative values.
+ * In order to create a standard image, the values at "0" will be lifted to 127 (8-bit images)
+ * or 32767. The span will be defined by max(minimum, maximum), where minimum and maximum are
+ * absolute values. Thus a new pixelvalue will be calculated as follows:
+ * ```
+ * int maxmax = abs(min) > abs(max) ? abs(min) : abs(min);
+ * newval = (byte) ((oldval + maxmax)*UCHAR_MAX/(2*maxmax));
+ * ```
+ *
+ * \param[in] lhs left-hand side image, mutated in place into the diff visualization
+ * \param[in] rhs right-hand side image
+ * \returns an error if the images are not compatible (differing channel
+ *          count, bits/sample, or photometric interpretation), if rescaling
+ *          `rhs` to `lhs`'s dimensions fails, or if the bits/sample is not 8
+ *          or 16; success otherwise
+ */
+[[nodiscard]] Result<void> subtract(SipiImage &lhs, const SipiImage &rhs);
+
 // ---------------------------------------------------------------------------
 // Package-internal: not part of the public //src/image_processing surface.
 // Bilinear-interpolation helpers shared between geometry.cpp
@@ -240,34 +264,6 @@ byte bilinn(const byte buf[], int nx, int ny, double x, double y, int c, int n);
 word bilinn(const word buf[], int nx, int ny, double x, double y, int c, int n);
 
 }// namespace processing
-
-/*!
- * Calculates the difference between 2 images.
- *
- * The difference between 2 images can contain (and usually will) negative values.
- * In order to create a standard image, the values at "0" will be lifted to 127 (8-bit images)
- * or 32767. The span will be defined by max(minimum, maximum), where minimum and maximum are
- * absolute values. Thus a new pixelvalue will be calculated as follows:
- * ```
- * int maxmax = abs(min) > abs(max) ? abs(min) : abs(min);
- * newval = (byte) ((oldval + maxmax)*UCHAR_MAX/(2*maxmax));
- * ```
- * \param[in] lhs left-hand side of "-=", mutated in place
- * \param[in] rhs right hand side of "-="
- */
-SipiImage &operator-=(SipiImage &lhs, const SipiImage &rhs);
-
-/*!
- * Calculates the difference between 2 images.
- *
- * \param[in] lhs left-hand side of "-" operator
- * \param[in] rhs right hand side of "-" operator
- */
-SipiImage operator-(const SipiImage &lhs, const SipiImage &rhs);
-
-SipiImage &operator+=(SipiImage &lhs, const SipiImage &rhs);
-
-SipiImage operator+(const SipiImage &lhs, const SipiImage &rhs);
 
 bool operator==(const SipiImage &lhs, const SipiImage &rhs);
 
