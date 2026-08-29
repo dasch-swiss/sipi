@@ -17,7 +17,6 @@
 #include "iiifparser/SipiRegion.h"
 #include "iiifparser/SipiSize.h"
 #include "format_handlers/output_sink.h"
-#include "SipiImageError.h"
 #include "error/SipiValueError.h"
 
 #include <memory>
@@ -46,21 +45,27 @@ inline constexpr std::size_t kMaxDecodeChannels = 32;
  * \param bps Bits per sample, as read from the file header
  * \param filepath Path of the file being decoded, for the error message
  *
- * \throws SipiImageError if nx or ny exceeds kMaxDecodeDim, nc exceeds
- * kMaxDecodeChannels, or bps is not one of the bit depths SIPI's codecs
- * support (1, 4, 8, 12, 16).
+ * \return A `Result` holding no value if nx or ny exceeds kMaxDecodeDim or nc
+ * exceeds kMaxDecodeChannels (`ErrorCode::kMalformedInput`), or if bps is not
+ * one of the bit depths SIPI's codecs support (1, 4, 8, 12, 16)
+ * (`ErrorCode::kUnsupportedFormat`); a value-holding `Result` otherwise.
  */
-inline void validate_decode_dims(std::size_t nx, std::size_t ny, std::size_t nc, int bps, const std::string &filepath)
+[[nodiscard]] inline Result<void>
+  validate_decode_dims(std::size_t nx, std::size_t ny, std::size_t nc, int bps, const std::string &filepath)
 {
   if (nx > kMaxDecodeDim || ny > kMaxDecodeDim) {
-    throw SipiImageError("Image dimensions exceed the supported decode limit: " + filepath);
+    return std::unexpected(SipiValueError{
+      ErrorCode::kMalformedInput, "Image dimensions exceed the supported decode limit: " + filepath });
   }
   if (nc > kMaxDecodeChannels) {
-    throw SipiImageError("Image channel count exceeds the supported decode limit: " + filepath);
+    return std::unexpected(SipiValueError{
+      ErrorCode::kMalformedInput, "Image channel count exceeds the supported decode limit: " + filepath });
   }
   if (bps != 1 && bps != 4 && bps != 8 && bps != 12 && bps != 16) {
-    throw SipiImageError("Unsupported bits-per-sample value: " + filepath);
+    return std::unexpected(
+      SipiValueError{ ErrorCode::kUnsupportedFormat, "Unsupported bits-per-sample value: " + filepath });
   }
+  return {};
 }
 
 enum class ScalingMethod : std::uint8_t { HIGH = 0, MEDIUM = 1, LOW = 2 };

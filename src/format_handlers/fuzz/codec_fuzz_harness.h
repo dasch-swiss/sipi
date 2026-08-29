@@ -54,8 +54,7 @@ inline const std::string &fuzz_temp_path(const char *suffix)
 // producing that `Result`: Kakadu's `kdu_exception` (an `int`-like type, not a
 // `std::exception`, which is why the bare `catch (...)` matters), `std::bad_alloc`
 // and the allocation-guard throws that stay exception-based by design
-// (`checked_buf_size_or_throw`, `memTiffOpen`'s raw `malloc` failures),
-// `validate_decode_dims` (the C-library-boundary header validator), and the
+// (`checked_buf_size_or_throw`, `memTiffOpen`'s raw `malloc` failures), and the
 // metadata constructors (`Iptc`/`Exif`/`Xmp`) the decoders still call inside
 // `try`/`catch`.
 template<typename Handler> int run_decode(const uint8_t *data, size_t size, const char *suffix)
