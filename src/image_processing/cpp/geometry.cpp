@@ -15,7 +15,6 @@
 
 #include "error/SipiValueError.h"
 #include "iiifparser/SipiRegion.h"
-#include "logging/logger.h"
 #include "observability/profiling.h"
 #include "util/checked_arith.h"
 
@@ -378,10 +377,11 @@ Result<void> scaleFast(SipiImage &img, size_t nnx, size_t nny)
   const size_t nx = img.getNx();
   const size_t ny = img.getNy();
   // A target or source axis of one sample or fewer has no resampling to do;
-  // the image is left at its current size.
+  // the request is rejected rather than served at some other size.
   if (nnx <= 1 || nny <= 1 || nx <= 1 || ny <= 1) {
-    log_warn("scaleFast: degenerate dimensions (src=%zux%zu, dst=%zux%zu), skipping", nx, ny, nnx, nny);
-    return {};
+    return std::unexpected(SipiValueError{ ErrorCode::kMalformedInput,
+      "scaleFast: unsupported target dimensions (src=" + std::to_string(nx) + "x" + std::to_string(ny)
+        + ", dst=" + std::to_string(nnx) + "x" + std::to_string(nny) + "): each axis must be at least 2 samples" });
   }
 
   auto xlut = std::make_unique<size_t[]>(nnx);
@@ -440,10 +440,11 @@ Result<void> scaleMedium(SipiImage &img, size_t nnx, size_t nny)
   const size_t nx = img.getNx();
   const size_t ny = img.getNy();
   // A target or source axis of one sample or fewer has no resampling to do;
-  // the image is left at its current size.
+  // the request is rejected rather than served at some other size.
   if (nnx <= 1 || nny <= 1 || nx <= 1 || ny <= 1) {
-    log_warn("scaleMedium: degenerate dimensions (src=%zux%zu, dst=%zux%zu), skipping", nx, ny, nnx, nny);
-    return {};
+    return std::unexpected(SipiValueError{ ErrorCode::kMalformedInput,
+      "scaleMedium: unsupported target dimensions (src=" + std::to_string(nx) + "x" + std::to_string(ny)
+        + ", dst=" + std::to_string(nnx) + "x" + std::to_string(nny) + "): each axis must be at least 2 samples" });
   }
 
   auto xlut = std::make_unique<double[]>(nnx);
@@ -512,10 +513,11 @@ Result<void> scale(SipiImage &img, size_t nnx, size_t nny)
   const size_t nx = img.getNx();
   const size_t ny = img.getNy();
   // A target or source axis of one sample or fewer has no resampling to do;
-  // the image is left at its current size.
+  // the request is rejected rather than served at some other size.
   if (nnx <= 1 || nny <= 1 || nx <= 1 || ny <= 1) {
-    log_warn("scale: degenerate dimensions (src=%zux%zu, dst=%zux%zu), skipping", nx, ny, nnx, nny);
-    return {};
+    return std::unexpected(SipiValueError{ ErrorCode::kMalformedInput,
+      "scale: unsupported target dimensions (src=" + std::to_string(nx) + "x" + std::to_string(ny) + ", dst="
+        + std::to_string(nnx) + "x" + std::to_string(nny) + "): each axis must be at least 2 samples" });
   }
 
   const size_t nc = img.getNc();

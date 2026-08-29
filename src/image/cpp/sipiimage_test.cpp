@@ -7,6 +7,7 @@
 
 #include "SipiImage.h"
 #include "SipiImageError.h"
+#include "error/SipiValueError.h"
 #include "image_processing/processing.h"
 #include "format_handlers/SipiIOTiff.h"
 #include "observability/metrics.h"
@@ -618,13 +619,41 @@ TEST(SipiImage, ScaleAsymmetricDoesNotCrash)
   EXPECT_TRUE(img.read(leavesSmallNoAlpha, region, size).has_value());
 }
 
-TEST(SipiImage, ScaleToOnePixelDoesNotCrash)
+// A 1-pixel target axis is degenerate for the bilinear interpolator (the
+// original crash this suite guards against); the resamplers now reject it
+// outright instead of silently leaving the image at its source size, so the
+// non-crash and the honest rejection are both pinned here.
+TEST(SipiImage, ScaleToOnePixelIsRejectedWithoutCrashing)
 {
   Sipi::SipiIOTiff::initLibrary();
   Sipi::SipiImage img;
   const std::shared_ptr<Sipi::SipiRegion> region;
   const auto size = std::make_shared<Sipi::SipiSize>("1,1");
-  EXPECT_TRUE(img.read(leavesSmallNoAlpha, region, size).has_value());
+  const auto result = img.read(leavesSmallNoAlpha, region, size);
+  ASSERT_FALSE(result.has_value());
+  EXPECT_EQ(result.error().code(), Sipi::ErrorCode::kMalformedInput);
+}
+
+TEST(SipiImage, ScaleToOnePixelWidthOnlyIsRejectedWithoutCrashing)
+{
+  Sipi::SipiIOTiff::initLibrary();
+  Sipi::SipiImage img;
+  const std::shared_ptr<Sipi::SipiRegion> region;
+  const auto size = std::make_shared<Sipi::SipiSize>("1,");
+  const auto result = img.read(leavesSmallNoAlpha, region, size);
+  ASSERT_FALSE(result.has_value());
+  EXPECT_EQ(result.error().code(), Sipi::ErrorCode::kMalformedInput);
+}
+
+TEST(SipiImage, ScaleToOnePixelHeightOnlyIsRejectedWithoutCrashing)
+{
+  Sipi::SipiIOTiff::initLibrary();
+  Sipi::SipiImage img;
+  const std::shared_ptr<Sipi::SipiRegion> region;
+  const auto size = std::make_shared<Sipi::SipiSize>(",1");
+  const auto result = img.read(leavesSmallNoAlpha, region, size);
+  ASSERT_FALSE(result.has_value());
+  EXPECT_EQ(result.error().code(), Sipi::ErrorCode::kMalformedInput);
 }
 
 TEST(SipiImage, ScaleBoundary16bpsDoesNotCrash)
