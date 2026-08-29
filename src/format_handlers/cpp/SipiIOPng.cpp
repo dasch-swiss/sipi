@@ -282,9 +282,12 @@ Result<bool> SipiIOPng::read(SipiImage *img,
     if (strcmp(png_texts[i].key, xmp_tag) == 0) {
       img->set_xmp(std::make_shared<Xmp>((char *)png_texts[i].text, (int)png_texts[i].text_length));
     } else if (strcmp(png_texts[i].key, exif_tag) == 0) {
-      // An unparseable EXIF chunk is ignored; the image still decodes.
+      // A PNG whose EXIF block does not parse is not decoded.
       if (auto exif = Exif::parse((unsigned char *)png_texts[i].text, (unsigned int)png_texts[i].text_length)) {
         img->set_exif(*exif);
+      } else {
+        png_destroy_read_struct(&png_ptr, &info_ptr, nullptr);
+        return std::unexpected(exif.error());
       }
     } else if (strcmp(png_texts[i].key, iptc_tag) == 0) {
       // A PNG whose IPTC block does not parse is not decoded.
