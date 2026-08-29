@@ -8,6 +8,7 @@
 #include <algorithm>
 #include <cstdint>
 #include <cstdlib>
+#include <exception>
 #include <expected>
 #include <string>
 #include <utility>
@@ -77,7 +78,10 @@ int cmd_convert_service_file(const ConvertServiceFileArgs &args)
 
   Sipi::SipiImage img;
   try {
-    img.readSource(args.input_path, /*region=*/nullptr, /*size=*/nullptr);
+    if (auto r = img.readSource(args.input_path, /*region=*/nullptr, /*size=*/nullptr); !r) {
+      log_err("convert service-file: error reading source: %s", r.error().diagnostic_message().c_str());
+      return EXIT_FAILURE;
+    }
   } catch (const std::exception &err) {
     log_err("convert service-file: error reading source: %s", err.what());
     return EXIT_FAILURE;
@@ -157,7 +161,12 @@ int cmd_convert_service_file(const ConvertServiceFileArgs &args)
 
   try {
     const std::string format_str = (format == ServiceFormat::Jp2) ? "jpx" : "tif";
-    img.write(format_str, args.output_path, params.empty() ? nullptr : &params);
+    if (auto r = img.write(format_str, args.output_path, params.empty() ? nullptr : &params); !r) {
+      log_err("convert service-file: error writing %s: %s",
+        args.output_path.c_str(),
+        r.error().diagnostic_message().c_str());
+      return EXIT_FAILURE;
+    }
   } catch (const std::exception &err) {
     log_err("convert service-file: error writing %s: %s", args.output_path.c_str(), err.what());
     return EXIT_FAILURE;

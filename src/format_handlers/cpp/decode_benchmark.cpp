@@ -69,7 +69,7 @@ void decode_tile(benchmark::State &state, const char *file)
     Sipi::SipiImage img;
     auto region = std::make_shared<Sipi::SipiRegion>(1024, 1024, dim, dim);
     auto size = std::make_shared<Sipi::SipiSize>(size_spec);
-    img.read(path, region, size);
+    if (!img.read(path, region, size)) { std::abort(); }
     benchmark::DoNotOptimize(img.getNx());
     benchmark::ClobberMemory();
   }
@@ -88,7 +88,7 @@ void decode_thumb(benchmark::State &state, const char *file)
   for (auto _ : state) {
     Sipi::SipiImage img;
     auto size = std::make_shared<Sipi::SipiSize>("!256,256");
-    img.read(path, nullptr, size);
+    if (!img.read(path, nullptr, size)) { std::abort(); }
     benchmark::DoNotOptimize(img.getNx());
     benchmark::ClobberMemory();
     thumb_bytes = static_cast<int64_t>(img.getNx() * img.getNy() * img.getNc());

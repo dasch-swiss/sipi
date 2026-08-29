@@ -192,8 +192,12 @@ int cmd_convert_access_file(const ConvertAccessFileArgs &args)
   // contract on (input MUST be a Service File per ADR-0009).
   //
   SipiImage img;
+  if (auto r = img.readSource(args.input_path, region, size); !r) {
+    observability::populate_from_image(sentry_ctx, img);
+    report_error(sentry_ctx, "read", r.error().diagnostic_message(), args.json_output);
+    return EXIT_FAILURE;
+  }
   try {
-    img.readSource(args.input_path, region, size);
     if (format == "jpg") {
       if (auto r = Sipi::processing::to8bps(img); !r) {
         observability::populate_from_image(sentry_ctx, img);
@@ -206,10 +210,6 @@ int cmd_convert_access_file(const ConvertAccessFileArgs &args)
         return EXIT_FAILURE;
       }
     }
-  } catch (const SipiImageError &err) {
-    observability::populate_from_image(sentry_ctx, img);
-    report_error(sentry_ctx, "read", err.what(), args.json_output);
-    return EXIT_FAILURE;
   } catch (const std::exception &err) {
     observability::populate_from_image(sentry_ctx, img);
     report_error(sentry_ctx, "read", err.what(), args.json_output);
@@ -286,7 +286,11 @@ int cmd_convert_access_file(const ConvertAccessFileArgs &args)
   if (args.jpeg_quality > 0) { params[JPEG_QUALITY] = std::to_string(args.jpeg_quality); }
 
   try {
-    img.write(format, args.output_path, &params);
+    if (auto r = img.write(format, args.output_path, &params); !r) {
+      observability::populate_from_image(sentry_ctx, img);
+      report_error(sentry_ctx, "write", r.error().diagnostic_message(), args.json_output);
+      return EXIT_FAILURE;
+    }
   } catch (const SipiImageError &err) {
     observability::populate_from_image(sentry_ctx, img);
     report_error(sentry_ctx, "write", err.what(), args.json_output);

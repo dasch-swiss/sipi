@@ -94,7 +94,7 @@ std::string materialize_fixture(const std::string &fixture_relpath, const std::s
 Sipi::EssentialsFields read_back_essentials(const std::string &path)
 {
   Sipi::SipiImage img;
-  img.read(path);
+  EXPECT_TRUE(img.read(path).has_value());
   const Sipi::Essentials &es = img.essential_metadata();
   EXPECT_TRUE(es.is_set()) << "Expected Essentials packet in " << path;
   return es.fields();
@@ -174,7 +174,7 @@ TEST(CmdConvertServiceFile, DataChksumMatchesEmittedPixels)
   ASSERT_TRUE(file_exists(dst));
 
   Sipi::SipiImage img;
-  img.read(dst);
+  ASSERT_TRUE(img.read(dst).has_value());
   const Sipi::Essentials &es = img.essential_metadata();
   ASSERT_TRUE(es.is_set());
 

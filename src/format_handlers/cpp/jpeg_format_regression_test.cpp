@@ -38,7 +38,7 @@ Sipi::SipiImage readFixture(const std::string &path)
 {
   Sipi::SipiIOTiff::initLibrary();// JPEG tests may transitively touch libtiff
   Sipi::SipiImage img;
-  img.read(path);
+  EXPECT_TRUE(img.read(path).has_value());
   return img;
 }
 

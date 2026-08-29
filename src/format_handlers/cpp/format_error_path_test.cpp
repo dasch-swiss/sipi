@@ -60,7 +60,10 @@ TEST(PngErrorPath, TruncatedPngReadThrowsCleanly)
   ASSERT_FALSE(create_truncated(src, truncated, 100).empty());
 
   Sipi::SipiImage img;
-  EXPECT_ANY_THROW(img.read(truncated));
+  // The PNG setjmp landing site funnels every libpng decode error into a
+  // single error Result (kDecodeFailed) — nothing throws for this fixture.
+  const auto r = img.read(truncated);
+  EXPECT_FALSE(r.has_value());
 
   std::remove(truncated.c_str());
 }
@@ -103,10 +106,11 @@ TEST(TiffErrorPath, TruncatedTiffReadThrowsCleanly)
   ASSERT_FALSE(create_truncated(src, truncated, 100).empty());
 
   Sipi::SipiImage img;
-  // Truncated TIFFs should throw (not crash with SIGABRT/SIGSEGV).
-  // The key assertion is that we don't crash.
+  // Truncated TIFFs should fail cleanly (not crash with SIGABRT/SIGSEGV): most
+  // decode failures are an error Result, but a handful of scanline/tile
+  // helpers stay exception-based, so either outcome is acceptable here.
   try {
-    img.read(truncated);
+    [[maybe_unused]] auto r = img.read(truncated);
   } catch (const std::exception &) {
     // Throwing is expected and acceptable
   }

@@ -95,12 +95,12 @@ void encode(const std::string &in_path,
   bool mirror = false)
 {
   Sipi::SipiImage img;
-  img.read(in_path, region, size);
+  ASSERT_TRUE(img.read(in_path, region, size).has_value());
   if (rotation != 0.0f || mirror) {
     const auto rotated = Sipi::processing::rotate(img, rotation, mirror);
     ASSERT_TRUE(rotated.has_value());
   }
-  img.write(format, out_path);
+  ASSERT_TRUE(img.write(format, out_path).has_value());
 }
 
 // Where to drop `.received.<ext>` files when the maintainer needs to

@@ -12,7 +12,6 @@
 
 #include "logging/logger.h"
 #include "image/SipiImage.h"
-#include "image/SipiImageError.h"
 #include "metadata/essentials.h"
 #include "observability/metrics.h"
 
@@ -86,14 +85,15 @@ int cmd_verify(const VerifyArgs &args)
 
   //
   // Decoder-coverage check: read the file via the format-handler reader.
-  // A throw here is the decoder telling us the file is unreadable.
+  // A decode failure arrives as a value; the catch below covers the
+  // allocation-guard and codec-boundary throws that stay exception-based.
   //
   SipiImage img;
   try {
-    img.readSource(args.input_path, /*region=*/nullptr, /*size=*/nullptr);
-  } catch (const SipiImageError &err) {
-    log_err("%s: failed to decode %s: %s", label, args.input_path.c_str(), err.what());
-    return EXIT_FAILURE;
+    if (auto r = img.readSource(args.input_path, /*region=*/nullptr, /*size=*/nullptr); !r) {
+      log_err("%s: failed to decode %s: %s", label, args.input_path.c_str(), r.error().diagnostic_message().c_str());
+      return EXIT_FAILURE;
+    }
   } catch (const std::exception &err) {
     log_err("%s: failed to decode %s: %s", label, args.input_path.c_str(), err.what());
     return EXIT_FAILURE;

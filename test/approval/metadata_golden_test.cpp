@@ -40,7 +40,10 @@ static std::string dump_metadata(const std::string &path)
 
   Sipi::SipiImage img;
   try {
-    img.read(path);
+    if (auto r = img.read(path); !r) {
+      out << "READ ERROR: " << r.error().diagnostic_message() << "\n";
+      return out.str();
+    }
   } catch (const std::exception &e) {
     out << "READ ERROR: " << e.what() << "\n";
     return out.str();

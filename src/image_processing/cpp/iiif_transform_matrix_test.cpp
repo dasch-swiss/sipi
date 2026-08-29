@@ -14,7 +14,7 @@
  * Kakadu ROI + reduce decode path. Running them here puts that hot path
  * under the fast ASan/UBSan unit job.
  *
- * JP2 tests skip (rather than fail) when the decode throws, matching the
+ * JP2 tests skip (rather than fail) when the decode fails, matching the
  * "Kakadu may not be available" convention in imginfo_test.cpp; on the
  * linux-x86_64 CI sanitizer runner Kakadu is present and they execute.
  */
@@ -22,7 +22,6 @@
 #include "gtest/gtest.h"
 
 #include "image/SipiImage.h"
-#include "image/SipiImageError.h"
 #include "image_processing/processing.h"
 #include "format_handlers/SipiIOTiff.h"
 #include "iiifparser/SipiRegion.h"
@@ -54,12 +53,7 @@ std::shared_ptr<Sipi::SipiSize> size(const std::string &s) { return std::make_sh
   bool force_bps_8 = false)
 {
   Sipi::SipiIOTiff::initLibrary();
-  try {
-    img.read(kLena512Jp2, region_p, size_p, force_bps_8);
-    return true;
-  } catch (const Sipi::SipiImageError &) {
-    return false;
-  }
+  return img.read(kLena512Jp2, region_p, size_p, force_bps_8).has_value();
 }
 
 [[nodiscard]] off_t file_size(const std::string &path)
@@ -82,7 +76,7 @@ TEST(IIIFTransformMatrix, Jp2RoiWithReduceProducesRequestedDims)
   EXPECT_EQ(img.getNy(), 128u);
 
   const std::string out = tmp_dir + "matrix_roi_reduce.jpg";
-  EXPECT_NO_THROW(img.write("jpg", out));
+  EXPECT_TRUE(img.write("jpg", out).has_value());
   EXPECT_GT(file_size(out), 0);
 }
 
@@ -173,7 +167,7 @@ TEST(IIIFTransformMatrix, RotateArbitraryAngleGrowsCanvasAndEncodes)
   EXPECT_GE(img.getNy(), 100u);
 
   const std::string out = tmp_dir + "matrix_rotate45.png";
-  EXPECT_NO_THROW(img.write("png", out));
+  EXPECT_TRUE(img.write("png", out).has_value());
   EXPECT_GT(file_size(out), 0);
 }
 
@@ -185,14 +179,14 @@ TEST(IIIFTransformMatrix, BitonalQualityReducesToSingleChannel)
   // Floyd-Steinberg dither reduction (the UBSan-interesting arithmetic).
   Sipi::SipiIOTiff::initLibrary();
   Sipi::SipiImage img;
-  ASSERT_NO_THROW(img.read(kRgbTiff));
+  ASSERT_TRUE(img.read(kRgbTiff).has_value());
   ASSERT_EQ(img.getNc(), 3u);
 
   ASSERT_TRUE(Sipi::processing::toBitonal(img).has_value());
   EXPECT_EQ(img.getNc(), 1u);
 
   const std::string out = tmp_dir + "matrix_bitonal.jpg";
-  EXPECT_NO_THROW(img.write("jpg", out));
+  EXPECT_TRUE(img.write("jpg", out).has_value());
   EXPECT_GT(file_size(out), 0);
 }
 
@@ -200,7 +194,7 @@ TEST(IIIFTransformMatrix, GrayQualityConvertsToSingleChannel8Bit)
 {
   Sipi::SipiIOTiff::initLibrary();
   Sipi::SipiImage img;
-  ASSERT_NO_THROW(img.read(kRgbTiff));
+  ASSERT_TRUE(img.read(kRgbTiff).has_value());
   ASSERT_EQ(img.getNc(), 3u);
 
   ASSERT_TRUE(Sipi::processing::convertToIcc(img, Sipi::Icc(Sipi::icc_GRAY_D50), 8).has_value());
@@ -212,7 +206,7 @@ TEST(IIIFTransformMatrix, SixteenBitPngTo8Bit)
 {
   Sipi::SipiIOTiff::initLibrary();
   Sipi::SipiImage img;
-  ASSERT_NO_THROW(img.read(kPng16Bit));
+  ASSERT_TRUE(img.read(kPng16Bit).has_value());
   ASSERT_EQ(img.getBps(), 16u);
 
   const auto result = Sipi::processing::to8bps(img);
@@ -245,11 +239,12 @@ TEST(IIIFTransformMatrix, Jp2UpscaleWithoutCaretRejected)
   Sipi::SipiIOTiff::initLibrary();
   Sipi::SipiImage img;
   try {
-    img.read(kLena512Jp2, nullptr, size("1024,"));
+    auto r = img.read(kLena512Jp2, nullptr, size("1024,"));
+    if (!r) {
+      GTEST_SKIP() << "JP2 decode unavailable (Kakadu?)";
+    }
     FAIL() << "expected SipiSizeError for upscale without '^'";
   } catch (const Sipi::SipiSizeError &) {
     SUCCEED();
-  } catch (const Sipi::SipiImageError &) {
-    GTEST_SKIP() << "JP2 decode unavailable (Kakadu?)";
   }
 }

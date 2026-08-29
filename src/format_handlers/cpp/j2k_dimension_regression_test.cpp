@@ -16,14 +16,14 @@
 
 #include <gtest/gtest.h>
 
+#include "error/SipiValueError.h"
 #include "image/SipiImage.h"
-#include "image/SipiImageError.h"
 #include "test_paths.h"
 
 namespace {
 
+using Sipi::ErrorCode;
 using Sipi::SipiImage;
-using Sipi::SipiImageError;
 
 const std::string kOversizedDimensionsJp2 = sipi::test::data_dir() + "/images/malformed/j2k_oversized_dimensions.jp2";
 
@@ -33,7 +33,12 @@ const std::string kOversizedDimensionsJp2 = sipi::test::data_dir() + "/images/ma
 TEST(J2kDimensionRegression, RejectsOversizedDimensionsJp2EndToEnd)
 {
   SipiImage img;
-  EXPECT_THROW(img.read(kOversizedDimensionsJp2), SipiImageError);
+  // The oversized header is rejected before any decode buffer is sized;
+  // validate_decode_dims() reports the rejection as a value, not a thrown
+  // exception, so the failing Result is asserted directly.
+  auto result = img.read(kOversizedDimensionsJp2);
+  ASSERT_FALSE(result.has_value());
+  EXPECT_EQ(result.error().code(), ErrorCode::kMalformedInput);
 }
 
 }// namespace
