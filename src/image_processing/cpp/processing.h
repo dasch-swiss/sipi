@@ -69,10 +69,9 @@ namespace processing {
  * \param[in] img Image to resize, mutated in place
  * \param[in] nnx New horizontal dimension (width)
  * \param[in] nny New vertical dimension (height)
- * \returns an error if the image's bits/sample is not 8 or 16, or if the
- *          resized pixel buffer's size overflows; success otherwise
- *          (including when the source or destination has a width or height
- *          <= 1, in which case the image is left at its current size)
+ * \returns an error if the image's bits/sample is not 8 or 16, if the
+ *          resized pixel buffer's size overflows, or if the source or
+ *          destination has a width or height <= 1; success otherwise
  */
 [[nodiscard]] Result<void> scaleFast(SipiImage &img, size_t nnx, size_t nny);
 
@@ -82,10 +81,9 @@ namespace processing {
  * \param[in] img Image to resize, mutated in place
  * \param[in] nnx New horizontal dimension (width)
  * \param[in] nny New vertical dimension (height)
- * \returns an error if the image's bits/sample is not 8 or 16, or if the
- *          resized pixel buffer's size overflows; success otherwise
- *          (including when the source or destination has a width or height
- *          <= 1, in which case the image is left at its current size)
+ * \returns an error if the image's bits/sample is not 8 or 16, if the
+ *          resized pixel buffer's size overflows, or if the source or
+ *          destination has a width or height <= 1; success otherwise
  */
 [[nodiscard]] Result<void> scaleMedium(SipiImage &img, size_t nnx, size_t nny);
 
@@ -95,10 +93,9 @@ namespace processing {
  * \param[in] img Image to resize, mutated in place
  * \param[in] nnx New horizontal dimension (width)
  * \param[in] nny New vertical dimension (height)
- * \returns an error if the image's bits/sample is not 8 or 16, or if the
- *          resized pixel buffer's size overflows; success otherwise
- *          (including when the source or destination has a width or height
- *          <= 1, in which case the image is left at its current size)
+ * \returns an error if the image's bits/sample is not 8 or 16, if the
+ *          resized pixel buffer's size overflows, or if the source or
+ *          destination has a width or height <= 1; success otherwise
  */
 [[nodiscard]] Result<void> scale(SipiImage &img, size_t nnx = 0, size_t nny = 0);
 
