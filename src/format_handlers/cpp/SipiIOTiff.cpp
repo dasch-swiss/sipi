@@ -364,6 +364,73 @@ size_t checked_buf_size_or_throw(size_t nx_, size_t ny_, size_t nc_, size_t elem
                         + ", channels=" + std::to_string(nc_) + ", elem=" + std::to_string(elem_) + ")");
 }
 
+// Accumulates the libtiff diagnostic text emitted while a single TIFF handle
+// (opened via TIFFOpenExt/TIFFClientOpenExt) is alive, in call order, so a
+// file that trips several libtiff errors contributes all of them to one
+// Result rather than only the first or the last.
+struct TiffDiagnosticSink
+{
+  std::string text;
+};
+
+// Formats one libtiff error/warning call into the sink, mirroring tiffError's
+// 1024-byte buffer below. Invoked from libtiff's own C stack frames via
+// TIFFOpenOptionsSet{Error,Warning}HandlerExtR — no exception may escape.
+void append_tiff_diagnostic(void *user_data, const char *module, const char *fmt, va_list args)
+{
+  try {
+    auto *sink = static_cast<TiffDiagnosticSink *>(user_data);
+    char buf[1024];
+    int n = std::vsnprintf(buf, sizeof(buf), fmt, args);
+    if (n < 0) { return; }
+    if (!sink->text.empty()) { sink->text += "; "; }
+    if (module != nullptr) {
+      sink->text += module;
+      sink->text += ": ";
+    }
+    sink->text += buf;
+  } catch (...) {
+  }
+}
+
+// Returns 0 (not handled) so libtiff also invokes the classic global handler
+// (tiffError/tiffWarning below): log_err/log_warn keeps seeing every libtiff
+// diagnostic exactly as before. This handler only ADDS capture into the
+// per-call sink; it does not take over or suppress logging.
+int tiff_error_ext_r(TIFF *, void *user_data, const char *module, const char *fmt, va_list args)
+{
+  append_tiff_diagnostic(user_data, module, fmt, args);
+  return 0;
+}
+
+int tiff_warning_ext_r(TIFF *, void *user_data, const char *module, const char *fmt, va_list args)
+{
+  append_tiff_diagnostic(user_data, module, fmt, args);
+  return 0;
+}
+
+using TiffOpenOptionsPtr = std::unique_ptr<TIFFOpenOptions, decltype(&TIFFOpenOptionsFree)>;
+
+// RAII alloc: TIFFOpenOptionsFree runs on every return path, including early
+// ones. Wires both handlers to the same sink so one open call's errors and
+// warnings land in one accumulated string.
+TiffOpenOptionsPtr make_tiff_open_options(TiffDiagnosticSink &sink)
+{
+  TiffOpenOptionsPtr opts(TIFFOpenOptionsAlloc(), TIFFOpenOptionsFree);
+  TIFFOpenOptionsSetErrorHandlerExtR(opts.get(), tiff_error_ext_r, &sink);
+  TIFFOpenOptionsSetWarningHandlerExtR(opts.get(), tiff_warning_ext_r, &sink);
+  return opts;
+}
+
+// Appends the sink's accumulated libtiff diagnostic text to a failure's
+// message when non-empty, preserving the original error's code/errnum/source
+// location; a no-op when the sink captured nothing.
+[[nodiscard]] SipiValueError with_tiff_diagnostic(SipiValueError err, const TiffDiagnosticSink &sink)
+{
+  if (sink.text.empty()) { return err; }
+  return SipiValueError{ err.code(), err.raw_message() + ": " + sink.text, err.errnum(), err.location() };
+}
+
 }// namespace
 
 Result<std::vector<unsigned char>> read_watermark(const std::string &wmfile, int &nx, int &ny, int &nc)
@@ -373,7 +440,9 @@ Result<std::vector<unsigned char>> read_watermark(const std::string &wmfile, int
   nx = 0;
   ny = 0;
 
-  std::unique_ptr<TIFF, decltype(&TIFFClose)> tif(TIFFOpen(wmfile.c_str(), "r"), TIFFClose);
+  TiffDiagnosticSink tiff_diag;
+  TiffOpenOptionsPtr tiff_opts = make_tiff_open_options(tiff_diag);
+  std::unique_ptr<TIFF, decltype(&TIFFClose)> tif(TIFFOpenExt(wmfile.c_str(), "r", tiff_opts.get()), TIFFClose);
   if (tif == nullptr) { return {}; }
 
   // add EXIF tags to the set of tags that libtiff knows about
@@ -383,13 +452,15 @@ Result<std::vector<unsigned char>> read_watermark(const std::string &wmfile, int
 
 
   if (TIFFGetField(tif.get(), TIFFTAG_IMAGEWIDTH, &nx) == 0) {
-    return std::unexpected(SipiValueError{ ErrorCode::kMalformedInput,
-      "ERROR in read_watermark: TIFFGetField of TIFFTAG_IMAGEWIDTH failed: " + wmfile });
+    return std::unexpected(with_tiff_diagnostic(SipiValueError{ ErrorCode::kMalformedInput,
+                              "ERROR in read_watermark: TIFFGetField of TIFFTAG_IMAGEWIDTH failed: " + wmfile },
+      tiff_diag));
   }
 
   if (TIFFGetField(tif.get(), TIFFTAG_IMAGELENGTH, &ny) == 0) {
-    return std::unexpected(SipiValueError{ ErrorCode::kMalformedInput,
-      "ERROR in read_watermark: TIFFGetField of TIFFTAG_IMAGELENGTH failed: " + wmfile });
+    return std::unexpected(with_tiff_diagnostic(SipiValueError{ ErrorCode::kMalformedInput,
+                              "ERROR in read_watermark: TIFFGetField of TIFFTAG_IMAGELENGTH failed: " + wmfile },
+      tiff_diag));
   }
 
   TIFF_GET_FIELD(tif.get(), TIFFTAG_SAMPLESPERPIXEL, &spp, 1);
@@ -397,16 +468,18 @@ Result<std::vector<unsigned char>> read_watermark(const std::string &wmfile, int
   TIFF_GET_FIELD(tif.get(), TIFFTAG_BITSPERSAMPLE, &bps, 1);
 
   if (bps != 8) {
-    return std::unexpected(
-      SipiValueError{ ErrorCode::kUnsupportedFormat, "ERROR in read_watermark: bps ≠ 8: " + wmfile });
+    return std::unexpected(with_tiff_diagnostic(
+      SipiValueError{ ErrorCode::kUnsupportedFormat, "ERROR in read_watermark: bps ≠ 8: " + wmfile }, tiff_diag));
   }
 
   TIFF_GET_FIELD(tif.get(), TIFFTAG_PHOTOMETRIC, &pmi, PHOTOMETRIC_MINISBLACK);
   TIFF_GET_FIELD(tif.get(), TIFFTAG_PLANARCONFIG, &pc, PLANARCONFIG_CONTIG);
 
   if (pc != PLANARCONFIG_CONTIG) {
-    return std::unexpected(SipiValueError{ ErrorCode::kUnsupportedFormat,
-      "ERROR in read_watermark: Tag TIFFTAG_PLANARCONFIG is not PLANARCONFIG_CONTIG: " + wmfile });
+    return std::unexpected(with_tiff_diagnostic(SipiValueError{ ErrorCode::kUnsupportedFormat,
+                              "ERROR in read_watermark: Tag TIFFTAG_PLANARCONFIG is not PLANARCONFIG_CONTIG: "
+                                + wmfile },
+      tiff_diag));
   }
 
   sll = nx * spp * bps / 8;
@@ -420,8 +493,10 @@ Result<std::vector<unsigned char>> read_watermark(const std::string &wmfile, int
 
   for (int i = 0; i < ny; i++) {
     if (TIFFReadScanline(tif.get(), wmbuf.data() + i * sll, i) == -1) {
-      return std::unexpected(SipiValueError{ ErrorCode::kDecodeFailed,
-        "ERROR in read_watermark: TIFFReadScanline failed on scanline " + std::to_string(i) + " in file " + wmfile });
+      return std::unexpected(with_tiff_diagnostic(
+        SipiValueError{ ErrorCode::kDecodeFailed,
+          "ERROR in read_watermark: TIFFReadScanline failed on scanline " + std::to_string(i) + " in file " + wmfile },
+        tiff_diag));
     }
   }
 
@@ -973,7 +1048,9 @@ Result<bool> SipiIOTiff::read(SipiImage *img,
   ScalingQuality scaling_quality)
 {
   SIPI_ZONE_N("SipiIOTiff::read");
-  std::unique_ptr<TIFF, decltype(&TIFFClose)> tif_guard(TIFFOpen(filepath.c_str(), "r"), TIFFClose);
+  TiffDiagnosticSink tiff_diag;
+  TiffOpenOptionsPtr tiff_opts = make_tiff_open_options(tiff_diag);
+  std::unique_ptr<TIFF, decltype(&TIFFClose)> tif_guard(TIFFOpenExt(filepath.c_str(), "r", tiff_opts.get()), TIFFClose);
 
   if (tif_guard != nullptr) {
     TIFF *tif = tif_guard.get();
@@ -991,13 +1068,15 @@ Result<bool> SipiIOTiff::read(SipiImage *img,
     // uint32_t out-params first.
     uint32_t tiff_width = 0, tiff_height = 0;
     if (TIFFGetField(tif, TIFFTAG_IMAGEWIDTH, &tiff_width) == 0) {
-      return std::unexpected(SipiValueError{
-        ErrorCode::kMalformedInput, "TIFFGetField of TIFFTAG_IMAGEWIDTH failed: " + filepath });
+      return std::unexpected(with_tiff_diagnostic(
+        SipiValueError{ ErrorCode::kMalformedInput, "TIFFGetField of TIFFTAG_IMAGEWIDTH failed: " + filepath },
+        tiff_diag));
     }
 
     if (TIFFGetField(tif, TIFFTAG_IMAGELENGTH, &tiff_height) == 0) {
-      return std::unexpected(SipiValueError{
-        ErrorCode::kMalformedInput, "TIFFGetField of TIFFTAG_IMAGELENGTH failed: " + filepath });
+      return std::unexpected(with_tiff_diagnostic(
+        SipiValueError{ ErrorCode::kMalformedInput, "TIFFGetField of TIFFTAG_IMAGELENGTH failed: " + filepath },
+        tiff_diag));
     }
 
     TIFF_GET_FIELD(tif, TIFFTAG_SAMPLESPERPIXEL, &stmp, 1);
@@ -1010,7 +1089,7 @@ Result<bool> SipiIOTiff::read(SipiImage *img,
 
     if (auto r = validate_decode_dims(img->getNx(), img->getNy(), img->getNc(), static_cast<int>(img->getBps()), filepath);
         !r) {
-      return std::unexpected(r.error());
+      return std::unexpected(with_tiff_diagnostic(std::move(r).error(), tiff_diag));
     }
 
     TIFF_GET_FIELD(tif, TIFFTAG_ORIENTATION, &ori, ORIENTATION_TOPLEFT);
@@ -1048,8 +1127,9 @@ Result<bool> SipiIOTiff::read(SipiImage *img,
     if (img->getPhoto() == PhotometricInterpretation::PALETTE) {
       uint16_t *_rcm = nullptr, *_gcm = nullptr, *_bcm = nullptr;
       if (TIFFGetField(tif, TIFFTAG_COLORMAP, &_rcm, &_gcm, &_bcm) == 0) {
-        return std::unexpected(SipiValueError{
-          ErrorCode::kMalformedInput, "TIFFGetField of TIFFTAG_COLORMAP failed: " + filepath });
+        return std::unexpected(with_tiff_diagnostic(
+          SipiValueError{ ErrorCode::kMalformedInput, "TIFFGetField of TIFFTAG_COLORMAP failed: " + filepath },
+          tiff_diag));
       }
       // The image's bps was already validated above (validate_decode_dims) to
       // be one of {1, 4, 8, 12, 16}, so 1 << bps cannot overflow size_t.
@@ -1381,8 +1461,10 @@ Result<bool> SipiIOTiff::read(SipiImage *img,
       ps = 2;
       break;
     default:
-      return std::unexpected(SipiValueError{ ErrorCode::kUnsupportedFormat,
-        "Unsupported bits/sample (" + std::to_string(img->getBps()) + ") in file " + filepath });
+      return std::unexpected(with_tiff_diagnostic(
+        SipiValueError{ ErrorCode::kUnsupportedFormat,
+          "Unsupported bits/sample (" + std::to_string(img->getBps()) + ") in file " + filepath },
+        tiff_diag));
     }
 
     std::vector<uint8_t> inbuf(checked_buf_size_or_throw(roi_w, roi_h, img->getNc(), static_cast<size_t>(ps)));
@@ -1395,7 +1477,9 @@ Result<bool> SipiIOTiff::read(SipiImage *img,
     if (img->getBps() <= 8) {
       auto pixdata_result = is_tiled ? read_tiled_data<uint8_t>(tif, roi_x, roi_y, roi_w, roi_h)
                                       : read_standard_data<uint8_t>(tif, roi_x, roi_y, roi_w, roi_h);
-      if (!pixdata_result) { return std::unexpected(std::move(pixdata_result).error()); }
+      if (!pixdata_result) {
+        return std::unexpected(with_tiff_diagnostic(std::move(pixdata_result).error(), tiff_diag));
+      }
       std::vector<uint8_t> pixdata = std::move(*pixdata_result);
 
       decoded_bps = 8;
@@ -1404,7 +1488,9 @@ Result<bool> SipiIOTiff::read(SipiImage *img,
     } else if (img->getBps() <= 16) {
       auto pixdata_result = is_tiled ? read_tiled_data<uint16_t>(tif, roi_x, roi_y, roi_w, roi_h)
                                       : read_standard_data<uint16_t>(tif, roi_x, roi_y, roi_w, roi_h);
-      if (!pixdata_result) { return std::unexpected(std::move(pixdata_result).error()); }
+      if (!pixdata_result) {
+        return std::unexpected(with_tiff_diagnostic(std::move(pixdata_result).error(), tiff_diag));
+      }
       std::vector<uint16_t> pixdata = std::move(*pixdata_result);
       decoded_bps = 16;
       memcpy(inbuf.data(), pixdata.data(), pixdata.size() * decoded_bps / 8);
@@ -1569,7 +1655,10 @@ Result<SipiImgInfo> SipiIOTiff::read_shape(const std::string &filepath)
 {
   SIPI_ZONE_N("SipiIOTiff::read_shape");
   SipiImgInfo info;
-  auto tif = std::unique_ptr<TIFF, decltype(&TIFFClose)>(TIFFOpen(filepath.c_str(), "r"), TIFFClose);
+  TiffDiagnosticSink tiff_diag;
+  TiffOpenOptionsPtr tiff_opts = make_tiff_open_options(tiff_diag);
+  auto tif =
+    std::unique_ptr<TIFF, decltype(&TIFFClose)>(TIFFOpenExt(filepath.c_str(), "r", tiff_opts.get()), TIFFClose);
   if (tif) {
     //
     // OK, it's a TIFF file
@@ -1577,16 +1666,18 @@ Result<SipiImgInfo> SipiIOTiff::read_shape(const std::string &filepath)
     unsigned int tmp_width;
 
     if (TIFFGetField(tif.get(), TIFFTAG_IMAGEWIDTH, &tmp_width) == 0) {
-      return std::unexpected(
-        SipiValueError{ ErrorCode::kShapeProbeFailed, "TIFFGetField of TIFFTAG_IMAGEWIDTH failed: " + filepath });
+      return std::unexpected(with_tiff_diagnostic(
+        SipiValueError{ ErrorCode::kShapeProbeFailed, "TIFFGetField of TIFFTAG_IMAGEWIDTH failed: " + filepath },
+        tiff_diag));
     }
 
     info.width = static_cast<size_t>(tmp_width);
     unsigned int tmp_height;
 
     if (TIFFGetField(tif.get(), TIFFTAG_IMAGELENGTH, &tmp_height) == 0) {
-      return std::unexpected(
-        SipiValueError{ ErrorCode::kShapeProbeFailed, "TIFFGetField of TIFFTAG_IMAGELENGTH failed: " + filepath });
+      return std::unexpected(with_tiff_diagnostic(
+        SipiValueError{ ErrorCode::kShapeProbeFailed, "TIFFGetField of TIFFTAG_IMAGELENGTH failed: " + filepath },
+        tiff_diag));
     }
     info.height = tmp_height;
     info.success = SipiImgInfo::DIMS;
@@ -1736,10 +1827,12 @@ Result<void> SipiIOTiff::write(SipiImage *img, const OutputSink &sink, const Sip
   // callbacks, so the MEMTIFF must outlive the TIFF handle.
   std::unique_ptr<MEMTIFF, decltype(&memTiffFree)> memtif_guard(nullptr, &memTiffFree);
   std::unique_ptr<TIFF, decltype(&TIFFClose)> tif_guard(nullptr, &TIFFClose);
+  TiffDiagnosticSink tiff_diag;
+  TiffOpenOptionsPtr tiff_opts = make_tiff_open_options(tiff_diag);
   auto rowsperstrip = (uint32_t)-1;
   if (streaming || (filepath == "stdout:")) {
     memtif_guard.reset(memTiffOpen());
-    tif_guard.reset(TIFFClientOpen("MEMTIFF",
+    tif_guard.reset(TIFFClientOpenExt("MEMTIFF",
       "w",
       (thandle_t)memtif_guard.get(),
       memTiffReadProc,
@@ -1748,16 +1841,17 @@ Result<void> SipiIOTiff::write(SipiImage *img, const OutputSink &sink, const Sip
       memTiffCloseProc,
       memTiffSizeProc,
       memTiffMapProc,
-      memTiffUnmapProc));
+      memTiffUnmapProc,
+      tiff_opts.get()));
     if (tif_guard == nullptr) {
-      return std::unexpected(
-        SipiValueError{ ErrorCode::kWriteFailed, "TIFFClientOpen for in-memory TIFF failed!" });
+      return std::unexpected(with_tiff_diagnostic(
+        SipiValueError{ ErrorCode::kWriteFailed, "TIFFClientOpen for in-memory TIFF failed!" }, tiff_diag));
     }
   } else {
-    tif_guard.reset(TIFFOpen(filepath.c_str(), "w"));
+    tif_guard.reset(TIFFOpenExt(filepath.c_str(), "w", tiff_opts.get()));
     if (tif_guard == nullptr) {
       std::string msg = "TIFFopen of \"" + filepath + "\" failed!";
-      return std::unexpected(SipiValueError{ ErrorCode::kWriteFailed, msg });
+      return std::unexpected(with_tiff_diagnostic(SipiValueError{ ErrorCode::kWriteFailed, msg }, tiff_diag));
     }
   }
   TIFF *tif = tif_guard.get();
@@ -1827,8 +1921,10 @@ Result<void> SipiIOTiff::write(SipiImage *img, const OutputSink &sink, const Sip
         }
       }
     } else {
-      return std::unexpected(SipiValueError{
-        ErrorCode::kUnsupportedFormat, "Unsupported bits per sample (" + std::to_string(img->getBps()) + ")" });
+      return std::unexpected(with_tiff_diagnostic(
+        SipiValueError{ ErrorCode::kUnsupportedFormat,
+          "Unsupported bits per sample (" + std::to_string(img->getBps()) + ")" },
+        tiff_diag));
     }
 
     // We don't want to add the ICC profile in this case (doesn't make sense!)
@@ -1954,7 +2050,9 @@ Result<void> SipiIOTiff::write(SipiImage *img, const OutputSink &sink, const Sip
   if (its_1_bit) {
     unsigned int sll;
     Result<std::vector<unsigned char>> cvrt_result = cvrt8BitTo1bit(*img, sll);
-    if (!cvrt_result.has_value()) { return std::unexpected(std::move(cvrt_result).error()); }
+    if (!cvrt_result.has_value()) {
+      return std::unexpected(with_tiff_diagnostic(std::move(cvrt_result).error(), tiff_diag));
+    }
     std::vector<unsigned char> buf = std::move(cvrt_result).value();
 
     for (size_t i = 0; i < img->getNy(); i++) { TIFFWriteScanline(tif, buf.data() + i * sll, (int)i, 0); }
