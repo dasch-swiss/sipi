@@ -12,6 +12,7 @@
 #include "observability/metrics.h"
 #include "test_paths.h"
 #include <cmath>
+#include <filesystem>
 #include <ranges>
 #include <sys/stat.h>
 
@@ -633,4 +634,22 @@ TEST(SipiImage, ScaleBoundary16bpsDoesNotCrash)
   const std::shared_ptr<Sipi::SipiRegion> region;
   const auto size = std::make_shared<Sipi::SipiSize>("2,2");
   EXPECT_NO_THROW(img.read(png16bit, region, size));
+}
+
+// `read` dispatches by extension, so a PNG file saved with a `.tif`
+// extension sends the search through the TIFF handler first (mismatch),
+// then the fallback loop across the remaining handlers, landing on PNG.
+// The image must decode with the same dimensions as reading the real PNG.
+TEST(SipiImage, ReadFallsBackWhenExtensionDoesNotMatchContent)
+{
+  const std::string misnamed = tmp_dir + "_mario_png_as_tif.tif";
+  std::filesystem::copy_file(pngPaletteAlpha, misnamed, std::filesystem::copy_options::overwrite_existing);
+
+  Sipi::SipiImage png_reference;
+  ASSERT_NO_THROW(png_reference.read(pngPaletteAlpha));
+
+  Sipi::SipiImage misnamed_image;
+  ASSERT_NO_THROW(misnamed_image.read(misnamed));
+  EXPECT_EQ(misnamed_image.getNx(), png_reference.getNx());
+  EXPECT_EQ(misnamed_image.getNy(), png_reference.getNy());
 }

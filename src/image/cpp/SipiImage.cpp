@@ -283,10 +283,10 @@ void SipiImage::set_pixels(std::vector<byte> &&buf, size_t nx_p, size_t ny_p, si
 
 /*!
  * Reads the image from a file by calling the appropriate reader, selected by
- * the file's extension and falling back to every registered handler in turn
- * on a mismatch. Throws `SipiImageError` if no handler recognises the file,
- * or immediately propagates a handler's decode failure as `SipiImageError`
- * without considering the fallback handlers.
+ * the file's extension and falling back to every other registered handler in
+ * turn on a mismatch. Throws `SipiImageError` if no handler recognises the
+ * file, or immediately propagates a handler's decode failure as
+ * `SipiImageError` without considering the fallback handlers.
  */
 void SipiImage::read(const std::string &filepath,
   const std::shared_ptr<SipiRegion> &region,
@@ -309,25 +309,42 @@ void SipiImage::read(const std::string &filepath,
     return *result;
   };
 
+  std::string dispatched_key;
   if ((_fext == "tif") || (_fext == "tiff")) {
-    got_file = dispatch_read("tif");
+    dispatched_key = "tif";
   } else if ((_fext == "jpg") || (_fext == "jpeg")) {
-    got_file = dispatch_read("jpg");
+    dispatched_key = "jpg";
   } else if (_fext == "png") {
-    got_file = dispatch_read("png");
+    dispatched_key = "png";
   } else if ((_fext == "jp2") || (_fext == "jpx") || (_fext == "j2k")) {
-    got_file = dispatch_read("jpx");
+    dispatched_key = "jpx";
   }
+  if (!dispatched_key.empty()) { got_file = dispatch_read(dispatched_key); }
 
+  // A successful `false` means the handler does not recognise the file's
+  // actual format, so the search continues across every remaining registered
+  // handler (the one already tried by extension is skipped). An error value
+  // means the handler recognised the file and failed to decode it; that
+  // failure is the authoritative cause and is propagated immediately without
+  // trying the remaining handlers.
   if (!got_file) {
     for (auto const &iterator : io) {
+      if (iterator.first == dispatched_key) continue;
       auto result = iterator.second->read(this, filepath, region, size, force_bps_8, scaling_quality);
       if (!result) { throw_from_value_error(result.error()); }
       if ((got_file = *result)) break;
     }
   }
 
-  if (!got_file) { throw SipiImageError("Error reading file " + filepath); }
+  if (!got_file) {
+    std::string tried_keys;
+    for (auto const &iterator : io) {
+      if (!tried_keys.empty()) { tried_keys += ", "; }
+      tried_keys += iterator.first;
+    }
+    throw SipiImageError(
+      "Error reading file " + filepath + ": no registered format handler recognised it (tried: " + tried_keys + ")");
+  }
 }
 
 //============================================================================
@@ -397,20 +414,29 @@ SipiImgInfo SipiImage::read_shape(const std::string &filepath) const
     return *result;
   };
 
+  std::string dispatched_key;
   if ((mimetype == "image/tiff") || (mimetype == "image/x-tiff")) {
-    info = dispatch_read_shape("tif");
+    dispatched_key = "tif";
   } else if ((mimetype == "image/jpeg") || (mimetype == "image/pjpeg")) {
-    info = dispatch_read_shape("jpg");
+    dispatched_key = "jpg";
   } else if (mimetype == "image/png") {
-    info = dispatch_read_shape("png");
+    dispatched_key = "png";
   } else if ((mimetype == "image/jp2") || (mimetype == "image/jpx")) {
-    info = dispatch_read_shape("jpx");
+    dispatched_key = "jpx";
   } else {
     throw SipiImageError("unknown mimetype: \"" + mimetype + "\"!");
   }
+  info = dispatch_read_shape(dispatched_key);
 
+  // A `FAILURE`-marked `SipiImgInfo` means the handler does not recognise the
+  // file's actual format, so the search continues across every remaining
+  // registered handler (the one already tried by mimetype is skipped). An
+  // error value means the handler recognised the file and failed; that
+  // failure is the authoritative cause and is propagated immediately without
+  // trying the remaining handlers.
   if (info.success == SipiImgInfo::FAILURE) {
     for (auto const &iterator : io) {
+      if (iterator.first == dispatched_key) continue;
       auto result = iterator.second->read_shape(filepath);
       if (!result) { throw_from_value_error(result.error()); }
       info = *result;
@@ -418,7 +444,15 @@ SipiImgInfo SipiImage::read_shape(const std::string &filepath) const
     }
   }
 
-  if (info.success == SipiImgInfo::FAILURE) { throw SipiImageError("Could not read file " + filepath); }
+  if (info.success == SipiImgInfo::FAILURE) {
+    std::string tried_keys;
+    for (auto const &iterator : io) {
+      if (!tried_keys.empty()) { tried_keys += ", "; }
+      tried_keys += iterator.first;
+    }
+    throw SipiImageError(
+      "Could not read file " + filepath + ": no registered format handler recognised it (tried: " + tried_keys + ")");
+  }
   return info;
 }
 
