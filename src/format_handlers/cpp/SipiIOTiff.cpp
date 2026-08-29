@@ -426,22 +426,33 @@ std::vector<unsigned char> read_watermark(const std::string &wmfile, int &nx, in
 //============================================================================
 
 
+// libtiff's fmt/args pair is text to log, never a format string to re-run: the
+// va_list is formatted locally with vsnprintf and the resulting text crosses
+// into log_err/log_warn as a %s argument. These handlers are process-global
+// and libtiff invokes them, from any decoding thread, out of its own C stack
+// frames — the body uses locals only (no shared mutable state) and must never
+// let an exception escape into those C frames, which is why the whole body is
+// wrapped in a catch-all here at this C-library boundary.
 static void tiffError(const char *module, const char *fmt, va_list args)
 {
-  // silenced due to erroneous UTF8 sequences in fmt values, leading to segfaults, perhaps fixable.
-
-  /* log_err("ERROR IN TIFF! Module: %s", module); */
-  /* log_err(fmt, argptr); */
+  try {
+    char buf[1024];
+    int n = std::vsnprintf(buf, sizeof(buf), fmt, args);
+    log_err("libtiff error (module %s): %s", module != nullptr ? module : "unknown", n >= 0 ? buf : "");
+  } catch (...) {
+  }
 }
 //============================================================================
 
 
 static void tiffWarning(const char *module, const char *fmt, va_list args)
 {
-  // silenced due to erroneous UTF8 sequences in fmt values, leading to segfaults, perhaps fixable.
-
-  /* log_err("ERROR IN TIFF! Module: %s", module); */
-  /* log_err(fmt, argptr); */
+  try {
+    char buf[1024];
+    int n = std::vsnprintf(buf, sizeof(buf), fmt, args);
+    log_warn("libtiff warning (module %s): %s", module != nullptr ? module : "unknown", n >= 0 ? buf : "");
+  } catch (...) {
+  }
 }
 //============================================================================
 
@@ -938,16 +949,19 @@ bool SipiIOTiff::read(SipiImage *img,
 
   if (tif_guard != nullptr) {
     TIFF *tif = tif_guard.get();
-    TIFFSetErrorHandler(tiffError);
-    TIFFSetWarningHandler(tiffWarning);
-    TIFFSetField(tif, TIFFTAG_JPEGCOLORMODE, JPEGCOLORMODE_RGB);
+
+    // TIFFTAG_JPEGCOLORMODE is a pseudo-tag owned by libtiff's JPEG codec and
+    // exists only while that codec is bound to the directory, so requesting
+    // RGB conversion is meaningful -- and accepted -- only for JPEG-compressed
+    // TIFFs.
+    uint16_t compression = COMPRESSION_NONE;
+    TIFF_GET_FIELD(tif, TIFFTAG_COMPRESSION, &compression, COMPRESSION_NONE);
+    if (compression == COMPRESSION_JPEG) { TIFFSetField(tif, TIFFTAG_JPEGCOLORMODE, JPEGCOLORMODE_RGB); }
 
     //
     // OK, it's a TIFF file
     //
     uint16_t safo, ori, planar, stmp;
-
-    (void)TIFFSetWarningHandler(nullptr);
 
     // TIFFGetField writes a uint32_t through these two pointers; img->nx/ny
     // are size_t, so passing their addresses directly leaves the upper
@@ -1561,7 +1575,6 @@ SipiImgInfo SipiIOTiff::read_shape(const std::string &filepath)
     //
     // OK, it's a TIFF file
     //
-    (void)TIFFSetWarningHandler(nullptr);
     unsigned int tmp_width;
 
     if (TIFFGetField(tif.get(), TIFFTAG_IMAGEWIDTH, &tmp_width) == 0) {
