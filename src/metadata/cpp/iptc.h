@@ -10,8 +10,11 @@
 #define SIPI_METADATA_IPTC_H
 
 #include <exiv2/iptc.hpp>
+#include <memory>
 #include <string>
 #include <vector>
+
+#include "error/SipiValueError.h"
 
 namespace Sipi {
 
@@ -23,14 +26,17 @@ class Iptc
 private:
   Exiv2::IptcData iptcData;//!< Private member variable holding the exiv2 IPTC object
 
+  explicit Iptc(Exiv2::IptcData data);
+
 public:
   /*!
-   * Constructor
+   * Parses a buffer of IPTC data in native format.
    *
-   * \param[in] Buffer containing the IPTC data in native format
-   * \param[in] Length of the buffer
+   * \param[in] iptc Buffer containing the IPTC data in native format
+   * \param[in] len Length of the buffer
+   * \return The parsed Iptc instance, or a SipiValueError if the buffer does not hold valid IPTC data.
    */
-  Iptc(const unsigned char *iptc, unsigned int len);
+  [[nodiscard]] static Result<std::shared_ptr<Iptc>> parse(const unsigned char *iptc, unsigned int len);
 
   /*!
    * Destructor

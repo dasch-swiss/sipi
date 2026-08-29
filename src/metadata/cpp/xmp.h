@@ -3,14 +3,10 @@
  * contributors. SPDX-License-Identifier: AGPL-3.0-or-later
  */
 
-/*!
- * This file implements the virtual abstract class which implements the image file I/O.
- */
 #ifndef SIPI_METADATA_XMP_H
 #define SIPI_METADATA_XMP_H
 
-#include <exiv2/error.hpp>
-#include <exiv2/xmp_exiv2.hpp>//!< Import xmp from the exiv2 library!
+#include <iosfwd>
 #include <mutex>
 #include <string>
 
@@ -26,12 +22,13 @@ extern XmpMutex xmp_mutex;
 extern void xmplock_func(void *pLockData, bool lockUnlock);
 
 /*!
- * This class handles XMP metadata. It uses the Exiv2 library
+ * This class holds an XMP metadata packet. SIPI stores the RDF/XML payload
+ * verbatim, neither parsing nor validating it, because Exiv2's XMP parser
+ * is not thread-safe at the Exiv2 version SIPI depends on.
  */
 class Xmp
 {
 private:
-  Exiv2::XmpData xmpData;//!< Private member variable holding the exiv2 XMP data
   std::string __xmpstr;
 
 public:
@@ -70,16 +67,18 @@ public:
    * @return String holding the xmp data
    */
   std::string xmpBytes();
-
-  /*!
-   * The overloaded << operator which is used to write the xmp formatted to the outstream
-   *
-   * \param[in] lhs The output stream
-   * \param[in] rhs Reference to an instance of a Xmp
-   * \returns Returns ostream object
-   */
-  friend std::ostream &operator<<(std::ostream &lhs, const Xmp &rhs);
 };
+
+/*!
+ * Lets an Xmp appear in SipiImage's stream output. It emits nothing: SIPI
+ * holds the XMP packet as an opaque RDF/XML byte string with no parsed
+ * structure to format.
+ *
+ * \param[in] lhs The output stream
+ * \param[in] rhs Reference to an instance of a Xmp
+ * \returns Returns ostream object
+ */
+std::ostream &operator<<(std::ostream &lhs, const Xmp &rhs);
 
 }// namespace Sipi
 

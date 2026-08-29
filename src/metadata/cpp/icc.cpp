@@ -57,22 +57,28 @@ void icc_error_logger(cmsContext ContextID, cmsUInt32Number ErrorCode, const cha
   log_err("ICC-CMS error: %s", Text);
 }
 
-Icc::Icc(const unsigned char *icc_buf, int icc_len)
+Icc::Icc(ProfilePtr profile, PredefinedProfiles type) : icc_profile(std::move(profile)), profile_type(type) {}
+
+Result<std::shared_ptr<Icc>> Icc::parse(const unsigned char *icc_buf, int icc_len)
 {
   cmsSetLogErrorHandler(icc_error_logger);
-  icc_profile.reset(cmsOpenProfileFromMem(icc_buf, icc_len));
-  if (icc_profile == nullptr) { throw SipiError("cmsOpenProfileFromMem failed"); }
-  unsigned int len =
-    cmsGetProfileInfoASCII(icc_profile.get(), cmsInfoDescription, cmsNoLanguage, cmsNoCountry, nullptr, 0);
-  auto buf = std::make_unique<char[]>(len);
-  cmsGetProfileInfoASCII(icc_profile.get(), cmsInfoDescription, cmsNoLanguage, cmsNoCountry, buf.get(), len);
-  if (strcmp(buf.get(), "sRGB IEC61966-2.1") == 0) {
-    profile_type = icc_sRGB;
-  } else if (strncmp(buf.get(), "AdobeRGB", 8) == 0) {
-    profile_type = icc_AdobeRGB;
-  } else {
-    profile_type = icc_unknown;
+  Icc::ProfilePtr profile(cmsOpenProfileFromMem(icc_buf, icc_len));
+  if (profile == nullptr) {
+    return std::unexpected(SipiValueError{ ErrorCode::kMetadataParseFailed, "cmsOpenProfileFromMem failed" });
   }
+  unsigned int len =
+    cmsGetProfileInfoASCII(profile.get(), cmsInfoDescription, cmsNoLanguage, cmsNoCountry, nullptr, 0);
+  auto buf = std::make_unique<char[]>(len);
+  cmsGetProfileInfoASCII(profile.get(), cmsInfoDescription, cmsNoLanguage, cmsNoCountry, buf.get(), len);
+  PredefinedProfiles type;
+  if (strcmp(buf.get(), "sRGB IEC61966-2.1") == 0) {
+    type = icc_sRGB;
+  } else if (strncmp(buf.get(), "AdobeRGB", 8) == 0) {
+    type = icc_AdobeRGB;
+  } else {
+    type = icc_unknown;
+  }
+  return std::shared_ptr<Icc>(new Icc(std::move(profile), type));
 }
 
 Icc::Icc(const Icc &icc_p)
@@ -93,18 +99,21 @@ Icc::Icc(const Icc &icc_p)
   }
 }
 
-Icc::Icc(cmsHPROFILE &icc_profile_p)
+Result<std::shared_ptr<Icc>> Icc::createFromProfile(cmsHPROFILE &icc_profile_p)
 {
   cmsSetLogErrorHandler(icc_error_logger);
+  Icc::ProfilePtr profile;
   if (icc_profile_p != nullptr) {
     cmsUInt32Number len = 0;
     cmsSaveProfileToMem(icc_profile_p, nullptr, &len);
     auto buf = std::make_unique<char[]>(len);
     cmsSaveProfileToMem(icc_profile_p, buf.get(), &len);
-    icc_profile.reset(cmsOpenProfileFromMem(buf.get(), len));
-    if (icc_profile == nullptr) { throw SipiError("cmsOpenProfileFromMem failed"); }
+    profile.reset(cmsOpenProfileFromMem(buf.get(), len));
+    if (profile == nullptr) {
+      return std::unexpected(SipiValueError{ ErrorCode::kMetadataParseFailed, "cmsOpenProfileFromMem failed" });
+    }
   }
-  profile_type = icc_unknown;
+  return std::shared_ptr<Icc>(new Icc(std::move(profile), icc_unknown));
 }
 
 Icc::Icc(PredefinedProfiles predef)
@@ -171,7 +180,8 @@ Icc::Icc(PredefinedProfiles predef)
   }
 }
 
-Icc::Icc(float white_point_p[], float primaries_p[], const unsigned short tfunc[], const int tfunc_len)
+Result<std::shared_ptr<Icc>>
+  Icc::createRGB(float white_point_p[], float primaries_p[], const unsigned short tfunc[], const int tfunc_len)
 {
   cmsSetLogErrorHandler(icc_error_logger);
   cmsCIExyY white_point;
@@ -202,10 +212,13 @@ Icc::Icc(float white_point_p[], float primaries_p[], const unsigned short tfunc[
     tonecurve[2] = cmsBuildTabulatedToneCurve16(context, tfunc_len, tfunc + 2 * tfunc_len);
   }
 
-  icc_profile.reset(cmsCreateRGBProfileTHR(context, &white_point, &primaries, tonecurve));
-  profile_type = icc_RGB;
+  Icc::ProfilePtr profile(cmsCreateRGBProfileTHR(context, &white_point, &primaries, tonecurve));
   cmsFreeToneCurveTriple(tonecurve);
   cmsDeleteContext(context);
+  if (profile == nullptr) {
+    return std::unexpected(SipiValueError{ ErrorCode::kMetadataParseFailed, "cmsCreateRGBProfileTHR failed" });
+  }
+  return std::shared_ptr<Icc>(new Icc(std::move(profile), icc_RGB));
 }
 
 Icc &Icc::operator=(const Icc &rhs)

@@ -4,15 +4,19 @@
  */
 
 #include "metadata/iptc.h"
-#include "error/SipiError.h"
 
 namespace Sipi {
 
-Iptc::Iptc(const unsigned char *iptc, unsigned int len)
+Iptc::Iptc(Exiv2::IptcData data) : iptcData(std::move(data)) {}
+//============================================================================
+
+Result<std::shared_ptr<Iptc>> Iptc::parse(const unsigned char *iptc, unsigned int len)
 {
-  if (Exiv2::IptcParser::decode(iptcData, iptc, (uint32_t)len) != 0) {
-    throw SipiError("No valid IPTC data!");
+  Exiv2::IptcData data;
+  if (Exiv2::IptcParser::decode(data, iptc, (uint32_t)len) != 0) {
+    return std::unexpected(SipiValueError{ ErrorCode::kMetadataParseFailed, "No valid IPTC data!" });
   }
+  return std::shared_ptr<Iptc>(new Iptc(std::move(data)));
 }
 //============================================================================
 
