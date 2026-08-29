@@ -526,9 +526,10 @@ std::expected<ServeResponse, SipiStatus>
       report_value_error(req.report_error, req.report_ctx, shape.error(), "read", sentry_ctx);
       return std::unexpected(status_for(shape.error()));
     }
+    // read_shape() converts an all-handlers-refused probe into an error value
+    // before returning, so a successfully unwrapped SipiImgInfo is always valid.
     info = *shape;
   }
-  if (info.success == SipiImgInfo::FAILURE) { return std::unexpected(SipiStatus::InternalError); }
 
   const size_t img_w = info.width;
   const size_t img_h = info.height;
