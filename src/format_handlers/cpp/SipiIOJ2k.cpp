@@ -371,8 +371,8 @@ Result<bool> SipiIOJ2k::read(SipiImage *img,
             auto xmp_buf = std::make_unique<char[]>(xmp_len);
             box.read((kdu_byte *)xmp_buf.get(), xmp_len);
             try {
-              img->xmp = std::make_shared<Xmp>(xmp_buf.get(),
-                xmp_len);// ToDo: Problem with thread safety!!!!!!!!!!!!!!
+              img->set_xmp(std::make_shared<Xmp>(xmp_buf.get(),
+                xmp_len));// ToDo: Problem with thread safety!!!!!!!!!!!!!!
             } catch (SipiError &err) {
               log_err("%s", err.to_string().c_str());
             }
@@ -381,7 +381,7 @@ Result<bool> SipiIOJ2k::read(SipiImage *img,
             auto iptc_buf = std::make_unique<unsigned char[]>(iptc_len);
             box.read(iptc_buf.get(), iptc_len);
             try {
-              img->iptc = std::make_shared<Iptc>(iptc_buf.get(), iptc_len);
+              img->set_iptc(std::make_shared<Iptc>(iptc_buf.get(), iptc_len));
             } catch (SipiError &err) {
               log_err("%s", err.to_string().c_str());
             }
@@ -390,7 +390,7 @@ Result<bool> SipiIOJ2k::read(SipiImage *img,
             auto exif_buf = std::make_unique<unsigned char[]>(exif_len);
             box.read(exif_buf.get(), exif_len);
             try {
-              img->exif = std::make_shared<Exif>(exif_buf.get(), exif_len);
+              img->set_exif(std::make_shared<Exif>(exif_buf.get(), exif_len));
             } catch (SipiError &err) {
               log_err("%s", err.to_string().c_str());
             }
@@ -517,14 +517,11 @@ Result<bool> SipiIOJ2k::read(SipiImage *img,
   kdu_core::kdu_dims dims;
   codestream.get_dims(0, dims);
 
-  img->nx = dims.size.x;
-  img->ny = dims.size.y;
+  // bitdepth of zeroth component, assumed valid for all; nc is not the same as
+  // the number of colors. No pixel buffer exists yet, so geometry alone moves.
+  img->set_geometry(dims.size.x, dims.size.y, codestream.get_num_components(), codestream.get_bit_depth(0));
 
-  img->bps = codestream.get_bit_depth(0);// bitdepth of zeroth component. Assuming it's valid for all
-
-  img->nc = codestream.get_num_components();// not the same as the number of colors!
-
-  validate_decode_dims(img->nx, img->ny, img->nc, static_cast<int>(img->bps), filepath);
+  validate_decode_dims(img->getNx(), img->getNy(), img->getNc(), static_cast<int>(img->getBps()), filepath);
 
   //
   // The following definitions we need in case we get a palette color image!
@@ -536,8 +533,8 @@ Result<bool> SipiIOJ2k::read(SipiImage *img,
   // get ICC-Profile if available
   //
   jpx_layer = jpx_in.access_layer(0);
-  img->photo = PhotometricInterpretation::INVALID;// we initialize to an invalid value in order to test later if
-                                                  // img->photo has been set
+  img->setPhoto(PhotometricInterpretation::INVALID);// we initialize to an invalid value in order to test later if
+                                                     // photo has been set
   int numcol = 0;
   if (jpx_layer.exists()) {
     kdu_supp::jp2_colour colinfo = jpx_layer.access_colour(0);
@@ -549,7 +546,9 @@ Result<bool> SipiIOJ2k::read(SipiImage *img,
       // The palette-expansion loop below only handles a single 8-bit index
       // component mapped to a 3-channel (RGB) output; reject anything else
       // instead of silently mis-decoding or overrunning the expansion buffer.
-      if (auto validated = validate_j2k_palette_mapping(img->bps, img->nc, numcol, nentries, filepath); !validated) {
+      if (auto validated =
+            validate_j2k_palette_mapping(img->getBps(), img->getNc(), numcol, nentries, filepath);
+          !validated) {
         return std::unexpected(validated.error());
       }
       rlut.resize(nentries);
@@ -566,52 +565,52 @@ Result<bool> SipiIOJ2k::read(SipiImage *img,
       palette.get_lut(2, tmplut.data());
       for (int i = 0; i < nentries; i++) { blut[i] = roundf((tmplut[i] + 0.5) * 255.0); }
     }
-    img->orientation = TOPLEFT;
-    if (img->nc > numcol) {// we have more components than colors -> alpha channel!
-      for (size_t i = 0; i < img->nc - numcol; i++) {// img->nc - numcol: number of alpha channels (?)
-        img->es.push_back(ExtraSamples::ASSOCALPHA);
+    img->setOrientation(TOPLEFT);
+    if (img->getNc() > numcol) {// we have more components than colors -> alpha channel!
+      for (size_t i = 0; i < img->getNc() - numcol; i++) {// nc - numcol: number of alpha channels (?)
+        img->addEs(ExtraSamples::ASSOCALPHA);
       }
     }
     if (colinfo.exists()) {
       int space = colinfo.get_space();
       switch (space) {
       case kdu_supp::JP2_sRGB_SPACE: {
-        img->photo = PhotometricInterpretation::RGB;
-        img->icc = std::make_shared<Icc>(icc_sRGB);
+        img->setPhoto(PhotometricInterpretation::RGB);
+        img->set_icc(std::make_shared<Icc>(icc_sRGB));
         break;
       }
       case kdu_supp::JP2_CMYK_SPACE: {
-        img->photo = PhotometricInterpretation::SEPARATED;
-        img->icc = std::make_shared<Icc>(icc_CMYK_standard);
+        img->setPhoto(PhotometricInterpretation::SEPARATED);
+        img->set_icc(std::make_shared<Icc>(icc_CMYK_standard));
         break;
       }
       case kdu_supp::JP2_YCbCr1_SPACE: {
-        img->photo = PhotometricInterpretation::YCBCR;
-        img->icc = std::make_shared<Icc>(icc_sRGB);
+        img->setPhoto(PhotometricInterpretation::YCBCR);
+        img->set_icc(std::make_shared<Icc>(icc_sRGB));
         break;
       }
       case kdu_supp::JP2_YCbCr2_SPACE:
       case kdu_supp::JP2_YCbCr3_SPACE: {
         float whitepoint[] = { 0.3127, 0.3290 };
         float primaries[] = { 0.630, 0.340, 0.310, 0.595, 0.155, 0.070 };
-        img->photo = PhotometricInterpretation::YCBCR;
-        img->icc = std::make_shared<Icc>(whitepoint, primaries);
+        img->setPhoto(PhotometricInterpretation::YCBCR);
+        img->set_icc(std::make_shared<Icc>(whitepoint, primaries));
         break;
       }
       case kdu_supp::JP2_iccRGB_SPACE: {
-        img->photo = PhotometricInterpretation::RGB;
+        img->setPhoto(PhotometricInterpretation::RGB);
         int icc_len;
         const unsigned char *icc_buf = colinfo.get_icc_profile(&icc_len);
-        img->icc = std::make_shared<Icc>(icc_buf, icc_len);
+        img->set_icc(std::make_shared<Icc>(icc_buf, icc_len));
         break;
       }
       case kdu_supp::JP2_iccANY_SPACE: {
         if (numcol == 1) {
-          img->photo = PhotometricInterpretation::MINISBLACK;
+          img->setPhoto(PhotometricInterpretation::MINISBLACK);
         } else if (numcol == 3) {
-          img->photo = PhotometricInterpretation::RGB;
+          img->setPhoto(PhotometricInterpretation::RGB);
         } else if (numcol == 4) {
-          img->photo = PhotometricInterpretation::SEPARATED;
+          img->setPhoto(PhotometricInterpretation::SEPARATED);
         } else {
           log_err("Unsupported number of colors: %d", numcol);
           return std::unexpected(
@@ -619,27 +618,27 @@ Result<bool> SipiIOJ2k::read(SipiImage *img,
         }
         int icc_len;
         const unsigned char *icc_buf = colinfo.get_icc_profile(&icc_len);
-        img->icc = std::make_shared<Icc>(icc_buf, icc_len);
+        img->set_icc(std::make_shared<Icc>(icc_buf, icc_len));
         break;
       }
       case kdu_supp::JP2_sLUM_SPACE: {
-        img->photo = PhotometricInterpretation::MINISBLACK;
-        img->icc = std::make_shared<Icc>(icc_LUM_D65);
+        img->setPhoto(PhotometricInterpretation::MINISBLACK);
+        img->set_icc(std::make_shared<Icc>(icc_LUM_D65));
         break;
       }
       case kdu_supp::JP2_sYCC_SPACE: {
-        img->photo = PhotometricInterpretation::YCBCR;
-        img->icc = std::make_shared<Icc>(icc_sRGB);
+        img->setPhoto(PhotometricInterpretation::YCBCR);
+        img->set_icc(std::make_shared<Icc>(icc_sRGB));
         break;
       }
       case kdu_supp::JP2_CIELab_SPACE: {
-        img->photo = PhotometricInterpretation::CIELAB;
-        img->icc = std::make_shared<Icc>(icc_LAB);
+        img->setPhoto(PhotometricInterpretation::CIELAB);
+        img->set_icc(std::make_shared<Icc>(icc_LAB));
         break;
       }
       case 100: {
-        img->photo = PhotometricInterpretation::MINISBLACK;
-        img->icc = std::make_shared<Icc>(icc_ROMM_GRAY);
+        img->setPhoto(PhotometricInterpretation::MINISBLACK);
+        img->set_icc(std::make_shared<Icc>(icc_ROMM_GRAY));
         break;
       }
 
@@ -651,21 +650,21 @@ Result<bool> SipiIOJ2k::read(SipiImage *img,
       }
     }
   } else {
-    numcol = img->nc;
+    numcol = img->getNc();
   }
 
-  if (img->photo == PhotometricInterpretation::INVALID) {
+  if (img->getPhoto() == PhotometricInterpretation::INVALID) {
     switch (numcol) {
     case 1: {
-      img->photo = PhotometricInterpretation::MINISBLACK;
+      img->setPhoto(PhotometricInterpretation::MINISBLACK);
       break;
     }
     case 3: {
-      img->photo = PhotometricInterpretation::RGB;
+      img->setPhoto(PhotometricInterpretation::RGB);
       break;
     }
     case 4: {
-      img->photo = PhotometricInterpretation::SEPARATED;
+      img->setPhoto(PhotometricInterpretation::SEPARATED);
       break;
     }
     default: {
@@ -706,36 +705,40 @@ Result<bool> SipiIOJ2k::read(SipiImage *img,
     dims.size.y, dims.size.y, dims.size.y, dims.size.y, dims.size.y
   };// enough for alpha channel (5 components)
 
-  if (force_bps_8) img->bps = 8;// forces kakadu to convert to 8 bit!
-  switch (img->bps) {
+  if (force_bps_8) img->set_geometry(img->getNx(), img->getNy(), img->getNc(), 8);// forces kakadu to convert to 8 bit!
+  switch (img->getBps()) {
   case 8: {
     const auto buf8_size = checked_buf_size(
-      static_cast<std::size_t>(dims.size.x), static_cast<std::size_t>(dims.size.y), static_cast<std::size_t>(img->nc), 1);
+      static_cast<std::size_t>(dims.size.x), static_cast<std::size_t>(dims.size.y), static_cast<std::size_t>(img->getNc()), 1);
     if (!buf8_size) {
       return std::unexpected(SipiValueError{ ErrorCode::kMalformedInput,
         "Cannot read JPEG2000 file \"" + filepath + "\": image dimensions overflow buffer size" });
     }
-    std::vector<byte> buffer8(*buf8_size);
+    // The pixel buffer is owned by img (not a local) for the whole risk
+    // window below: pull_stripe can throw a kdu_exception, and matching the
+    // other handlers' ownership shape keeps that failure leak-free.
+    img->set_pixels(std::vector<byte>(*buf8_size), img->getNx(), img->getNy(), img->getNc(), img->getBps());
+    byte *dst = img->pixels_writable().data();
     try {
-      decompressor.pull_stripe(buffer8.data(), stripe_heights);
+      decompressor.pull_stripe(dst, stripe_heights);
     } catch (kdu_exception &exc) {
       log_err("Error while decompressing image: %s.", filepath.c_str());
       return false;
     }
-    img->pixels = std::move(buffer8);
     break;
   }
   case 12: {
-    std::vector<char> get_signed(img->nc, 0);// vector<bool> does not work -> special treatment in C++
+    std::vector<char> get_signed(img->getNc(), 0);// vector<bool> does not work -> special treatment in C++
     const auto buf16_size = checked_buf_size(
-      static_cast<std::size_t>(dims.size.x), static_cast<std::size_t>(dims.size.y), static_cast<std::size_t>(img->nc), 2);
+      static_cast<std::size_t>(dims.size.x), static_cast<std::size_t>(dims.size.y), static_cast<std::size_t>(img->getNc()), 2);
     if (!buf16_size) {
       return std::unexpected(SipiValueError{ ErrorCode::kMalformedInput,
         "Cannot read JPEG2000 file \"" + filepath + "\": image dimensions overflow buffer size" });
     }
-    std::vector<byte> buffer16(*buf16_size);
+    img->set_pixels(std::vector<byte>(*buf16_size), img->getNx(), img->getNy(), img->getNc(), 16);
+    byte *dst = img->pixels_writable().data();
     try {
-      decompressor.pull_stripe(reinterpret_cast<kdu_core::kdu_int16 *>(buffer16.data()),
+      decompressor.pull_stripe(reinterpret_cast<kdu_core::kdu_int16 *>(dst),
         stripe_heights,
         nullptr,
         nullptr,
@@ -746,21 +749,20 @@ Result<bool> SipiIOJ2k::read(SipiImage *img,
       log_err("Error while decompressing image: %s.", filepath.c_str());
       return false;
     }
-    img->pixels = std::move(buffer16);
-    img->bps = 16;
     break;
   }
   case 16: {
-    std::vector<char> get_signed(img->nc, 0);// vector<bool> does not work -> special treatment in C++
+    std::vector<char> get_signed(img->getNc(), 0);// vector<bool> does not work -> special treatment in C++
     const auto buf16_size = checked_buf_size(
-      static_cast<std::size_t>(dims.size.x), static_cast<std::size_t>(dims.size.y), static_cast<std::size_t>(img->nc), 2);
+      static_cast<std::size_t>(dims.size.x), static_cast<std::size_t>(dims.size.y), static_cast<std::size_t>(img->getNc()), 2);
     if (!buf16_size) {
       return std::unexpected(SipiValueError{ ErrorCode::kMalformedInput,
         "Cannot read JPEG2000 file \"" + filepath + "\": image dimensions overflow buffer size" });
     }
-    std::vector<byte> buffer16(*buf16_size);
+    img->set_pixels(std::vector<byte>(*buf16_size), img->getNx(), img->getNy(), img->getNc(), img->getBps());
+    byte *dst = img->pixels_writable().data();
     try {
-      decompressor.pull_stripe(reinterpret_cast<kdu_core::kdu_int16 *>(buffer16.data()),
+      decompressor.pull_stripe(reinterpret_cast<kdu_core::kdu_int16 *>(dst),
         stripe_heights,
         nullptr,
         nullptr,
@@ -771,16 +773,15 @@ Result<bool> SipiIOJ2k::read(SipiImage *img,
       log_err("Error while decompressing image: %s.", filepath.c_str());
       return false;
     }
-    img->pixels = std::move(buffer16);
     break;
   }
   default: {
     decompressor.finish();
-    log_err("Unsupported number of bits/sample: %ld in file %s", img->bps, filepath.c_str());
+    log_err("Unsupported number of bits/sample: %ld in file %s", img->getBps(), filepath.c_str());
     return std::unexpected(SipiValueError{ ErrorCode::kUnsupportedFormat,
-      "Cannot read JPEG2000: unsupported bits/sample (" + std::to_string(img->bps) + ") in file \"" + filepath
-        + "\" (dimensions: " + std::to_string(img->nx) + "x" + std::to_string(img->ny)
-        + ", channels: " + std::to_string(img->nc) + ")" });
+      "Cannot read JPEG2000: unsupported bits/sample (" + std::to_string(img->getBps()) + ") in file \"" + filepath
+        + "\" (dimensions: " + std::to_string(img->getNx()) + "x" + std::to_string(img->getNy())
+        + ", channels: " + std::to_string(img->getNc()) + ")" });
   }
   }
   decompressor.finish();
@@ -790,30 +791,32 @@ Result<bool> SipiIOJ2k::read(SipiImage *img,
     //
     // we have a palette color image...
     //
-    // numcol == 3 and img->bps == 8 are enforced above where rlut/glut/blut
+    // numcol == 3 and img->getBps() == 8 are enforced above where rlut/glut/blut
     // are built, so the buffer's stride-3 layout matches the writes below
     // and every index into rlut/glut/blut is in range.
     const auto tmpbuf_size = checked_buf_size(
-      static_cast<std::size_t>(img->nx), static_cast<std::size_t>(img->ny), static_cast<std::size_t>(numcol), 1);
+      static_cast<std::size_t>(img->getNx()), static_cast<std::size_t>(img->getNy()), static_cast<std::size_t>(numcol), 1);
     if (!tmpbuf_size) {
       return std::unexpected(SipiValueError{ ErrorCode::kMalformedInput,
         "Cannot read JPEG2000 file \"" + filepath + "\": palette-expanded buffer size overflow" });
     }
     std::vector<byte> tmpbuf(*tmpbuf_size);
-    for (int y = 0; y < img->ny; ++y) {
-      for (int x = 0; x < img->nx; ++x) {
-        const byte idx = img->pixels[y * img->nx + x];
-        tmpbuf[3 * (y * img->nx + x) + 0] = rlut[idx];
-        tmpbuf[3 * (y * img->nx + x) + 1] = glut[idx];
-        tmpbuf[3 * (y * img->nx + x) + 2] = blut[idx];
+    const byte *src = img->pixels_view().data();
+    const size_t nx_val = img->getNx();
+    const size_t ny_val = img->getNy();
+    for (int y = 0; y < ny_val; ++y) {
+      for (int x = 0; x < nx_val; ++x) {
+        const byte idx = src[y * nx_val + x];
+        tmpbuf[3 * (y * nx_val + x) + 0] = rlut[idx];
+        tmpbuf[3 * (y * nx_val + x) + 1] = glut[idx];
+        tmpbuf[3 * (y * nx_val + x) + 2] = blut[idx];
       }
     }
-    img->pixels = std::move(tmpbuf);
-    img->nc = numcol;
+    img->set_pixels(std::move(tmpbuf), nx_val, ny_val, numcol, img->getBps());
   }
-  if (img->photo == PhotometricInterpretation::YCBCR) {
+  if (img->getPhoto() == PhotometricInterpretation::YCBCR) {
     processing::convertYCC2RGB(*img);
-    img->photo = PhotometricInterpretation::RGB;
+    img->setPhoto(PhotometricInterpretation::RGB);
   }
 
   if ((size != nullptr) && (!redonly)) {
@@ -1135,17 +1138,17 @@ Result<void> SipiIOJ2k::write(SipiImage *img, const OutputSink &sink, const Sipi
   try {
     // Construct code-stream object
     siz_params siz;
-    siz.set(Scomponents, 0, 0, (int)img->nc);
-    siz.set(Sdims, 0, 0, (int)img->ny);// Height of first image component
-    siz.set(Sdims, 0, 1, (int)img->nx);// Width of first image component
-    siz.set(Sprecision, 0, 0, (int)img->bps);// Bits per sample (usually 8 or 16)
+    siz.set(Scomponents, 0, 0, (int)img->getNc());
+    siz.set(Sdims, 0, 0, (int)img->getNy());// Height of first image component
+    siz.set(Sdims, 0, 1, (int)img->getNx());// Width of first image component
+    siz.set(Sprecision, 0, 0, (int)img->getBps());// Bits per sample (usually 8 or 16)
     siz.set(Ssigned, 0, 0, false);// Image samples are originally unsigned
 
     //
     // tiling has to be done here. Tile size must be adapted to image dimesions!
     //
     int tw = 0, th = 0;
-    const int mindim = img->ny < img->nx ? img->ny : img->nx;
+    const int mindim = img->getNy() < img->getNx() ? img->getNy() : img->getNx();
     if ((params != nullptr) && (!params->empty())) {
       if (params->find(J2K_Stiles) != params->end()) {
         int n = std::sscanf(params->at(J2K_Stiles).c_str(), "{%d,%d}", &tw, &th);
@@ -1324,12 +1327,13 @@ Result<void> SipiIOJ2k::write(SipiImage *img, const OutputSink &sink, const Sipi
     // In the latter case, a desired display resolution box will be created, having a
     // default vertical display resolution of one grid-point per metre.
     //
-    if (img->exif != nullptr) {
+    std::shared_ptr<Exif> exif = img->getExif();
+    if (exif != nullptr) {
       float res_x = 72., res_y = 72.;
       int unit = 2;// RESUNIT_INCH
-      if (img->exif->getValByKey("Exif.Image.XResolution", res_x)
-          && img->exif->getValByKey("Exif.Image.YResolution", res_y)) {
-        (void)img->exif->getValByKey("Exif.Image.ResolutionUnit", unit);
+      if (exif->getValByKey("Exif.Image.XResolution", res_x)
+          && exif->getValByKey("Exif.Image.YResolution", res_y)) {
+        (void)exif->getValByKey("Exif.Image.ResolutionUnit", unit);
         switch (unit) {
         case 1:
           break;// RESUNIT_NONE
@@ -1354,23 +1358,24 @@ Result<void> SipiIOJ2k::write(SipiImage *img, const OutputSink &sink, const Sipi
     Essentials es = img->essential_metadata();
 
     jp2_colour jp2_family_colour = jpx_layer.add_colour();
-    if (img->icc != nullptr) {
-      PredefinedProfiles icc_type = img->icc->getProfileType();
+    std::shared_ptr<Icc> image_icc = img->getIcc();
+    if (image_icc != nullptr) {
+      PredefinedProfiles icc_type = image_icc->getProfileType();
       try {
         switch (icc_type) {
         case icc_undefined: {
-          std::vector<unsigned char> icc_buf = img->icc->iccBytes();
+          std::vector<unsigned char> icc_buf = image_icc->iccBytes();
           jp2_family_colour.init(reinterpret_cast<kdu_byte *>(icc_buf.data()));
           break;
         }
         case icc_unknown: {
-          std::vector<unsigned char> icc_buf = img->icc->iccBytes();
+          std::vector<unsigned char> icc_buf = image_icc->iccBytes();
           jp2_family_colour.init(reinterpret_cast<kdu_byte *>(icc_buf.data()));
           break;
         }
         case icc_sRGB: {
           // TODO: this fixes the problem with grayscale JPEGs, but is it breaking anything else?
-          if (img->nc - img->es.size() == 1) {
+          if (img->getNc() - img->getEs().size() == 1) {
             jp2_family_colour.init(JP2_sLUM_SPACE);
           } else {
             jp2_family_colour.init(JP2_sRGB_SPACE);
@@ -1378,12 +1383,12 @@ Result<void> SipiIOJ2k::write(SipiImage *img, const OutputSink &sink, const Sipi
           break;
         }
         case icc_AdobeRGB: {
-          std::vector<unsigned char> icc_buf = img->icc->iccBytes();
+          std::vector<unsigned char> icc_buf = image_icc->iccBytes();
           jp2_family_colour.init(reinterpret_cast<kdu_byte *>(icc_buf.data()));
           break;
         }
         case icc_RGB: {// TODO: DOES NOT WORK AS EXPECTED!!!!! Fallback below
-          std::vector<unsigned char> icc_buf = img->icc->iccBytes();
+          std::vector<unsigned char> icc_buf = image_icc->iccBytes();
           jp2_family_colour.init(reinterpret_cast<kdu_byte *>(icc_buf.data()));
           break;
         }
@@ -1392,7 +1397,7 @@ Result<void> SipiIOJ2k::write(SipiImage *img, const OutputSink &sink, const Sipi
           break;
         }
         case icc_GRAY_D50: {
-          std::vector<unsigned char> icc_buf = img->icc->iccBytes();
+          std::vector<unsigned char> icc_buf = image_icc->iccBytes();
           jp2_family_colour.init(reinterpret_cast<kdu_byte *>(icc_buf.data()));// TODO: DOES NOT WORK AS EXPECTED!!!!! Fallback below
           break;
         }
@@ -1407,7 +1412,7 @@ Result<void> SipiIOJ2k::write(SipiImage *img, const OutputSink &sink, const Sipi
           break;
         }
         case icc_LAB: {
-          if (img->bps == 8) {
+          if (img->getBps() == 8) {
             jp2_family_colour.init(JP2_CIELab_SPACE, 100, 0, 8, 255, 128, 8, 255, 128, 8);
           } else {
             //
@@ -1418,13 +1423,13 @@ Result<void> SipiIOJ2k::write(SipiImage *img, const OutputSink &sink, const Sipi
           break;
         };
         default: {
-          std::vector<unsigned char> icc_buf = img->icc->iccBytes();
+          std::vector<unsigned char> icc_buf = image_icc->iccBytes();
           jp2_family_colour.init(reinterpret_cast<kdu_byte *>(icc_buf.data()));
         }
         }
       } catch (kdu_exception e) {
         if (es.is_set()) es.fields_mut().use_icc = true;
-        switch (img->nc - img->es.size()) {
+        switch (img->getNc() - img->getEs().size()) {
         case 1: {
           jp2_family_colour.init(JP2_sLUM_SPACE);
           break;
@@ -1440,7 +1445,7 @@ Result<void> SipiIOJ2k::write(SipiImage *img, const OutputSink &sink, const Sipi
         }
       }
     } else {
-      switch (img->nc - img->es.size()) {
+      switch (img->getNc() - img->getEs().size()) {
       case 1: {
         jp2_family_colour.init(JP2_sLUM_SPACE);
         break;
@@ -1467,17 +1472,15 @@ Result<void> SipiIOJ2k::write(SipiImage *img, const OutputSink &sink, const Sipi
     // post-headers / pre-codestream region.
 
     jp2_channels jp2_family_channels = jpx_layer.access_channels();
-    jp2_family_channels.init(img->nc - img->es.size());
-    for (int c = 0; c < img->nc - img->es.size(); c++) { jp2_family_channels.set_colour_mapping(c, c); }
-    if (img->es.size() > 0) {
-      if (img->es.size() == 1) {
-        for (int c = 0; c < img->nc - img->es.size(); c++) {
-          jp2_family_channels.set_opacity_mapping(c, img->nc - img->es.size());
-        }
-      } else if (img->es.size() == (img->nc - img->es.size())) {
-        for (int c = 0; c < img->nc - img->es.size(); c++) {
-          jp2_family_channels.set_opacity_mapping(c, img->nc - img->es.size() + c);
-        }
+    const size_t es_size = img->getEs().size();
+    const size_t color_nc = img->getNc() - es_size;
+    jp2_family_channels.init(color_nc);
+    for (int c = 0; c < color_nc; c++) { jp2_family_channels.set_colour_mapping(c, c); }
+    if (es_size > 0) {
+      if (es_size == 1) {
+        for (int c = 0; c < color_nc; c++) { jp2_family_channels.set_opacity_mapping(c, color_nc); }
+      } else if (es_size == color_nc) {
+        for (int c = 0; c < color_nc; c++) { jp2_family_channels.set_opacity_mapping(c, color_nc + c); }
       }
     }
 
@@ -1493,24 +1496,26 @@ Result<void> SipiIOJ2k::write(SipiImage *img, const OutputSink &sink, const Sipi
     //
     if (es.is_set()) { write_essentials_box(&jp2_ultimate_tgt, es.serialize()); }
 
-    if (img->iptc != nullptr) {
-      std::vector<unsigned char> iptc_buf = img->iptc->iptcBytes();
+    std::shared_ptr<Iptc> iptc = img->getIptc();
+    if (iptc != nullptr) {
+      std::vector<unsigned char> iptc_buf = iptc->iptcBytes();
       write_iptc_box(&jp2_ultimate_tgt, iptc_buf.data(), iptc_buf.size());
     }
 
     //
     // write EXIF here
     //
-    if (img->exif != nullptr) {
-      std::vector<unsigned char> exif_buf = img->exif->exifBytes();
+    if (exif != nullptr) {
+      std::vector<unsigned char> exif_buf = exif->exifBytes();
       write_exif_box(&jp2_ultimate_tgt, exif_buf.data(), exif_buf.size());
     }
 
     //
     // write XMP data here
     //
-    if (img->xmp != nullptr) {
-      std::string xmp_buf = img->xmp->xmpBytes();
+    std::shared_ptr<Xmp> xmp = img->getXmp();
+    if (xmp != nullptr) {
+      std::string xmp_buf = xmp->xmpBytes();
       if (!xmp_buf.empty()) { write_xmp_box(&jp2_ultimate_tgt, xmp_buf.c_str()); }
     }
 
@@ -1531,39 +1536,43 @@ Result<void> SipiIOJ2k::write(SipiImage *img, const OutputSink &sink, const Sipi
       is_reversible,// force_precise [YES, if reversible=yes]
       true,// record_layer_info_in_comment
       0.0,// size_tolerance
-      img->nc,// num_components
+      img->getNc(),// num_components
       false,// want_fastest [NO]
       env_ref);
 
-    // int *stripe_heights = new int[img->nc];
+    // int *stripe_heights = new int[img->getNc()];
     int stripe_heights[5];
-    if (img->bps == 16) {
-      kdu_int16 *buf = (kdu_int16 *)img->pixels.data();
-      std::vector<int> precisions(img->nc, static_cast<int>(img->bps));
-      std::vector<char> is_signed(img->nc, 0);// vector<bool> does not work -> special treatment in C++
-      for (size_t i = 0; i < img->nc; i++) { stripe_heights[i] = img->ny; }
+    byte *pixel_data = img->pixels_writable().data();
+    if (img->getBps() == 16) {
+      kdu_int16 *buf = (kdu_int16 *)pixel_data;
+      std::vector<int> precisions(img->getNc(), static_cast<int>(img->getBps()));
+      std::vector<char> is_signed(img->getNc(), 0);// vector<bool> does not work -> special treatment in C++
+      for (size_t i = 0; i < img->getNc(); i++) { stripe_heights[i] = img->getNy(); }
       compressor.push_stripe(
         buf, stripe_heights, nullptr, nullptr, nullptr, precisions.data(), reinterpret_cast<bool *>(is_signed.data()));
-    } else if (img->bps == 8) {
-      if (th == 0) th = img->ny;
+    } else if (img->getBps() == 8) {
+      if (th == 0) th = img->getNy();
+      const size_t nc = img->getNc();
+      const size_t nx = img->getNx();
+      const size_t ny = img->getNy();
       size_t stripe_start = 0;
       do {
-        kdu_byte *buf = img->pixels.data() + stripe_start * img->nc * img->nx;
-        for (size_t i = 0; i < img->nc; i++) { stripe_heights[i] = th; }
+        kdu_byte *buf = pixel_data + stripe_start * nc * nx;
+        for (size_t i = 0; i < nc; i++) { stripe_heights[i] = th; }
         compressor.push_stripe(buf, stripe_heights);
         stripe_start += th;
-      } while ((img->ny - stripe_start) >= th);
-      if ((img->ny - stripe_start) > 0) {
-        kdu_byte *buf = img->pixels.data() + stripe_start * img->nc * img->nx;
-        for (size_t i = 0; i < img->nc; i++) { stripe_heights[i] = img->ny - stripe_start; }
+      } while ((ny - stripe_start) >= th);
+      if ((ny - stripe_start) > 0) {
+        kdu_byte *buf = pixel_data + stripe_start * nc * nx;
+        for (size_t i = 0; i < nc; i++) { stripe_heights[i] = ny - stripe_start; }
         compressor.push_stripe(buf, stripe_heights);
-        stripe_start += img->ny - stripe_start;
+        stripe_start += ny - stripe_start;
       }
     } else {
       return std::unexpected(SipiValueError{ ErrorCode::kUnsupportedFormat,
-        "Unsupported number of bits/sample for JPEG2000 write: bps=" + std::to_string(img->bps)
-          + " (only 8 and 16 supported)" + ", file=" + filepath + ", dimensions=" + std::to_string(img->nx) + "x"
-          + std::to_string(img->ny) + ", channels=" + std::to_string(img->nc) });
+        "Unsupported number of bits/sample for JPEG2000 write: bps=" + std::to_string(img->getBps())
+          + " (only 8 and 16 supported)" + ", file=" + filepath + ", dimensions=" + std::to_string(img->getNx()) + "x"
+          + std::to_string(img->getNy()) + ", channels=" + std::to_string(img->getNc()) });
     }
     compressor.finish(0, NULL, NULL, env_ref);
     // Finally, cleanup
@@ -1579,8 +1588,9 @@ Result<void> SipiIOJ2k::write(SipiImage *img, const OutputSink &sink, const Sipi
     }
     return std::unexpected(SipiValueError{ ErrorCode::kWriteFailed,
       "Failed writing JPEG2000 image (Kakadu exception " + std::to_string(e) + ")" + ", file=" + filepath
-        + ", dimensions=" + std::to_string(img->nx) + "x" + std::to_string(img->ny) + ", channels="
-        + std::to_string(img->nc) + ", bps=" + std::to_string(img->bps) + ", colorspace=" + to_string(img->photo) });
+        + ", dimensions=" + std::to_string(img->getNx()) + "x" + std::to_string(img->getNy()) + ", channels="
+        + std::to_string(img->getNc()) + ", bps=" + std::to_string(img->getBps())
+        + ", colorspace=" + to_string(img->getPhoto()) });
   }
   return {};
 }

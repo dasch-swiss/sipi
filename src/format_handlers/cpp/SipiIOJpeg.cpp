@@ -421,21 +421,21 @@ void SipiIOJpeg::parse_photoshop(SipiImage *img, char *data, int length)
 
     switch (id) {
     case 0x0404: {
-      if (img->iptc == nullptr) img->iptc = std::make_shared<Iptc>((unsigned char *)ptr, datalen);
+      if (img->getIptc() == nullptr) img->set_iptc(std::make_shared<Iptc>((unsigned char *)ptr, datalen));
       break;
     }
     case 0x040f: {
-      if (img->icc == nullptr) img->icc = std::make_shared<Icc>((unsigned char *)ptr, datalen);
+      if (img->getIcc() == nullptr) img->set_icc(std::make_shared<Icc>((unsigned char *)ptr, datalen));
       break;
     }
     case 0x0422: {
-      if (img->exif == nullptr) img->exif = std::make_shared<Exif>((unsigned char *)ptr, datalen);
+      if (img->getExif() == nullptr) img->set_exif(std::make_shared<Exif>((unsigned char *)ptr, datalen));
       uint16_t ori;
-      if (img->exif->getValByKey("Exif.Image.Orientation", ori)) { img->orientation = Orientation(ori); }
+      if (img->getExif()->getValByKey("Exif.Image.Orientation", ori)) { img->setOrientation(Orientation(ori)); }
       break;
     }
     case 0x0424: {
-      if (img->xmp == nullptr) img->xmp = std::make_shared<Xmp>(ptr, datalen);
+      if (img->getXmp() == nullptr) img->set_xmp(std::make_shared<Xmp>(ptr, datalen));
       break;  // Fix: was missing, causing fall-through to default
     }
     default: {
@@ -497,6 +497,12 @@ Result<bool> SipiIOJpeg::read(SipiImage *img,
   // volatile: assigned inside the setjmp risk window during ICC marker
   // parsing and read by the landing block on longjmp.
   unsigned char *volatile icc_buffer_guard = nullptr;
+  // Adobe APP14 transform flag (0=Unknown/CMYK, 1=YCbCr, 2=YCCK); 255 means
+  // no APP14 marker was present. Set while parsing markers below and
+  // consulted once, after decompression, by the CMYK/YCCK polarity check.
+  // Not read by the setjmp landing block, so no volatile qualification is
+  // needed here.
+  uint8_t app14_transform = 255;
 
   // Source manager + buffer, owned here and declared before the setjmp so
   // their destructors run on the C++ unwind path.
@@ -578,7 +584,7 @@ Result<bool> SipiIOJpeg::read(SipiImage *img,
   //
   // set default orientation
   //
-  img->orientation = TOPLEFT;
+  img->setOrientation(TOPLEFT);
 
   //
   // getting Metadata
@@ -605,9 +611,11 @@ Result<bool> SipiIOJpeg::read(SipiImage *img,
         // (e.g. APP13-before-APP1 with non-ASCII IPTC) does not abort the
         // whole read.
         try {
-          img->exif = std::make_shared<Exif>(pos + 6, marker->data_length - (pos - marker->data) - 6);
+          img->set_exif(std::make_shared<Exif>(pos + 6, marker->data_length - (pos - marker->data) - 6));
           uint16_t ori;
-          if (img->exif->getValByKey("Exif.Image.Orientation", ori)) { img->orientation = static_cast<Orientation>(ori); }
+          if (img->getExif()->getValByKey("Exif.Image.Orientation", ori)) {
+            img->setOrientation(static_cast<Orientation>(ori));
+          }
         } catch (const std::exception &err) {
           log_warn("Failed to parse EXIF metadata from JPEG: %s", err.what());
         }
@@ -636,7 +644,7 @@ Result<bool> SipiIOJpeg::read(SipiImage *img,
           const unsigned char *xmp_start = pos + kXmpNsLen;
           if (xmp_start < data_end) {
             const size_t xmp_len = data_end - xmp_start;
-            img->xmp = std::make_shared<Xmp>(std::string((const char *)xmp_start, xmp_len));
+            img->set_xmp(std::make_shared<Xmp>(std::string((const char *)xmp_start, xmp_len)));
           }
         } catch (const std::exception &err) {
           log_warn("Failed to parse XMP metadata from JPEG: %s", err.what());
@@ -694,13 +702,13 @@ Result<bool> SipiIOJpeg::read(SipiImage *img,
       //   bytes 9-10 : flags1
       //   byte  11   : transform flag (0=Unknown/CMYK, 1=YCbCr, 2=YCCK)
       if (marker->data_length >= 12 && memcmp(marker->data, "Adobe", 5) == 0) {
-        img->app14_transform = static_cast<uint8_t>(marker->data[11]);
+        app14_transform = static_cast<uint8_t>(marker->data[11]);
       }
     }
     marker = marker->next;
   }
   if (icc_buffer != nullptr) {
-    img->icc = std::make_shared<Icc>(icc_buffer, icc_buffer_len);
+    img->set_icc(std::make_shared<Icc>(icc_buffer, icc_buffer_len));
     free(icc_buffer);// Icc constructor copies the data
     icc_buffer = nullptr;  // prevent double-free if longjmp fires later
   }
@@ -708,58 +716,60 @@ Result<bool> SipiIOJpeg::read(SipiImage *img,
   // icc_buffer is freed and nulled above; errors → longjmp → setjmp handler
   jpeg_start_decompress(&cinfo);
 
-  img->bps = 8;
-  img->nx = cinfo.output_width;
-  img->ny = cinfo.output_height;
-  img->nc = cinfo.output_components;
-  validate_decode_dims(img->nx, img->ny, img->nc, static_cast<int>(img->bps), filepath);
+  img->set_geometry(cinfo.output_width, cinfo.output_height, cinfo.output_components, 8);
+  validate_decode_dims(img->getNx(), img->getNy(), img->getNc(), static_cast<int>(img->getBps()), filepath);
   int colspace = cinfo.out_color_space;
   // JCS_UNKNOWN, JCS_GRAYSCALE, JCS_RGB, JCS_YCbCr, JCS_CMYK, JCS_YCCK
   switch (colspace) {
   case JCS_RGB: {
-    img->photo = PhotometricInterpretation::RGB;
+    img->setPhoto(PhotometricInterpretation::RGB);
     break;
   }
   case JCS_GRAYSCALE: {
-    img->photo = PhotometricInterpretation::MINISBLACK;
+    img->setPhoto(PhotometricInterpretation::MINISBLACK);
     break;
   }
   case JCS_CMYK: {
-    img->photo = PhotometricInterpretation::SEPARATED;
+    img->setPhoto(PhotometricInterpretation::SEPARATED);
     break;
   }
   case JCS_YCbCr: {
-    img->photo = PhotometricInterpretation::YCBCR;
+    img->setPhoto(PhotometricInterpretation::YCBCR);
     break;
   }
   case JCS_YCCK: {
     // libjpeg-turbo decodes YCCK internally to CMYK; the post-read
     // inversion handling is shared with the CMYK path.
-    img->photo = PhotometricInterpretation::SEPARATED;
+    img->setPhoto(PhotometricInterpretation::SEPARATED);
     break;
   }
   case JCS_UNKNOWN: {
     return std::unexpected(SipiValueError{ ErrorCode::kUnsupportedFormat,
       "Unsupported JPEG colorspace JCS_UNKNOWN in file \"" + filepath
-        + "\" (dimensions: " + std::to_string(img->nx) + "x" + std::to_string(img->ny)
+        + "\" (dimensions: " + std::to_string(img->getNx()) + "x" + std::to_string(img->getNy())
         + ", components: " + std::to_string(cinfo.output_components) + ")" });
   }
   default: {
     return std::unexpected(SipiValueError{ ErrorCode::kUnsupportedFormat,
       "Unsupported JPEG colorspace (code: " + std::to_string(colspace) + ") in file \"" + filepath
-        + "\" (dimensions: " + std::to_string(img->nx) + "x" + std::to_string(img->ny)
+        + "\" (dimensions: " + std::to_string(img->getNx()) + "x" + std::to_string(img->getNy())
         + ", components: " + std::to_string(cinfo.output_components) + ")" });
   }
   }
   int sll = cinfo.output_components * cinfo.output_width * sizeof(uint8_t);
 
-  img->pixels.assign(static_cast<size_t>(img->ny) * sll, 0);
+  // The pixel buffer is owned by img (not a local) for the whole risk
+  // window below: jpeg_read_scanlines can longjmp, which skips destructors,
+  // so a local std::vector held across that call would leak on error.
+  img->set_pixels(std::vector<byte>(static_cast<size_t>(img->getNy()) * sll, 0),
+    img->getNx(), img->getNy(), img->getNc(), img->getBps());
+  byte *dst = img->pixels_writable().data();
 
   // All libjpeg calls below — errors → longjmp → setjmp handler above
   linbuf = (*cinfo.mem->alloc_sarray)((j_common_ptr)&cinfo, JPOOL_IMAGE, sll, 1);
-  for (size_t i = 0; i < img->ny; i++) {
+  for (size_t i = 0; i < img->getNy(); i++) {
     jpeg_read_scanlines(&cinfo, linbuf, 1);
-    memcpy(&(img->pixels[i * sll]), linbuf[0], (size_t)sll);
+    memcpy(dst + i * sll, linbuf[0], (size_t)sll);
   }
 
   jpeg_finish_decompress(&cinfo);
@@ -780,12 +790,11 @@ Result<bool> SipiIOJpeg::read(SipiImage *img,
   //     inverting here would corrupt files that do not need it; the R10
   //     `JpegCmykRawNoApp14NotInverted` test pins this branch).
   //
-  const bool is_cmyk_path = img->photo == PhotometricInterpretation::SEPARATED && img->nc == 4;
-  const bool needs_inversion =
-    is_cmyk_path && (img->app14_transform == 0 || img->app14_transform == 2);
+  const bool is_cmyk_path = img->getPhoto() == PhotometricInterpretation::SEPARATED && img->getNc() == 4;
+  const bool needs_inversion = is_cmyk_path && (app14_transform == 0 || app14_transform == 2);
   if (needs_inversion) {
-    const size_t total_bytes = static_cast<size_t>(img->ny) * static_cast<size_t>(sll);
-    for (size_t b = 0; b < total_bytes; ++b) { img->pixels[b] = static_cast<byte>(255 - img->pixels[b]); }
+    const size_t total_bytes = static_cast<size_t>(img->getNy()) * static_cast<size_t>(sll);
+    for (size_t b = 0; b < total_bytes; ++b) { dst[b] = static_cast<byte>(255 - dst[b]); }
   }
 
   //
@@ -803,7 +812,7 @@ Result<bool> SipiIOJpeg::read(SipiImage *img,
     //
     int reduce = -1;
     bool redonly = false;
-    (void)size->get_size(img->nx, img->ny, nnx, nny, reduce, redonly);
+    (void)size->get_size(img->getNx(), img->getNy(), nnx, nny, reduce, redonly);
   }
 
   //
@@ -926,7 +935,7 @@ Result<SipiImgInfo> SipiIOJpeg::read_shape(const std::string &filepath)
       //
       auto *pos = (unsigned char *)memmem(marker->data, marker->data_length, "Exif\000\000", 6);
       if (pos != nullptr) {
-        img.exif = std::make_shared<Exif>(pos + 6, marker->data_length - (pos - marker->data) - 6);
+        img.set_exif(std::make_shared<Exif>(pos + 6, marker->data_length - (pos - marker->data) - 6));
       }
 
       //
@@ -945,7 +954,7 @@ Result<SipiImgInfo> SipiIOJpeg::read_shape(const std::string &filepath)
           const unsigned char *xmp_start = pos + kXmpNsLen;
           if (xmp_start < data_end) {
             const size_t xmp_len = data_end - xmp_start;
-            img.xmp = std::make_shared<Xmp>(std::string((const char *)xmp_start, xmp_len));
+            img.set_xmp(std::make_shared<Xmp>(std::string((const char *)xmp_start, xmp_len)));
           }
         } catch (const std::exception &err) {
           log_warn("Failed to parse XMP metadata from JPEG (read_shape): %s", err.what());
@@ -975,9 +984,9 @@ Result<SipiImgInfo> SipiIOJpeg::read_shape(const std::string &filepath)
   info.nc = cinfo.num_components;
   info.bps = cinfo.data_precision;
   info.orientation = TOPLEFT;
-  if (img.exif != nullptr) {
+  if (img.getExif() != nullptr) {
     uint16_t ori;
-    if (img.exif->getValByKey("Exif.Image.Orientation", ori)) { info.orientation = Orientation(ori); }
+    if (img.getExif()->getValByKey("Exif.Image.Orientation", ori)) { info.orientation = Orientation(ori); }
   }
   info.success = SipiImgInfo::DIMS;
   jpeg_destroy_decompress(&cinfo);
@@ -1106,51 +1115,54 @@ Result<void> SipiIOJpeg::write(SipiImage *img, const OutputSink &sink, const Sip
     jpeg_file_dest(&cinfo, file_buffer.get(), destmgr.get());
   }
 
-  cinfo.image_width = (int)img->nx;
-  cinfo.image_height = (int)img->ny;
-  cinfo.input_components = (int)img->nc;
-  switch (img->photo) {
+  cinfo.image_width = (int)img->getNx();
+  cinfo.image_height = (int)img->getNy();
+  cinfo.input_components = (int)img->getNc();
+  switch (img->getPhoto()) {
   case PhotometricInterpretation::MINISWHITE:
   case PhotometricInterpretation::MINISBLACK: {
-    if (img->nc != 1) {
+    if (img->getNc() != 1) {
       jpeg_destroy_compress(&cinfo);
       return std::unexpected(SipiValueError{ ErrorCode::kUnsupportedFormat,
-        "Cannot write JPEG: grayscale (MINISBLACK) requires 1 channel, got " + std::to_string(img->nc)
-          + " (dimensions: " + std::to_string(img->nx) + "x" + std::to_string(img->ny)
-          + ", bps: " + std::to_string(img->bps) + ")" });
+        "Cannot write JPEG: grayscale (MINISBLACK) requires 1 channel, got " + std::to_string(img->getNc())
+          + " (dimensions: " + std::to_string(img->getNx()) + "x" + std::to_string(img->getNy())
+          + ", bps: " + std::to_string(img->getBps()) + ")" });
     }
     cinfo.in_color_space = JCS_GRAYSCALE;
     cinfo.jpeg_color_space = JCS_GRAYSCALE;
     break;
   }
   case PhotometricInterpretation::RGB: {
-    if (img->nc != 3) {
+    if (img->getNc() != 3) {
       jpeg_destroy_compress(&cinfo);
       return std::unexpected(SipiValueError{ ErrorCode::kUnsupportedFormat,
-        "Cannot write JPEG: RGB requires 3 channels, got " + std::to_string(img->nc) + " (dimensions: "
-          + std::to_string(img->nx) + "x" + std::to_string(img->ny) + ", bps: " + std::to_string(img->bps) + ")" });
+        "Cannot write JPEG: RGB requires 3 channels, got " + std::to_string(img->getNc()) + " (dimensions: "
+          + std::to_string(img->getNx()) + "x" + std::to_string(img->getNy()) + ", bps: "
+          + std::to_string(img->getBps()) + ")" });
     }
     cinfo.in_color_space = JCS_RGB;
     cinfo.jpeg_color_space = JCS_RGB;
     break;
   }
   case PhotometricInterpretation::SEPARATED: {
-    if (img->nc != 4) {
+    if (img->getNc() != 4) {
       jpeg_destroy_compress(&cinfo);
       return std::unexpected(SipiValueError{ ErrorCode::kUnsupportedFormat,
-        "Cannot write JPEG: CMYK (SEPARATED) requires 4 channels, got " + std::to_string(img->nc) + " (dimensions: "
-          + std::to_string(img->nx) + "x" + std::to_string(img->ny) + ", bps: " + std::to_string(img->bps) + ")" });
+        "Cannot write JPEG: CMYK (SEPARATED) requires 4 channels, got " + std::to_string(img->getNc())
+          + " (dimensions: " + std::to_string(img->getNx()) + "x" + std::to_string(img->getNy()) + ", bps: "
+          + std::to_string(img->getBps()) + ")" });
     }
     cinfo.in_color_space = JCS_CMYK;
     cinfo.jpeg_color_space = JCS_CMYK;
     break;
   }
   case PhotometricInterpretation::YCBCR: {
-    if (img->nc != 3) {
+    if (img->getNc() != 3) {
       jpeg_destroy_compress(&cinfo);
       return std::unexpected(SipiValueError{ ErrorCode::kUnsupportedFormat,
-        "Cannot write JPEG: YCbCr requires 3 channels, got " + std::to_string(img->nc) + " (dimensions: "
-          + std::to_string(img->nx) + "x" + std::to_string(img->ny) + ", bps: " + std::to_string(img->bps) + ")" });
+        "Cannot write JPEG: YCbCr requires 3 channels, got " + std::to_string(img->getNc()) + " (dimensions: "
+          + std::to_string(img->getNx()) + "x" + std::to_string(img->getNy()) + ", bps: "
+          + std::to_string(img->getBps()) + ")" });
     }
     cinfo.in_color_space = JCS_YCbCr;
     cinfo.jpeg_color_space = JCS_YCbCr;
@@ -1165,9 +1177,9 @@ Result<void> SipiIOJpeg::write(SipiImage *img, const OutputSink &sink, const Sip
   default: {
     jpeg_destroy_compress(&cinfo);
     return std::unexpected(SipiValueError{ ErrorCode::kUnsupportedFormat,
-      "Cannot write JPEG: unsupported colorspace " + to_string(img->photo) + " (dimensions: " + std::to_string(img->nx)
-        + "x" + std::to_string(img->ny) + ", channels: " + std::to_string(img->nc)
-        + ", bps: " + std::to_string(img->bps) + ")" });
+      "Cannot write JPEG: unsupported colorspace " + to_string(img->getPhoto()) + " (dimensions: "
+        + std::to_string(img->getNx()) + "x" + std::to_string(img->getNy())
+        + ", channels: " + std::to_string(img->getNc()) + ", bps: " + std::to_string(img->getBps()) + ")" });
   }
   }
   cinfo.write_Adobe_marker = TRUE;
@@ -1193,8 +1205,9 @@ Result<void> SipiIOJpeg::write(SipiImage *img, const OutputSink &sink, const Sip
   // Markers must be written in sequence: APP0, APP1, APP2, ..., APP15
   //
 
-  if (img->exif != nullptr) {
-    std::vector<unsigned char> buf = img->exif->exifBytes();
+  std::shared_ptr<Exif> exif = img->getExif();
+  if (exif != nullptr) {
+    std::vector<unsigned char> buf = exif->exifBytes();
     if (buf.size() <= 65535) {
       char start[] = "Exif\000\000";
       size_t start_l = sizeof(start) - 1;
@@ -1206,8 +1219,9 @@ Result<void> SipiIOJpeg::write(SipiImage *img, const OutputSink &sink, const Sip
     }
   }
 
-  if (img->xmp != nullptr) {
-    std::string buf = img->xmp->xmpBytes();
+  std::shared_ptr<Xmp> xmp = img->getXmp();
+  if (xmp != nullptr) {
+    std::string buf = xmp->xmpBytes();
     if ((!buf.empty()) && (buf.size() <= 65535)) {
       char start[] = "http://ns.adobe.com/xap/1.0/\000";
       size_t start_l = sizeof(start) - 1;
@@ -1220,13 +1234,14 @@ Result<void> SipiIOJpeg::write(SipiImage *img, const OutputSink &sink, const Sip
 
   Essentials es = img->essential_metadata();
 
-  if ((img->icc != nullptr) || es.fields().use_icc) {
+  std::shared_ptr<Icc> image_icc = img->getIcc();
+  if ((image_icc != nullptr) || es.fields().use_icc) {
     std::vector<unsigned char> buf;
     try {
       if (es.fields().use_icc) {
         buf = es.fields().icc_profile;
       } else {
-        buf = img->icc->iccBytes();
+        buf = image_icc->iccBytes();
       }
     } catch (SipiError &err) {
       log_err("Error writing ICC profile in JPEG: %s", err.what());
@@ -1255,8 +1270,9 @@ Result<void> SipiIOJpeg::write(SipiImage *img, const OutputSink &sink, const Sip
     if (n_towrite != 0) { log_warn("Incomplete JPEG ICC write: %u bytes remaining", n_towrite); }
   }
 
-  if (img->iptc != nullptr) {
-    std::vector<unsigned char> buf = img->iptc->iptcBytes();
+  std::shared_ptr<Iptc> iptc = img->getIptc();
+  if (iptc != nullptr) {
+    std::vector<unsigned char> buf = iptc->iptcBytes();
     if (buf.size() <= 65535) {
       char start[] = " Photoshop 3.0\0008BIM\004\004\000\000";
       size_t start_l = sizeof(start) - 1;
@@ -1280,10 +1296,11 @@ Result<void> SipiIOJpeg::write(SipiImage *img, const OutputSink &sink, const Sip
   // (lines 1228-1261) but the COM marker emission has been removed
   // (DEV-6379).
 
-  row_stride = img->nx * img->nc;
+  row_stride = img->getNx() * img->getNc();
+  byte *pixel_data = img->pixels_writable().data();
 
   while (cinfo.next_scanline < cinfo.image_height) {
-    row_pointer[0] = &img->pixels[cinfo.next_scanline * row_stride];
+    row_pointer[0] = pixel_data + cinfo.next_scanline * row_stride;
     (void)jpeg_write_scanlines(&cinfo, row_pointer, 1);
   }
 
