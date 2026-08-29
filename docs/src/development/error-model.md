@@ -73,10 +73,13 @@ lands, the exception it still throws) into its own failure vocabulary:
   Lua-visible error string; there is no HTTP status or Sentry report on this
   surface.
 - **CLI offline verbs** (`src/cli/cpp/cli_app.cpp`,
-  `src/cli/cpp/commands/verify.cpp`, `convert_access_file.cpp`) —
-  `diagnostic_message()` goes to stderr; the exit code is derived from
-  `HttpStatusClass` (client-class failures and internal failures map to
-  distinct non-zero codes).
+  `src/cli/cpp/commands/convert_access_file.cpp`, `convert_service_file.cpp`,
+  `verify.cpp`, `health.cpp`) — `diagnostic_message()` reaches the operator
+  through the verb's own reporting path: `log_err` to stderr, plus the
+  optional `--json` report on `sipi convert` (`emit_json_report`) or
+  `report_error` on `convert access-file`. The exit code is a plain binary
+  `EXIT_SUCCESS`/`EXIT_FAILURE` — a richer `HttpStatusClass`-derived exit-code
+  mapping is not implemented today.
 
 ## Error-variant principle
 

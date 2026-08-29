@@ -268,6 +268,8 @@ C++ engine:
 | Engine errors to the client | The engine returns a `SipiStatus` over the FFI seam; the Rust shell maps it to an axum HTTP response |
 | Resource exhaustion (OOM) | Catch `std::bad_alloc`, return an error status over the seam, log, continue serving |
 
+A new fallible operation in the image layer (`src/image/`, `src/image_processing/`, `src/format_handlers/`, `src/metadata/`) returns `Result<T>` — it does not throw. Exceptions stay reserved for `std::bad_alloc` and genuine logic-bug invariants (a condition only a caller passing wrong arguments can reach). `[[nodiscard]]` is mandatory on every `Result`-returning function, no exceptions — enforced by clang-tidy's `bugprone-unused-return-value` check, which covers `std::expected` in its default watched-type list and, unlike `[[nodiscard]]` alone, also flags a `(void)`-cast used to silence the warning. See [ADR-0024](docs/adr/0024-value-based-image-errors.md) for the model and [`docs/src/development/error-model.md`](docs/src/development/error-model.md) for the per-seam accessors.
+
 ## Docker
 
 - Build: `bazel run //src:image_load` (per-arch); `crane index append`
