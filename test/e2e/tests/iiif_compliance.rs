@@ -1659,7 +1659,7 @@ fn progressive_jpeg_input() {
 
 #[test]
 fn tiff_jpeg_compression_input() {
-    // TIFF with JPEG compression (known edge case fixture).
+    // TIFF with JPEG compression.
     let srv = server();
 
     // Copy from knora directory to unit for auth-free access
@@ -1684,30 +1684,13 @@ fn tiff_jpeg_compression_input() {
     let status = resp.status().as_u16();
     let _ = std::fs::remove_file(&dst);
 
-    if status == 200 {
-        let bytes = resp.bytes().expect("read TIFF JPEG response body");
-        if !bytes.is_empty() {
-            if let Ok(img) = image::load_from_memory(&bytes) {
-                let (w, h) = img.dimensions();
-                assert!(w > 0 && h > 0);
-            }
-        }
-    } else {
-        // Known issue: TIFF with JPEG compression may not be fully supported.
-        assert!(
-            status == 500 || status == 400,
-            "TIFF JPEG compression should return 200 or error, got {}",
-            status
-        );
+    assert_eq!(
+        status, 200,
+        "TIFF JPEG compression input should decode successfully"
+    );
 
-        // Verify server is still responsive
-        let health = client()
-            .get(format!(
-                "{}/unit/lena512.jp2/full/max/0/default.jpg",
-                srv.base_url
-            ))
-            .send()
-            .expect("server should still respond after TIFF JPEG error");
-        assert_eq!(health.status().as_u16(), 200);
-    }
+    let bytes = resp.bytes().expect("read TIFF JPEG response body");
+    let img = image::load_from_memory(&bytes).expect("decode returned JPEG");
+    let (w, h) = img.dimensions();
+    assert!(w > 0 && h > 0);
 }

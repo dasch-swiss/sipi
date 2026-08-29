@@ -889,6 +889,18 @@ static Result<std::vector<T>> read_tiled_data(TIFF *tif, int32_t roi_x, int32_t 
   }
   return inbuf;
 }
+// TIFFTAG_JPEGCOLORMODE is a pseudo-tag owned by libtiff's JPEG codec and exists
+// only while that codec is bound to the directory. TIFFSetDirectory re-binds the
+// codec for the target directory and libtiff resets the pseudo-tag to
+// JPEGCOLORMODE_RAW, so it must be re-requested after every directory switch on a
+// JPEG-compressed TIFF, or TIFFReadScanline rejects downsampled JPEG data.
+static void set_jpeg_colormode_if_jpeg(TIFF *tif)
+{
+  uint16_t compression = COMPRESSION_NONE;
+  TIFF_GET_FIELD(tif, TIFFTAG_COMPRESSION, &compression, COMPRESSION_NONE);
+  if (compression == COMPRESSION_JPEG) { TIFFSetField(tif, TIFFTAG_JPEGCOLORMODE, JPEGCOLORMODE_RGB); }
+}
+
 // get the resolutions of pyramid if available
 std::vector<SubImageInfo> read_resolutions(uint64_t image_width, TIFF *tif)
 {
@@ -908,6 +920,7 @@ std::vector<SubImageInfo> read_resolutions(uint64_t image_width, TIFF *tif)
   } while (TIFFReadDirectory(tif));
 
   TIFFSetDirectory(tif, 0);
+  set_jpeg_colormode_if_jpeg(tif);
 
   return resolutions;
 }
@@ -960,13 +973,7 @@ Result<bool> SipiIOTiff::read(SipiImage *img,
   if (tif_guard != nullptr) {
     TIFF *tif = tif_guard.get();
 
-    // TIFFTAG_JPEGCOLORMODE is a pseudo-tag owned by libtiff's JPEG codec and
-    // exists only while that codec is bound to the directory, so requesting
-    // RGB conversion is meaningful -- and accepted -- only for JPEG-compressed
-    // TIFFs.
-    uint16_t compression = COMPRESSION_NONE;
-    TIFF_GET_FIELD(tif, TIFFTAG_COMPRESSION, &compression, COMPRESSION_NONE);
-    if (compression == COMPRESSION_JPEG) { TIFFSetField(tif, TIFFTAG_JPEGCOLORMODE, JPEGCOLORMODE_RGB); }
+    set_jpeg_colormode_if_jpeg(tif);
 
     //
     // OK, it's a TIFF file
@@ -1005,6 +1012,16 @@ Result<bool> SipiIOTiff::read(SipiImage *img,
       img->photo = PhotometricInterpretation::MINISBLACK;
     } else {
       img->photo = static_cast<PhotometricInterpretation>(stmp);
+    }
+
+    // With TIFFTAG_JPEGCOLORMODE set to JPEGCOLORMODE_RGB, libtiff's JPEG codec
+    // converts YCbCr scanlines to RGB before handing them back; TIFFTAG_PHOTOMETRIC
+    // keeps reporting the file's on-disk YCbCr encoding regardless. img->photo drives
+    // downstream colorspace/ICC handling, so it must track the decoded pixel layout.
+    uint16_t decode_compression = COMPRESSION_NONE;
+    TIFF_GET_FIELD(tif, TIFFTAG_COMPRESSION, &decode_compression, COMPRESSION_NONE);
+    if (decode_compression == COMPRESSION_JPEG && img->photo == PhotometricInterpretation::YCBCR) {
+      img->photo = PhotometricInterpretation::RGB;
     }
 
     //
@@ -1331,6 +1348,7 @@ Result<bool> SipiIOTiff::read(SipiImage *img,
 
       level = select_pyramid_level(resolutions, reduce);
       TIFFSetDirectory(tif, level);
+      set_jpeg_colormode_if_jpeg(tif);
 
       img->nx = resolutions[level].width;
       img->ny = resolutions[level].height;

@@ -408,17 +408,17 @@ TEST(SipiImage, CMYK_With_Alpha_Conversion)
   ASSERT_NO_THROW(img2.write("png", tif_cmyk_with_alpha_converted_to_png));
 }
 
-// BROKEN! See the remark about "TIFFSetDirectory(tif, 0);" in SipiIOTiff.cpp
-// Convert Tiff with JPEG compression and automatic YCrCb conversion via TIFFTAG_JPEGCOLORMODE = JPEGCOLORMODE_RGB
-/* TEST(SipiImage, TiffJpegAutoRgbConvert) */
-/* { */
-/*   Sipi::SipiIOTiff::initLibrary(); */
+// Convert TIFF with JPEG compression and automatic YCbCr conversion via
+// TIFFTAG_JPEGCOLORMODE = JPEGCOLORMODE_RGB.
+TEST(SipiImage, TiffJpegAutoRgbConvert)
+{
+  Sipi::SipiIOTiff::initLibrary();
 
-/*   Sipi::SipiImage img; */
+  Sipi::SipiImage img;
 
-/*   EXPECT_NO_THROW(img.read(tiffJpegScanlineBug)); */
-/*   EXPECT_NO_THROW(img.write("jpx", tmp_dir + "tiffJpegScanlineBug.jp2")); */
-/* } */
+  EXPECT_NO_THROW(img.read(tiffJpegScanlineBug));
+  EXPECT_NO_THROW(img.write("jpx", tmp_dir + "tiffJpegScanlineBug.jp2"));
+}
 
 double errorPercent(double actual, double expected) { return abs((actual - expected) / expected); }
 
