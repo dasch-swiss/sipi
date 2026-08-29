@@ -535,18 +535,23 @@ extern "C" int sipi_cli_main(int argc, char **argv)
     }
 
     // Capture the per-channel delta from the original pixels before the
-    // `img1 -= img2` visualization step below rewrites img1 into the
-    // normalized diff (which would otherwise corrupt the reported avg/max).
+    // `Sipi::processing::subtract` visualization step below rewrites img1
+    // into the normalized diff (which would otherwise corrupt the reported
+    // avg/max).
     const std::optional<Sipi::PixelDelta> delta = Sipi::processing::maxPixelDelta(img1, img2);
 
     if (!delta.has_value()) {
       // Differing channel count / bit depth / photometric interpretation:
-      // no meaningful per-channel delta, and `img1 -= img2` would throw.
+      // no meaningful per-channel delta, and `Sipi::processing::subtract`
+      // would return an error.
       log_info("Files differ: dimensions or format not comparable.");
       return -1;
     }
 
-    img1 -= img2;
+    if (auto r = Sipi::processing::subtract(img1, img2); !r) {
+      log_err("sipi: unhandled exception: %s", r.error().diagnostic_message().c_str());
+      return EXIT_FAILURE;
+    }
     if (auto r = img1.write("tif", "diff.tif"); !r) {
       log_err("sipi: unhandled exception: %s", r.error().diagnostic_message().c_str());
       return EXIT_FAILURE;

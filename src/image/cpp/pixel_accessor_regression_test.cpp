@@ -4,7 +4,7 @@
  *
  * Regression test — `SipiImage::getPixel`/`setPixel` index the pixel buffer
  * row-major (`nc * (y * nx + x) + c`), matching the codec store written by
- * the format handlers and read by `operator-=`/`maxPixelDelta`.
+ * the format handlers and read by `processing::subtract`/`maxPixelDelta`.
  *
  * Before the fix the accessors indexed transposed (`x * nx + y`). For a
  * square image both formulae cover the same index set, so a setPixel ->
