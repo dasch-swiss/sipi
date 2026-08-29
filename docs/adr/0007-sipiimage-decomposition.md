@@ -51,7 +51,8 @@ The hub dissolves into named packages, not a single successor. Full disposition:
 | the ~12 processing methods (crop/scale/rotate/colour/channel/bit-depth/watermark/arithmetic) | free functions in `src/image_processing/cpp/` (`//src/image_processing`) |
 | [`resample.{cc,h}`](../../src/resample.h), [`process_benchmark.cpp`](../../src/process_benchmark.cpp) | `src/image_processing/cpp/` (benchmark co-located per ADR-0003) |
 | [`SipiCache.{h,cpp}`](../../src/SipiCache.h) | `src/cache/cpp/` (`//src/cache`) |
-| [`SipiCommon.{h,cpp}`](../../src/SipiCommon.h), [`SipiFilenameHash.{h,cpp}`](../../src/SipiFilenameHash.h) | `src/util/cpp/` |
+| `SipiCommon.{h,cpp}` | deleted — empty translation units |
+| [`SipiFilenameHash.{h,cpp}`](../../src/util/cpp/SipiFilenameHash.h) | `src/util/cpp/` |
 | [`SipiConf.{h,cpp}`](../../src/SipiConf.cpp) | `src/ffi/cpp/` |
 | [`SipiReport.cpp`](../../src/SipiReport.cpp) | `src/cli/cpp/` |
 | [`SipiError.{h,cpp}`](../../src/SipiError.h) | `src/error/cpp/` (`//src/error`) |
@@ -79,7 +80,7 @@ Two points in this disposition are non-obvious and need their reasoning spelled 
 
 The new topology must satisfy these `bazel query` invariants (same style as [ARCH-MAP's iiifparser FFI-freedom check](../../ARCH-MAP.md)):
 
-- `bazel query 'deps(//src/image_processing/...)'` resolves only to `{image, error, util, logging, observability}` — no `format_handlers`, no `ffi`, no Kakadu/libtiff/etc.
+- `bazel query 'deps(//src/image_processing/...)'` resolves only to `{image, error, util, logging, observability, metadata}` — no `format_handlers`, no `ffi`, no Kakadu/libtiff/etc.
 - `bazel query 'somepath(//src/image, //src/image_processing)'` is empty — `image` never depends on `image_processing`, even transitively.
 - `bazel query 'deps(//src/error/...)'` matches its minimal documented set (stdlib only) — nothing pulls `image` back in through `error`.
 
