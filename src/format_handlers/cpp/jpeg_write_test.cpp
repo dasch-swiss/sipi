@@ -54,8 +54,8 @@ TEST(JpegWrite, WriteToFileProducesValidJpeg)
   ASSERT_TRUE(file_exists(src)) << "Test image not found: " << src;
 
   Sipi::SipiImage img;
-  ASSERT_NO_THROW(img.read(src));
-  ASSERT_NO_THROW(img.write("jpg", dst));
+  ASSERT_TRUE(img.read(src).has_value());
+  ASSERT_TRUE(img.write("jpg", dst).has_value());
 
   EXPECT_TRUE(file_exists(dst));
   EXPECT_GT(file_size(dst), 0u);
@@ -75,12 +75,12 @@ TEST(JpegWrite, DifferentQualitySettingsProduceDifferentSizes)
   Sipi::SipiCompressionParams params_high = {{Sipi::JPEG_QUALITY, "95"}};
 
   Sipi::SipiImage img_low;
-  img_low.read(src);
-  img_low.write("jpg", dst_low, &params_low);
+  ASSERT_TRUE(img_low.read(src).has_value());
+  ASSERT_TRUE(img_low.write("jpg", dst_low, &params_low).has_value());
 
   Sipi::SipiImage img_high;
-  img_high.read(src);
-  img_high.write("jpg", dst_high, &params_high);
+  ASSERT_TRUE(img_high.read(src).has_value());
+  ASSERT_TRUE(img_high.write("jpg", dst_high, &params_high).has_value());
 
   ASSERT_TRUE(file_exists(dst_low));
   ASSERT_TRUE(file_exists(dst_high));
@@ -101,14 +101,14 @@ TEST(JpegWrite, ReadWriteRoundtripPreservesDimensions)
   ASSERT_TRUE(file_exists(src));
 
   Sipi::SipiImage img_orig;
-  img_orig.read(src);
+  ASSERT_TRUE(img_orig.read(src).has_value());
   size_t orig_nx = img_orig.getNx();
   size_t orig_ny = img_orig.getNy();
 
-  img_orig.write("jpg", dst);
+  ASSERT_TRUE(img_orig.write("jpg", dst).has_value());
 
   Sipi::SipiImage img_rt;
-  img_rt.read(dst);
+  ASSERT_TRUE(img_rt.read(dst).has_value());
 
   EXPECT_EQ(img_rt.getNx(), orig_nx);
   EXPECT_EQ(img_rt.getNy(), orig_ny);
@@ -140,9 +140,12 @@ TEST(JpegRead, TruncatedJpegHandledCleanly)
     ::close(fd_out);
   }
 
-  // Reading a truncated JPEG should throw an error, not crash
+  // Reading a truncated JPEG should fail cleanly, not crash. The setjmp
+  // landing site funnels every libjpeg decode error into a single error
+  // Result (kDecodeFailed) — nothing throws for this fixture.
   Sipi::SipiImage img;
-  EXPECT_ANY_THROW(img.read(truncated));
+  const auto r = img.read(truncated);
+  EXPECT_FALSE(r.has_value());
 
   std::remove(truncated.c_str());
 }

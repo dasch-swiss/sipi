@@ -107,7 +107,7 @@ std::ptrdiff_t tiff_first_ifd_offset(const std::string &path)
 Sipi::SipiImage make_service_file_image(const std::string &src)
 {
   Sipi::SipiImage img;
-  img.readSource(src);
+  EXPECT_TRUE(img.readSource(src).has_value());
 
   Sipi::EssentialsFields f;
   f.origname = src;
@@ -139,7 +139,7 @@ TEST(EssentialsPrefixInvariant, JP2UuidBoxWithin64KBPrefix)
   auto img = make_service_file_image(src);
   // Essentials packet on the image (set in make_service_file_image) is the
   // writer's emit gate per ADR-0010. No FileRole marker is passed.
-  ASSERT_NO_THROW(img.write("jpx", dst, nullptr));
+  ASSERT_TRUE(img.write("jpx", dst, nullptr).has_value());
   ASSERT_TRUE(file_exists(dst));
 
   const auto offset = find_sipi_uuid_in_prefix(dst, kPrefixBudgetBytes);
@@ -170,7 +170,7 @@ TEST(EssentialsPrefixInvariant, DISABLED_TIFFFirstIFDWithin64KBPrefix)
   // SIPI tag emission per the writer gate + ADR-0009).
   Sipi::SipiCompressionParams params;
   params[Sipi::TIFF_Pyramid] = "yes";
-  ASSERT_NO_THROW(img.write("tif", dst, &params));
+  ASSERT_TRUE(img.write("tif", dst, &params).has_value());
   ASSERT_TRUE(file_exists(dst));
 
   const auto ifd_offset = tiff_first_ifd_offset(dst);
@@ -194,7 +194,7 @@ TEST(EssentialsPrefixInvariant, TIFFFirstIFDOffsetIsResolvable)
   auto img = make_service_file_image(src);
   Sipi::SipiCompressionParams params;
   params[Sipi::TIFF_Pyramid] = "yes";
-  ASSERT_NO_THROW(img.write("tif", dst, &params));
+  ASSERT_TRUE(img.write("tif", dst, &params).has_value());
   ASSERT_TRUE(file_exists(dst));
 
   const auto ifd_offset = tiff_first_ifd_offset(dst);

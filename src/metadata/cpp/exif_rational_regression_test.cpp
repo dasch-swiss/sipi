@@ -42,7 +42,7 @@ TEST(ExifRationalRegression, LensSpecificationArrayRoundTrips)
 {
   Sipi::SipiIOTiff::initLibrary();
   Sipi::SipiImage img;
-  ASSERT_NO_THROW(img.read(kFixturePath));
+  ASSERT_TRUE(img.read(kFixturePath).has_value());
   auto exif = img.getExif();
   ASSERT_NE(exif, nullptr);
 

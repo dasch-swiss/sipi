@@ -39,7 +39,7 @@ namespace {
 Sipi::SipiImage load(const std::string &rel)
 {
   Sipi::SipiImage img;
-  img.read(sipi::test::data_dir() + "/images/" + rel);
+  if (!img.read(sipi::test::data_dir() + "/images/" + rel)) { std::abort(); }
   return img;
 }
 

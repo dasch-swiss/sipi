@@ -80,7 +80,7 @@ TEST(JpegMarkerRegression, XmpTruncatedReadShapeDoesNotCrash)
 TEST(JpegMarkerRegression, XmpTruncatedFullReadDoesNotCrash)
 {
   Sipi::SipiImage img;
-  EXPECT_NO_THROW(img.read(kXmpTruncated));
+  EXPECT_TRUE(img.read(kXmpTruncated).has_value());
 }
 
 // -------------------------------------------------------------------------
@@ -94,7 +94,7 @@ TEST(JpegMarkerRegression, XmpTruncatedFullReadDoesNotCrash)
 TEST(JpegMarkerRegression, IccShortApp2ReadDoesNotCrash)
 {
   Sipi::SipiImage img;
-  EXPECT_NO_THROW(img.read(kIccShortApp2));
+  EXPECT_TRUE(img.read(kIccShortApp2).has_value());
 }
 
 // -------------------------------------------------------------------------
@@ -114,7 +114,7 @@ TEST(JpegMarkerRegression, PhotoshopShortApp13ReadShapeDoesNotCrash)
 TEST(JpegMarkerRegression, PhotoshopShortApp13FullReadDoesNotCrash)
 {
   Sipi::SipiImage img;
-  EXPECT_NO_THROW(img.read(kPhotoshopShortApp13));
+  EXPECT_TRUE(img.read(kPhotoshopShortApp13).has_value());
 }
 
 // -------------------------------------------------------------------------
@@ -145,5 +145,5 @@ TEST(JpegMarkerRegression, PhotoshopOvershootApp13ReadShapeDoesNotCrash)
 TEST(JpegMarkerRegression, PhotoshopOvershootApp13FullReadDoesNotCrash)
 {
   Sipi::SipiImage img;
-  EXPECT_NO_THROW(img.read(kPhotoshopOvershootApp13));
+  EXPECT_TRUE(img.read(kPhotoshopOvershootApp13).has_value());
 }

@@ -448,9 +448,10 @@ public:
    * \param[in] force_bps_8 We want in any case a 8 Bit/sample image. Reduce if necessary. Default is false.
    * \param[in] scaling_quality Quality of the scaling algorithm. Default is HIGH.
    *
-   * \throws SipiError
+   * \return `Result<void>`, or a `SipiValueError` if no registered format
+   *   handler recognises the file, or a handler recognised it and failed to decode it.
    */
-  void read(const std::string &filepath,
+  [[nodiscard]] Result<void> read(const std::string &filepath,
     const std::shared_ptr<SipiRegion> &region = nullptr,
     const std::shared_ptr<SipiSize> &size = nullptr,
     bool force_bps_8 = false,
@@ -474,8 +475,9 @@ public:
    * \param[in] filepath A string containing the path to the source image file
    * \param[in] region Optional region of interest — the image will be cropped
    * \param[in] size Optional size — the image will be scaled accordingly
+   * \return `Result<void>`, propagating `read`'s failure.
    */
-  void readSource(const std::string &filepath,
+  [[nodiscard]] Result<void> readSource(const std::string &filepath,
     const std::shared_ptr<SipiRegion> &region = nullptr,
     const std::shared_ptr<SipiSize> &size = nullptr);
 
@@ -485,7 +487,7 @@ public:
    * command — not by readSource itself — so this overload behaves
    * identically to the 3-arg form. Kept for the existing Lua-side call site.
    */
-  void readSource(const std::string &filepath,
+  [[nodiscard]] Result<void> readSource(const std::string &filepath,
     const std::shared_ptr<SipiRegion> &region,
     const std::shared_ptr<SipiSize> &size,
     const std::string &origname);
@@ -522,14 +524,22 @@ public:
    * Any other value throws std::out_of_range.
    * \param[in] sink Where the encoded bytes go: a FilePath (file, or stdout via
    * "-"/"stdout:"), a CallbackSink, or a TeeSink.
+   * \return `Result<void>`, or a `SipiValueError` if the handler failed to encode
+   *   or write the image.
    */
-  void write(const std::string &ftype, const OutputSink &sink, const SipiCompressionParams *params = nullptr);
+  [[nodiscard]] Result<void> write(const std::string &ftype,
+    const OutputSink &sink,
+    const SipiCompressionParams *params = nullptr);
 
   /*!
    * Convenience overload: write to a filesystem path (or stdout via "-" /
    * "stdout:"). Equivalent to write(ftype, FilePath{filepath}, params).
+   *
+   * \return `Result<void>`, propagating `write`'s failure.
    */
-  void write(const std::string &ftype, const std::string &filepath, const SipiCompressionParams *params = nullptr);
+  [[nodiscard]] Result<void> write(const std::string &ftype,
+    const std::string &filepath,
+    const SipiCompressionParams *params = nullptr);
 
 
   /*!

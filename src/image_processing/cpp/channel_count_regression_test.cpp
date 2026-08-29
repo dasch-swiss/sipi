@@ -98,7 +98,7 @@ TEST(ConvertYcc, ConvertYcc16BitDoesNotOverflow)
 TEST(ConvertYcc, Decodes16BitYcbcrJp2EndToEnd)
 {
   SipiImage img;
-  ASSERT_NO_THROW(img.read(kYcbcr16Jp2));
+  ASSERT_TRUE(img.read(kYcbcr16Jp2).has_value());
 
   EXPECT_EQ(img.getNx(), 8u);
   EXPECT_EQ(img.getNy(), 8u);

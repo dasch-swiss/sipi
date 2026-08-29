@@ -53,7 +53,7 @@ const Sipi::SipiImage &master()
 {
   static const Sipi::SipiImage img = [] {
     Sipi::SipiImage i;
-    i.read(fixture("flat.tif"));
+    if (!i.read(fixture("flat.tif"))) { std::abort(); }
     return i;
   }();
   return img;
@@ -71,7 +71,7 @@ void encode(benchmark::State &state, const char *ftype, const Sipi::SipiCompress
     state.PauseTiming();
     Sipi::SipiImage img(master());
     state.ResumeTiming();
-    img.write(ftype, out, params);
+    if (!img.write(ftype, out, params)) { std::abort(); }
     benchmark::ClobberMemory();
   }
   std::remove(out.c_str());

@@ -302,6 +302,7 @@ namespace {
                                ? OutputSink{ TeeSink{ { OutputSink{ socket }, OutputSink{ FilePath{ cachefile_ } } } } }
                                : OutputSink{ socket };
 
+      Result<void> r;
       try {
         // Spans the encode AND the streamed write to the sink, so a slow client's
         // back-pressure counts toward this phase's duration (see SipiServeTimings).
@@ -309,28 +310,21 @@ namespace {
         switch (format_) {
         case SipiQualityFormat::JPG: {
           SipiCompressionParams qp = { { JPEG_QUALITY, std::to_string(jpeg_quality_) } };
-          img_.write("jpg", out, &qp);
+          r = img_.write("jpg", out, &qp);
           break;
         }
         case SipiQualityFormat::JP2:
-          img_.write("jpx", out);
+          r = img_.write("jpx", out);
           break;
         case SipiQualityFormat::TIF:
-          img_.write("tif", out);
+          r = img_.write("tif", out);
           break;
         case SipiQualityFormat::PNG:
-          img_.write("png", out);
+          r = img_.write("png", out);
           break;
         default:
           break;
         }
-      } catch (SipiImageClientAbortError &) {
-        // Client closed the socket mid-response (Traefik 499). Not a server
-        // error: drop the partial cache file, no Sentry.
-        if (caching) { ::unlink(cachefile_.c_str()); }
-        log_info("Client aborted HTTP response for %s", request_uri_.c_str());
-        Metrics::instance().client_disconnected_total.Increment();
-        return 1;
       } catch (SipiError &err) {
         if (caching) { ::unlink(cachefile_.c_str()); }
         capture_write_error(err.to_string());
@@ -340,6 +334,21 @@ namespace {
         if (caching) { ::unlink(cachefile_.c_str()); }
         capture_write_error(err.what());
         log_err("GET %s: error writing image: %s", request_uri_.c_str(), err.what());
+        return 1;
+      }
+
+      if (!r) {
+        const auto &err = r.error();
+        if (caching) { ::unlink(cachefile_.c_str()); }
+        if (err.code() == ErrorCode::kClientAbort) {
+          // Client closed the socket mid-response (Traefik 499). Not a server
+          // error: no Sentry.
+          log_info("Client aborted HTTP response for %s", request_uri_.c_str());
+          Metrics::instance().client_disconnected_total.Increment();
+          return 1;
+        }
+        capture_write_error(err.diagnostic_message());
+        log_err("GET %s: error writing image: %s", request_uri_.c_str(), err.diagnostic_message().c_str());
         return 1;
       }
 
@@ -694,7 +703,15 @@ std::expected<ServeResponse, SipiStatus>
   SipiImage img;
   try {
     PhaseTimer phase_timer(SIPI_PHASE_DECODE);
-    img.read(infile, region, size, quality_format.format() == SipiQualityFormat::JPG, eng.scaling_quality);
+    if (auto r = img.read(infile, region, size, quality_format.format() == SipiQualityFormat::JPG, eng.scaling_quality);
+        !r) {
+      ImageContext sentry_ctx;
+      sentry_ctx.input_file = infile;
+      sentry_ctx.file_size_bytes = get_file_size(infile);
+      populate_from_image(sentry_ctx, img);
+      report_value_error(req.report_error, req.report_ctx, r.error(), "read", sentry_ctx);
+      return std::unexpected(status_for(r.error()));
+    }
   } catch (const std::bad_alloc &) {
     Metrics::instance().memory_alloc_failures_total.Increment();
     ImageContext sentry_ctx;
@@ -703,6 +720,8 @@ std::expected<ServeResponse, SipiStatus>
     report_image_error(req.report_error, req.report_ctx, "std::bad_alloc during image read", "read", sentry_ctx);
     return std::unexpected(SipiStatus::InternalError);
   } catch (const SipiImageError &err) {
+    // Covers the allocation-guard and codec-boundary throws that stay exception-based
+    // (checked_buf_size_or_throw, memTiffOpen, Kakadu), not decode failures.
     ImageContext sentry_ctx;
     sentry_ctx.input_file = infile;
     sentry_ctx.file_size_bytes = get_file_size(infile);

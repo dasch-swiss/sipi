@@ -121,14 +121,19 @@ extern "C" SipiImageHandle *sipi_image_new(const char *path,
     auto handle = std::make_unique<SipiImageHandle>();
     handle->filename = imgpath;
     if (!original_str.empty()) {
-      handle->image.readSource(imgpath, reg, siz, original_str);
+      auto r = handle->image.readSource(imgpath, reg, siz, original_str);
+      if (!r) {
+        emit_str(err, err_ctx, r.error().client_message());
+        return nullptr;
+      }
     } else {
-      handle->image.read(imgpath, reg, siz);
+      auto r = handle->image.read(imgpath, reg, siz);
+      if (!r) {
+        emit_str(err, err_ctx, r.error().client_message());
+        return nullptr;
+      }
     }
     return handle.release();
-  } catch (const Sipi::SipiImageError &e) {
-    emit_str(err, err_ctx, e.message());
-    return nullptr;
   } catch (const Sipi::SipiError &e) {
     emit_str(err, err_ctx, e.message());
     return nullptr;
@@ -599,10 +604,9 @@ extern "C" int sipi_image_write(SipiImageHandle *img,
     if (!origname_str.empty() && !mimetype_str.empty()) {
       stamp_service_file(img, ftype_str, origname_str, mimetype_str, comp_params);
     }
-    try {
-      img->image.write(ftype_str, nz(path), comp_params.empty() ? nullptr : &comp_params);
-    } catch (const Sipi::SipiImageError &e) {
-      emit_str(err, err_ctx, e.message());
+    auto r = img->image.write(ftype_str, nz(path), comp_params.empty() ? nullptr : &comp_params);
+    if (!r) {
+      emit_str(err, err_ctx, r.error().client_message());
       return 1;
     }
     return static_cast<int>(Sipi::ffi::SipiStatus::Ok);
@@ -625,11 +629,10 @@ extern "C" int sipi_image_send(SipiImageHandle *img,
       emit_str(err, err_ctx, "invalid compression parameter");
       return 1;
     }
-    try {
-      img->image.write(
-        nz(ftype), Sipi::CallbackSink{ write, write_ctx }, comp_params.empty() ? nullptr : &comp_params);
-    } catch (const Sipi::SipiImageError &e) {
-      emit_str(err, err_ctx, e.message());
+    auto r = img->image.write(
+      nz(ftype), Sipi::CallbackSink{ write, write_ctx }, comp_params.empty() ? nullptr : &comp_params);
+    if (!r) {
+      emit_str(err, err_ctx, r.error().client_message());
       return 1;
     }
     return static_cast<int>(Sipi::ffi::SipiStatus::Ok);

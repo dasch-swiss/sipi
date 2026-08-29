@@ -98,7 +98,7 @@ TEST(CmdConvertAccessFile, DropsEssentialsOnServiceFileInput)
   // Re-read the output. The Essentials packet must be UNSET — JPEG is an
   // Access File format and never carries the packet.
   Sipi::SipiImage img;
-  img.read(access_file);
+  ASSERT_TRUE(img.read(access_file).has_value());
   EXPECT_FALSE(img.essential_metadata().is_set())
     << "Access File output must not carry the Essentials packet";
 }
@@ -121,7 +121,7 @@ TEST(CmdConvertAccessFile, NoEssentialsBoxInJp2Output)
   ASSERT_TRUE(file_exists(access_file));
 
   Sipi::SipiImage img;
-  img.read(access_file);
+  ASSERT_TRUE(img.read(access_file).has_value());
   EXPECT_FALSE(img.essential_metadata().is_set())
     << "JP2 Access File output must not carry the Essentials UUID box";
 }
@@ -199,14 +199,14 @@ TEST(CmdConvertAccessFile, AppliesRegionTransform)
   ASSERT_TRUE(file_exists(access_file));
 
   Sipi::SipiImage img;
-  img.read(access_file);
+  ASSERT_TRUE(img.read(access_file).has_value());
   EXPECT_EQ(img.getNx(), 100u);
   EXPECT_EQ(img.getNy(), 80u);
   EXPECT_FALSE(img.essential_metadata().is_set());
 }
 
-// 12.6 — Missing input: command catches SipiImageError from
-// readSource and exits non-zero without crashing.
+// 12.6 — Missing input: command handles readSource's failing Result
+// and exits non-zero without crashing.
 TEST(CmdConvertAccessFile, FailsOnMissingInput)
 {
   const std::string src = tmp_dir + "_afo_nonexistent_input.jp2";

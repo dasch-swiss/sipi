@@ -14,8 +14,8 @@
 
 #include "gtest/gtest.h"
 
+#include "error/SipiValueError.h"
 #include "image/SipiImage.h"
-#include "image/SipiImageError.h"
 #include "test_paths.h"
 
 namespace {
@@ -28,20 +28,28 @@ std::string malformed_path(const char *name)
 }// namespace
 
 // DEV-6063: a TIFF header claiming a width far beyond SipiIO's
-// kMaxDecodeDim must be rejected by validate_decode_dims() before any pixel
-// buffer is sized or allocated.
+// kMaxDecodeDim must be rejected before any pixel buffer is sized or
+// allocated. libtiff itself refuses to open the malformed directory
+// (TIFFOpen returns null), so the handler reports "not mine" and every
+// other registered handler agrees, which read() surfaces as the terminal
+// "no registered format handler recognised it" error.
 TEST(MalformedTiff, OversizedDimensionsThrows)
 {
   Sipi::SipiImage img;
-  EXPECT_THROW(img.read(malformed_path("tiff_oversized_dimensions.tif")), Sipi::SipiImageError);
+  const auto r = img.read(malformed_path("tiff_oversized_dimensions.tif"));
+  ASSERT_FALSE(r.has_value());
+  EXPECT_EQ(r.error().code(), Sipi::ErrorCode::kUnsupportedFormat);
 }
 
 // N6: a palette TIFF whose BitsPerSample (32) falls outside the supported
 // set must be rejected before the colormap length (1 << bps) is computed.
+// Same "TIFFOpen refuses the directory" mechanism as OversizedDimensionsThrows.
 TEST(MalformedTiff, ColormapUnsupportedBpsThrows)
 {
   Sipi::SipiImage img;
-  EXPECT_THROW(img.read(malformed_path("tiff_colormap_unsupported_bps.tif")), Sipi::SipiImageError);
+  const auto r = img.read(malformed_path("tiff_colormap_unsupported_bps.tif"));
+  ASSERT_FALSE(r.has_value());
+  EXPECT_EQ(r.error().code(), Sipi::ErrorCode::kUnsupportedFormat);
 }
 
 // N3: a grayscale TIFF with WhitePoint + TransferFunction (no embedded ICC
@@ -51,7 +59,7 @@ TEST(MalformedTiff, ColormapUnsupportedBpsThrows)
 TEST(MalformedTiff, TransferFunctionGrayscaleDecodesCleanly)
 {
   Sipi::SipiImage img;
-  ASSERT_NO_THROW(img.read(malformed_path("tiff_transferfunction_grayscale.tif")));
+  ASSERT_TRUE(img.read(malformed_path("tiff_transferfunction_grayscale.tif")).has_value());
   EXPECT_EQ(img.getNx(), 8U);
   EXPECT_EQ(img.getNy(), 8U);
 }
@@ -64,16 +72,14 @@ TEST(MalformedTiff, TransferFunctionGrayscaleDecodesCleanly)
 // unpackers do, so a decoded pixel value is not structurally guaranteed to
 // stay within the colormap's bounds; the validate-before-lookup guard added
 // at the palette-to-RGB expansion step (DEV-6065) must fail closed
-// (SipiImageError) rather than read past rcm/gcm/bcm if it ever doesn't.
-// Either outcome (clean decode or a thrown SipiImageError) is acceptable
-// here — the regression this guards against is a crash / OOB read.
+// (an error Result) rather than read past rcm/gcm/bcm if it ever doesn't.
+// Either outcome (clean decode or a rejected Result) is acceptable here —
+// the regression this guards against is a crash / OOB read.
 TEST(MalformedTiff, PaletteOneBitDoesNotCrash)
 {
   Sipi::SipiImage img;
-  try {
-    img.read(malformed_path("tiff_palette_1bit.tif"));
-  } catch (const Sipi::SipiImageError &) {
-    // Rejecting an out-of-range palette index is an acceptable outcome.
-  }
-  // Reaching this point without SIGSEGV/SIGABRT is the assertion.
+  // Rejecting an out-of-range palette index (delivered as an error Result) is
+  // an acceptable outcome, equally with a clean decode; reaching this point
+  // without SIGSEGV/SIGABRT is the assertion.
+  [[maybe_unused]] auto r = img.read(malformed_path("tiff_palette_1bit.tif"));
 }

@@ -125,22 +125,6 @@ private:
   std::source_location location_;//!< Source location where the error occurs
   std::string fullerrmsg_;
 };
-
-/*!
- * Signals that a write to an HTTP response failed because the peer is gone
- * (FIN, RST, or write timeout). Detected at the write site by catching
- * `shttps::OUTPUT_WRITE_FAIL` — the only thing `shttps::Connection`'s
- * `sendAndFlush` / `flush` raises on a socket-write failure. Every such
- * throw is a definitive abort, so no further `peerConnected()` check is
- * needed (POLLRDHUP misses RST and write-timeout aborts). The HTTP handler
- * uses the distinct type to skip Sentry capture — these are not
- * server-side errors.
- */
-class SipiImageClientAbortError final : public SipiImageError
-{
-public:
-  using SipiImageError::SipiImageError;
-};
 }// namespace Sipi
 
 #endif// SIPIIMAGEERROR_HPP

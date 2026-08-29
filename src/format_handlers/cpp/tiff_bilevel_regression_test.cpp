@@ -40,7 +40,7 @@ Sipi::SipiImage readFixture(const std::string &path,
 {
   Sipi::SipiIOTiff::initLibrary();
   Sipi::SipiImage img;
-  img.read(path, region, size);
+  EXPECT_TRUE(img.read(path, region, size).has_value());
   return img;
 }
 

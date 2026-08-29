@@ -42,7 +42,6 @@
 
 #include "error/SipiValueError.h"
 #include "image/SipiImage.h"
-#include "image/SipiImageError.h"
 #include "SipiIOJ2k.h"
 #include "test_paths.h"
 
@@ -51,7 +50,6 @@ namespace {
 using Sipi::ErrorCode;
 using Sipi::PhotometricInterpretation;
 using Sipi::SipiImage;
-using Sipi::SipiImageError;
 using Sipi::validate_j2k_palette_mapping;
 
 const std::string kPaletteJp2 = sipi::test::data_dir() + "/images/iso-15444-4/testfiles_jp2/file9.jp2";
@@ -124,7 +122,7 @@ TEST(J2kPaletteRegression, RejectsUndersizedPalette)
 TEST(J2kPaletteRegression, DecodesWellFormedPaletteJp2EndToEnd)
 {
   SipiImage img;
-  ASSERT_NO_THROW(img.read(kPaletteJp2));
+  ASSERT_TRUE(img.read(kPaletteJp2).has_value());
 
   EXPECT_EQ(img.getNx(), 768u);
   EXPECT_EQ(img.getNy(), 512u);
@@ -141,7 +139,9 @@ TEST(J2kPaletteRegression, DecodesWellFormedPaletteJp2EndToEnd)
 TEST(J2kPaletteRegression, RejectsUndersizedPaletteJp2EndToEnd)
 {
   SipiImage img;
-  EXPECT_THROW(img.read(kUndersizedPaletteJp2), SipiImageError);
+  auto result = img.read(kUndersizedPaletteJp2);
+  ASSERT_FALSE(result.has_value());
+  EXPECT_EQ(result.error().code(), ErrorCode::kMalformedInput);
 }
 
 }// namespace

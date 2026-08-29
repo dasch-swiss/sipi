@@ -208,7 +208,10 @@ extern "C" int sipi_cli_main(int argc, char **argv)
   auto run_query = [&]() -> int {
     set_cli_mode(true);
     Sipi::SipiImage img;
-    img.read(optInFile);
+    if (auto r = img.read(optInFile); !r) {
+      log_err("sipi: unhandled exception: %s", r.error().diagnostic_message().c_str());
+      return EXIT_FAILURE;
+    }
     std::cout << img << std::endl;
     return 0;
   };
@@ -315,8 +318,15 @@ extern "C" int sipi_cli_main(int argc, char **argv)
     // read the input image
     //
     Sipi::SipiImage img;
+    if (auto r = img.readSource(optInFile, region, size); !r) {
+      Sipi::observability::populate_from_image(sentry_ctx, img);
+      log_err("Error reading image: %s", r.error().diagnostic_message().c_str());
+      if (optJsonOutput) {
+        Sipi::emit_json_report(std::cout, sentry_ctx, r.error().diagnostic_message(), std::string{ "read" });
+      }
+      return EXIT_FAILURE;
+    }
     try {
-      img.readSource(optInFile, region, size);
       if (format == "jpg") {
         if (auto r = Sipi::processing::to8bps(img); !r) {
           Sipi::observability::populate_from_image(sentry_ctx, img);
@@ -335,11 +345,6 @@ extern "C" int sipi_cli_main(int argc, char **argv)
           return EXIT_FAILURE;
         }
       }
-    } catch (const Sipi::SipiImageError &err) {
-      Sipi::observability::populate_from_image(sentry_ctx, img);
-      log_err("Error reading image: %s", err.what());
-      if (optJsonOutput) { Sipi::emit_json_report(std::cout, sentry_ctx, err.what(), std::string{ "read" }); }
-      return EXIT_FAILURE;
     } catch (const std::exception &err) {
       Sipi::observability::populate_from_image(sentry_ctx, img);
       log_err("Error reading image: %s", err.what());
@@ -475,7 +480,14 @@ extern "C" int sipi_cli_main(int argc, char **argv)
     }
 
     try {
-      img.write(format, optOutFile, &comp_params);
+      if (auto r = img.write(format, optOutFile, &comp_params); !r) {
+        Sipi::observability::populate_from_image(sentry_ctx, img);
+        log_err("Error writing image: %s", r.error().diagnostic_message().c_str());
+        if (optJsonOutput) {
+          Sipi::emit_json_report(std::cout, sentry_ctx, r.error().diagnostic_message(), std::string{ "write" });
+        }
+        return EXIT_FAILURE;
+      }
     } catch (const Sipi::SipiImageError &err) {
       Sipi::observability::populate_from_image(sentry_ctx, img);
       log_err("Error writing image: %s", err.what());
@@ -508,8 +520,14 @@ extern "C" int sipi_cli_main(int argc, char **argv)
     }
 
     Sipi::SipiImage img1, img2;
-    img1.read(optCompare[0]);
-    img2.read(optCompare[1]);
+    if (auto r = img1.read(optCompare[0]); !r) {
+      log_err("sipi: unhandled exception: %s", r.error().diagnostic_message().c_str());
+      return EXIT_FAILURE;
+    }
+    if (auto r = img2.read(optCompare[1]); !r) {
+      log_err("sipi: unhandled exception: %s", r.error().diagnostic_message().c_str());
+      return EXIT_FAILURE;
+    }
 
     if (img1 == img2) {
       log_info("Files identical!");
@@ -529,7 +547,10 @@ extern "C" int sipi_cli_main(int argc, char **argv)
     }
 
     img1 -= img2;
-    img1.write("tif", "diff.tif");
+    if (auto r = img1.write("tif", "diff.tif"); !r) {
+      log_err("sipi: unhandled exception: %s", r.error().diagnostic_message().c_str());
+      return EXIT_FAILURE;
+    }
     log_info("Files differ: avg: %f max: %d (%zu, %zu) See diff.tif",
       delta->mean_abs,
       delta->max_abs,
@@ -779,11 +800,12 @@ extern "C" int sipi_cli_main(int argc, char **argv)
     ->check(CLI::Range(1, 65535));
   cmd_health->callback([&]() { sipi_exit_code = Sipi::cli::cmd_health({ optHealthPort }); });
 
-  // Catch-all around dispatch: a subcommand body (e.g. query/compare's
-  // img.read()/write()) can throw SipiImageError, which is NOT a CLI::Error, so
-  // CLI11_PARSE would let it unwind out of this `extern "C"` entry into the Rust
-  // caller — UB across the FFI (sipi_ffi.h's no-exception contract). Map any
-  // escaped exception to EXIT_FAILURE here, mirroring the engine's sipi_guard.
+  // Catch-all around dispatch: a subcommand body can still throw SipiImageError
+  // for an allocation-guard failure (e.g. checked_buf_size_or_throw, memTiffOpen),
+  // which is NOT a CLI::Error, so CLI11_PARSE would let it unwind out of this
+  // `extern "C"` entry into the Rust caller — UB across the FFI (sipi_ffi.h's
+  // no-exception contract). Map any escaped exception to EXIT_FAILURE here,
+  // mirroring the engine's sipi_guard.
   // (CLI11_PARSE's own try/catch still handles CLI::ParseError + returns its code.)
   try {
     CLI11_PARSE(sipiopt, argc, argv);

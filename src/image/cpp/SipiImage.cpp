@@ -42,18 +42,6 @@ size_t checked_buf_size_or_throw(size_t nx_, size_t ny_, size_t nc_, size_t elem
                         + ", channels=" + std::to_string(nc_) + ", elem=" + std::to_string(elem_) + ")");
 }
 
-// The single conversion point from a handler's `Result` failure to the
-// exception `SipiImage::read` / `write` promise their callers:
-// a `SipiValueError` becomes a `SipiImageError` carrying the same message,
-// errno, and source location. `SipiImage::write` additionally checks for
-// `ErrorCode::kClientAbort` first, throwing the `SipiImageClientAbortError`
-// subtype for that one code and falling through to this helper for every
-// other failure.
-[[noreturn]] void throw_from_value_error(const SipiValueError &err)
-{
-  throw SipiImageError(err.raw_message(), err.errnum(), err.location());
-}
-
 }// namespace
 
 // SipiImage::io — the static format-handler registry — is defined in
@@ -284,11 +272,11 @@ void SipiImage::set_pixels(std::vector<byte> &&buf, size_t nx_p, size_t ny_p, si
 /*!
  * Reads the image from a file by calling the appropriate reader, selected by
  * the file's extension and falling back to every other registered handler in
- * turn on a mismatch. Throws `SipiImageError` if no handler recognises the
- * file, or immediately propagates a handler's decode failure as
- * `SipiImageError` without considering the fallback handlers.
+ * turn on a mismatch. Returns a `SipiValueError` if no handler recognises the
+ * file, or immediately propagates a handler's decode failure without
+ * considering the fallback handlers.
  */
-void SipiImage::read(const std::string &filepath,
+Result<void> SipiImage::read(const std::string &filepath,
   const std::shared_ptr<SipiRegion> &region,
   const std::shared_ptr<SipiSize> &size,
   bool force_bps_8,
@@ -303,12 +291,6 @@ void SipiImage::read(const std::string &filepath,
   _fext.resize(fext.size());
   std::transform(fext.begin(), fext.end(), _fext.begin(), ::tolower);
 
-  auto dispatch_read = [&](const std::string &key) {
-    auto result = io[key]->read(this, filepath, region, size, force_bps_8, scaling_quality);
-    if (!result) { throw_from_value_error(result.error()); }
-    return *result;
-  };
-
   std::string dispatched_key;
   if ((_fext == "tif") || (_fext == "tiff")) {
     dispatched_key = "tif";
@@ -319,7 +301,11 @@ void SipiImage::read(const std::string &filepath,
   } else if ((_fext == "jp2") || (_fext == "jpx") || (_fext == "j2k")) {
     dispatched_key = "jpx";
   }
-  if (!dispatched_key.empty()) { got_file = dispatch_read(dispatched_key); }
+  if (!dispatched_key.empty()) {
+    auto result = io[dispatched_key]->read(this, filepath, region, size, force_bps_8, scaling_quality);
+    if (!result) { return std::unexpected(result.error()); }
+    got_file = *result;
+  }
 
   // A successful `false` means the handler does not recognise the file's
   // actual format, so the search continues across every remaining registered
@@ -331,7 +317,7 @@ void SipiImage::read(const std::string &filepath,
     for (auto const &iterator : io) {
       if (iterator.first == dispatched_key) continue;
       auto result = iterator.second->read(this, filepath, region, size, force_bps_8, scaling_quality);
-      if (!result) { throw_from_value_error(result.error()); }
+      if (!result) { return std::unexpected(result.error()); }
       if ((got_file = *result)) break;
     }
   }
@@ -342,18 +328,19 @@ void SipiImage::read(const std::string &filepath,
       if (!tried_keys.empty()) { tried_keys += ", "; }
       tried_keys += iterator.first;
     }
-    throw SipiImageError(
-      "Error reading file " + filepath + ": no registered format handler recognised it (tried: " + tried_keys + ")");
+    return std::unexpected(SipiValueError(ErrorCode::kUnsupportedFormat,
+      "Error reading file " + filepath + ": no registered format handler recognised it (tried: " + tried_keys + ")"));
   }
+  return {};
 }
 
 //============================================================================
 
-void SipiImage::readSource(const std::string &filepath,
+Result<void> SipiImage::readSource(const std::string &filepath,
   const std::shared_ptr<SipiRegion> &region,
   const std::shared_ptr<SipiSize> &size)
 {
-  read(filepath, region, size, false);
+  if (auto r = read(filepath, region, size, false); !r) { return std::unexpected(r.error()); }
 
   // Corruption tripwire (ADR-0010): if the source carries an Essentials packet,
   // recompute the pixel checksum and compare. On mismatch, log ERROR and continue —
@@ -369,18 +356,19 @@ void SipiImage::readSource(const std::string &filepath,
         Sipi::observability::format_from_path(filepath)).Increment();
     }
   }
+  return {};
 }
 
 //============================================================================
 
 
-void SipiImage::readSource(const std::string &filepath,
+Result<void> SipiImage::readSource(const std::string &filepath,
   const std::shared_ptr<SipiRegion> &region,
   const std::shared_ptr<SipiSize> &size,
   const std::string &origname)
 {
   (void)origname;  // consumed by the `convert service-file` command (DEV-6540), not here
-  readSource(filepath, region, size);
+  return readSource(filepath, region, size);
 }
 
 //============================================================================
@@ -463,28 +451,22 @@ void SipiImage::getDim(size_t &width, size_t &height) const
 
 //============================================================================
 
-void SipiImage::write(const std::string &ftype, const OutputSink &sink, const SipiCompressionParams *params)
+Result<void> SipiImage::write(const std::string &ftype, const OutputSink &sink, const SipiCompressionParams *params)
 {
   // .at(): an unknown ftype must throw, not operator[]-insert a null
   // handler and segfault on the virtual call. Callers pass validated
   // format strings; the historical write() docstring advertised "j2k"
   // (the map key is "jpx"), which is exactly how this fired.
   auto result = io.at(ftype)->write(this, sink, params);
-  if (!result) {
-    const auto &err = result.error();
-    // The HTTP seam dispatches on the exception type to skip Sentry capture
-    // for a client-initiated disconnect; every other write failure is a
-    // genuine server-side error.
-    if (err.code() == ErrorCode::kClientAbort) {
-      throw SipiImageClientAbortError(err.raw_message(), err.errnum(), err.location());
-    }
-    throw_from_value_error(err);
-  }
+  if (!result) { return std::unexpected(result.error()); }
+  return {};
 }
 
-void SipiImage::write(const std::string &ftype, const std::string &filepath, const SipiCompressionParams *params)
+Result<void> SipiImage::write(const std::string &ftype,
+  const std::string &filepath,
+  const SipiCompressionParams *params)
 {
-  write(ftype, OutputSink{ FilePath{ filepath } }, params);
+  return write(ftype, OutputSink{ FilePath{ filepath } }, params);
 }
 
 //============================================================================
