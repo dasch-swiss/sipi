@@ -35,17 +35,18 @@ enum class ErrorCode {
   kClientAbort,
   kShapeProbeFailed,
   kMetadataParseFailed,
+  kInvalidRequestParameter,
 };
 
 /*!
- * Every `ErrorCode` maps to `kInternalError` today (error-model.md's policy
- * table). The enum exists anyway because each seam translates it into its own
- * vocabulary (an HTTP status on the HTTP seam, a Lua-visible string on the
- * scripting seam, an exit code on the CLI seam); a future `ErrorCode` that
- * should surface as client error (e.g. HTTP 4xx) extends this enum rather
- * than special-casing a raw `ErrorCode` check at a seam.
+ * Most `ErrorCode` variants map to `kInternalError` (error-model.md's policy
+ * table); `kInvalidRequestParameter` maps to `kClientError`. The enum exists
+ * so each seam translates the class into its own vocabulary (an HTTP status
+ * on the HTTP seam, a Lua-visible string on the scripting seam, an exit code
+ * on the CLI seam) rather than special-casing a raw `ErrorCode` check at a
+ * seam.
  */
-enum class HttpStatusClass { kInternalError };
+enum class HttpStatusClass { kInternalError, kClientError };
 
 enum class SentryPolicy { kReport, kSkip };
 
@@ -87,6 +88,8 @@ struct ErrorPolicy
     return { HttpStatusClass::kInternalError, SentryPolicy::kReport, MetricHint::kNone };
   case ErrorCode::kMetadataParseFailed:
     return { HttpStatusClass::kInternalError, SentryPolicy::kReport, MetricHint::kNone };
+  case ErrorCode::kInvalidRequestParameter:
+    return { HttpStatusClass::kClientError, SentryPolicy::kSkip, MetricHint::kNone };
   }
 }
 

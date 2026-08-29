@@ -631,7 +631,7 @@ TEST(SipiImage, ScaleToOnePixelIsRejectedWithoutCrashing)
   const auto size = std::make_shared<Sipi::SipiSize>("1,1");
   const auto result = img.read(leavesSmallNoAlpha, region, size);
   ASSERT_FALSE(result.has_value());
-  EXPECT_EQ(result.error().code(), Sipi::ErrorCode::kMalformedInput);
+  EXPECT_EQ(result.error().code(), Sipi::ErrorCode::kInvalidRequestParameter);
 }
 
 TEST(SipiImage, ScaleToOnePixelWidthOnlyIsRejectedWithoutCrashing)
@@ -642,7 +642,7 @@ TEST(SipiImage, ScaleToOnePixelWidthOnlyIsRejectedWithoutCrashing)
   const auto size = std::make_shared<Sipi::SipiSize>("1,");
   const auto result = img.read(leavesSmallNoAlpha, region, size);
   ASSERT_FALSE(result.has_value());
-  EXPECT_EQ(result.error().code(), Sipi::ErrorCode::kMalformedInput);
+  EXPECT_EQ(result.error().code(), Sipi::ErrorCode::kInvalidRequestParameter);
 }
 
 TEST(SipiImage, ScaleToOnePixelHeightOnlyIsRejectedWithoutCrashing)
@@ -653,7 +653,7 @@ TEST(SipiImage, ScaleToOnePixelHeightOnlyIsRejectedWithoutCrashing)
   const auto size = std::make_shared<Sipi::SipiSize>(",1");
   const auto result = img.read(leavesSmallNoAlpha, region, size);
   ASSERT_FALSE(result.has_value());
-  EXPECT_EQ(result.error().code(), Sipi::ErrorCode::kMalformedInput);
+  EXPECT_EQ(result.error().code(), Sipi::ErrorCode::kInvalidRequestParameter);
 }
 
 TEST(SipiImage, ScaleBoundary16bpsDoesNotCrash)

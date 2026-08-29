@@ -14,8 +14,8 @@ decision record itself.
 - `ErrorCode` — an `enum class`, one variant per distinct failure category a
   caller can act on (decode rejection, unsupported format, malformed/oversized
   input, encode/write failure, client-abort, shape-probe failure,
-  metadata-parse failure). New failure categories get a new variant — never
-  folded into an existing one.
+  metadata-parse failure, invalid request parameter). New failure categories
+  get a new variant — never folded into an existing one.
 - `SipiValueError` — the value itself: an `ErrorCode`, a diagnostic message, and
   a `std::source_location` captured at construction. Cheap to move; the
   diagnostic string is not eagerly formatted.
@@ -45,6 +45,15 @@ seam, an exit code on the CLI seam.
 | `kClientAbort` | `kInternalError` | `kSkip` | `kClientDisconnected` |
 | `kShapeProbeFailed` | `kInternalError` | `kReport` | none |
 | `kMetadataParseFailed` | `kInternalError` | `kReport` | none |
+| `kInvalidRequestParameter` | `kClientError` | `kSkip` | none |
+
+`kInvalidRequestParameter` is the one `ErrorCode` whose `HttpStatusClass` is
+`kClientError` rather than `kInternalError`: it marks a client-supplied IIIF
+parameter the engine cannot honour (for example, a requested scale target of
+one sample or fewer on an otherwise well-formed source image), as distinct
+from `kMalformedInput`, which stays `kInternalError` because it flags a
+problem with the repository's own content (a corrupt or degenerate source
+file) rather than with the request.
 
 `std::bad_alloc` is deliberately not an `ErrorCode` and never appears in this
 table — it stays exception-based permanently (ADR-0024 Decision 7). It has no

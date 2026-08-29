@@ -376,11 +376,18 @@ Result<void> scaleFast(SipiImage &img, size_t nnx, size_t nny)
   SIPI_ZONE_N("SipiImage::scaleFast");
   const size_t nx = img.getNx();
   const size_t ny = img.getNy();
-  // A target or source axis of one sample or fewer has no resampling to do;
-  // the request is rejected rather than served at some other size.
-  if (nnx <= 1 || nny <= 1 || nx <= 1 || ny <= 1) {
-    return std::unexpected(SipiValueError{ ErrorCode::kMalformedInput,
+  // A requested axis of one sample or fewer has no resampling to do; the
+  // requested size is a malformed IIIF size parameter.
+  if (nnx <= 1 || nny <= 1) {
+    return std::unexpected(SipiValueError{ ErrorCode::kInvalidRequestParameter,
       "scaleFast: unsupported target dimensions (src=" + std::to_string(nx) + "x" + std::to_string(ny)
+        + ", dst=" + std::to_string(nnx) + "x" + std::to_string(nny) + "): each axis must be at least 2 samples" });
+  }
+  // A source axis of one sample or fewer has no resampling to do; the source
+  // dimensions are a property of the decoded file, not the request.
+  if (nx <= 1 || ny <= 1) {
+    return std::unexpected(SipiValueError{ ErrorCode::kMalformedInput,
+      "scaleFast: unsupported source dimensions (src=" + std::to_string(nx) + "x" + std::to_string(ny)
         + ", dst=" + std::to_string(nnx) + "x" + std::to_string(nny) + "): each axis must be at least 2 samples" });
   }
 
@@ -439,11 +446,18 @@ Result<void> scaleMedium(SipiImage &img, size_t nnx, size_t nny)
   SIPI_ZONE_N("SipiImage::scaleMedium");
   const size_t nx = img.getNx();
   const size_t ny = img.getNy();
-  // A target or source axis of one sample or fewer has no resampling to do;
-  // the request is rejected rather than served at some other size.
-  if (nnx <= 1 || nny <= 1 || nx <= 1 || ny <= 1) {
-    return std::unexpected(SipiValueError{ ErrorCode::kMalformedInput,
+  // A requested axis of one sample or fewer has no resampling to do; the
+  // requested size is a malformed IIIF size parameter.
+  if (nnx <= 1 || nny <= 1) {
+    return std::unexpected(SipiValueError{ ErrorCode::kInvalidRequestParameter,
       "scaleMedium: unsupported target dimensions (src=" + std::to_string(nx) + "x" + std::to_string(ny)
+        + ", dst=" + std::to_string(nnx) + "x" + std::to_string(nny) + "): each axis must be at least 2 samples" });
+  }
+  // A source axis of one sample or fewer has no resampling to do; the source
+  // dimensions are a property of the decoded file, not the request.
+  if (nx <= 1 || ny <= 1) {
+    return std::unexpected(SipiValueError{ ErrorCode::kMalformedInput,
+      "scaleMedium: unsupported source dimensions (src=" + std::to_string(nx) + "x" + std::to_string(ny)
         + ", dst=" + std::to_string(nnx) + "x" + std::to_string(nny) + "): each axis must be at least 2 samples" });
   }
 
@@ -512,11 +526,18 @@ Result<void> scale(SipiImage &img, size_t nnx, size_t nny)
   SIPI_ZONE_N("SipiImage::scale");
   const size_t nx = img.getNx();
   const size_t ny = img.getNy();
-  // A target or source axis of one sample or fewer has no resampling to do;
-  // the request is rejected rather than served at some other size.
-  if (nnx <= 1 || nny <= 1 || nx <= 1 || ny <= 1) {
-    return std::unexpected(SipiValueError{ ErrorCode::kMalformedInput,
+  // A requested axis of one sample or fewer has no resampling to do; the
+  // requested size is a malformed IIIF size parameter.
+  if (nnx <= 1 || nny <= 1) {
+    return std::unexpected(SipiValueError{ ErrorCode::kInvalidRequestParameter,
       "scale: unsupported target dimensions (src=" + std::to_string(nx) + "x" + std::to_string(ny) + ", dst="
+        + std::to_string(nnx) + "x" + std::to_string(nny) + "): each axis must be at least 2 samples" });
+  }
+  // A source axis of one sample or fewer has no resampling to do; the source
+  // dimensions are a property of the decoded file, not the request.
+  if (nx <= 1 || ny <= 1) {
+    return std::unexpected(SipiValueError{ ErrorCode::kMalformedInput,
+      "scale: unsupported source dimensions (src=" + std::to_string(nx) + "x" + std::to_string(ny) + ", dst="
         + std::to_string(nnx) + "x" + std::to_string(nny) + "): each axis must be at least 2 samples" });
   }
 
