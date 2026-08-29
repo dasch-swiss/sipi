@@ -88,7 +88,33 @@ Result<void> add_watermark(SipiImage &img, const std::string &wmfilename)
       }
     }
   } else if (bps == 16) {
-    // 16bps support was never really finished, left unimplemented
+    // The watermark file is always 8bps (read_watermark rejects any other
+    // depth), so wmbuf stays byte-sampled here too; only the image side reads
+    // and writes through a word* view and normalizes by the 16bps full scale.
+    word *buf = reinterpret_cast<word *>(img.pixels_writable().data());
+
+    for (size_t j = 0; j < ny; j++) {
+      for (size_t i = 0; i < nx; i++) {
+        double wm_i = (i - nx / 2.) * wm_scale + wm_nx / 2.;
+        double wm_j = (j - ny / 2.) * wm_scale + wm_ny / 2.;
+
+        for (size_t k = 0; k < nc; k++) {
+          if (!(abs(wm_i - wm_nx / 2.) < wm_nx / 2. && abs(wm_j - wm_ny / 2.) < wm_ny / 2.)) continue;
+
+          // Map channel index into watermark's channel range to prevent OOB
+          // when image has more channels than watermark (e.g., 3-ch CIELab + 1-ch grayscale wm)
+          size_t wm_k = k % static_cast<size_t>(wm_nc);
+
+          double wm_alpha = wm_nc == 4 ? bilinn(wmbuf, wm_nx, wm_ny, wm_i, wm_j, 3, wm_nc) : 1;
+          double wm_alpha_weak = wm_alpha / 255.0 * wm_strength;
+
+          double wm_color = bilinn(wmbuf, wm_nx, wm_ny, wm_i, wm_j, wm_k, wm_nc) / 255.0;
+          double color = (buf[nc * (j * nx + i) + k] / 65535.);
+          double blend = color * (1.0 - wm_alpha_weak) + wm_color * wm_alpha_weak;
+          buf[nc * (j * nx + i) + k] = std::clamp(blend * 65535., 0., 65535.);
+        }
+      }
+    }
   }
 
   return {};
