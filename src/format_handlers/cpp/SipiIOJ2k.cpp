@@ -370,12 +370,8 @@ Result<bool> SipiIOJ2k::read(SipiImage *img,
             auto xmp_len = box.get_remaining_bytes();
             auto xmp_buf = std::make_unique<char[]>(xmp_len);
             box.read((kdu_byte *)xmp_buf.get(), xmp_len);
-            try {
-              img->set_xmp(std::make_shared<Xmp>(xmp_buf.get(),
-                xmp_len));// ToDo: Problem with thread safety!!!!!!!!!!!!!!
-            } catch (SipiError &err) {
-              log_err("%s", err.to_string().c_str());
-            }
+            img->set_xmp(std::make_shared<Xmp>(xmp_buf.get(),
+              xmp_len));// ToDo: Problem with thread safety!!!!!!!!!!!!!!
           } else if (memcmp(buf, iptc_uuid, 16) == 0) {
             auto iptc_len = box.get_remaining_bytes();
             auto iptc_buf = std::make_unique<unsigned char[]>(iptc_len);

@@ -1174,11 +1174,7 @@ Result<bool> SipiIOTiff::read(SipiImage *img,
       if (xmp_length > static_cast<unsigned int>(std::numeric_limits<int>::max())) {
         log_warn("TIFF XMLPACKET (XMP) packet of %u bytes exceeds INT_MAX; skipping", xmp_length);
       } else {
-        try {
-          img->set_xmp(std::make_shared<Xmp>(xmp_content, static_cast<int>(xmp_length)));
-        } catch (SipiError &err) {
-          log_err("%s", err.to_string().c_str());
-        }
+        img->set_xmp(std::make_shared<Xmp>(xmp_content, static_cast<int>(xmp_length)));
       }
     }
 
