@@ -126,6 +126,19 @@ cc_test(
     ],
 )
 
+# Co-located unit test for the Icc::parse public factory surface (DEV-7078):
+# a description-less embedded profile must classify as icc_unknown rather
+# than reading past a zero-length description buffer.
+cc_test(
+    name = "icc_parse_test",
+    srcs = ["cpp/icc_parse_test.cpp"],
+    deps = [
+        ":metadata",
+        "@googletest//:gtest_main",
+        "@lcms2//:lcms2",
+    ],
+)
+
 # Co-located unit test for the EXIF rational-array read path (DEV-6537).
 # Decodes a real TIFF fixture through `SipiIOTiff::read()`, so this target
 # depends on `//src/format_handlers` and `//src/image` for the codec dispatch

@@ -19,11 +19,12 @@ Produces three fixtures under test/_test_data/images/jpeg/:
      F3 feature-contract test to prove that log_warn is routed to stderr under
      --json without breaking the single-document contract on stdout.
 
-Also produces five marker-parsing regression fixtures as a
+Also produces six marker-parsing regression fixtures as a
 sibling `../malformed/` directory (relative to the given output dir), see
 `generate_malformed()` and test/_test_data/images/malformed/README.md for
 each fixture's defect (DEV-6066, N1, N4, the parse_photoshop
-even-padding pointer overshoot, and DEV-7056's fatal-metadata-parse fixture).
+even-padding pointer overshoot, DEV-7056's fatal-metadata-parse fixture,
+and DEV-7078's zero-tag-count ICC profile).
 
 Run (from the sipi repo root):
 
@@ -167,6 +168,43 @@ def _insert_app_marker(jpeg_bytes: bytes, marker: int, payload: bytes) -> bytes:
     return jpeg_bytes[:2] + bytes(seg) + jpeg_bytes[2:]
 
 
+def _build_icc_profile_no_description(size: int = 536) -> bytes:
+    """Synthesize a minimal but well-formed ICC profile with a zero tag
+    count — therefore no tags at all, including no description tag.
+
+    Builds the standard 128-byte ICC header field by field (profile size,
+    preferred CMM `ADBE`, version `0x02100000`, device class `mntr`, data
+    colour space `RGB `, PCS `XYZ `, a fixed date/time, signature `acsp`,
+    platform `MSFT`, everything else zero), appends a 4-byte tag count of
+    0, and pads with zero bytes out to the declared size.
+    """
+    header = bytearray()
+    header += size.to_bytes(4, "big")  # profile size
+    header += b"ADBE"  # preferred CMM type
+    header += (0x02100000).to_bytes(4, "big")  # profile version
+    header += b"mntr"  # profile/device class
+    header += b"RGB "  # colour space of data
+    header += b"XYZ "  # profile connection space
+    for field in (0x07D1, 0x0001, 0x0017, 0x0013, 0x0022, 0x0022):  # date/time
+        header += field.to_bytes(2, "big")
+    header += b"acsp"  # profile file signature
+    header += b"MSFT"  # primary platform signature
+    header += b"\x00" * 4  # profile flags
+    header += b"\x00" * 4  # device manufacturer
+    header += b"\x00" * 4  # device model
+    header += b"\x00" * 8  # device attributes
+    header += b"\x00" * 4  # rendering intent
+    header += b"\x00" * 12  # PCS illuminant
+    header += b"\x00" * 4  # profile creator
+    header += b"\x00" * 16  # profile ID
+    header += b"\x00" * 28  # reserved
+    assert len(header) == 128
+    header += b"\x00\x00\x00\x00"  # tag count = 0 (no tags at all)
+    header += b"\x00" * (size - len(header))
+    assert len(header) == size
+    return bytes(header)
+
+
 def generate_malformed(malformed_dir: pathlib.Path) -> None:
     """Regression fixtures for the JPEG marker-parsing over-reads fixed
     alongside DEV-6066 / N1 / N4, plus the DEV-7056 fatal-metadata-parse
@@ -259,6 +297,22 @@ def generate_malformed(malformed_dir: pathlib.Path) -> None:
     exif_path = malformed_dir / "jpeg_exif_truncated.jpg"
     exif_path.write_bytes(exif_truncated)
     print(f"  wrote {exif_path} ({len(exif_truncated)} bytes, EXIF identifier with truncated TIFF header)")
+
+    # jpeg_icc_no_description.jpg — a well-formed APP2 ICC segment (the real
+    # "ICC_PROFILE\0" + sequence number (1) + count (1) layout, so it clears
+    # every upstream length guard and the embedded bytes actually reach
+    # Icc::parse()) whose profile has a valid 128-byte header but a tag count
+    # of 0 — no tags at all, therefore no description tag. lcms2's
+    # cmsOpenProfileFromMem() accepts the header-only profile, but
+    # cmsGetProfileInfoASCII(..., cmsInfoDescription, ...) then reports
+    # length 0. Icc::parse() must classify this as icc_unknown instead of
+    # reading a description buffer that was never populated (DEV-7078).
+    icc_no_desc_profile = _build_icc_profile_no_description()
+    icc_no_desc_payload = b"ICC_PROFILE\x00" + b"\x01\x01" + icc_no_desc_profile
+    icc_no_desc = _insert_app_marker(base_jpeg, 0xE2, icc_no_desc_payload)
+    icc_no_desc_path = malformed_dir / "jpeg_icc_no_description.jpg"
+    icc_no_desc_path.write_bytes(icc_no_desc)
+    print(f"  wrote {icc_no_desc_path} ({len(icc_no_desc)} bytes, ICC profile with zero tag count)")
 
 
 def generate(out_dir: pathlib.Path) -> None:
