@@ -366,7 +366,7 @@ size_t checked_buf_size_or_throw(size_t nx_, size_t ny_, size_t nc_, size_t elem
 
 }// namespace
 
-std::vector<unsigned char> read_watermark(const std::string &wmfile, int &nx, int &ny, int &nc)
+Result<std::vector<unsigned char>> read_watermark(const std::string &wmfile, int &nx, int &ny, int &nc)
 {
   int sll;
   unsigned short spp, bps, pmi, pc;
@@ -383,25 +383,30 @@ std::vector<unsigned char> read_watermark(const std::string &wmfile, int &nx, in
 
 
   if (TIFFGetField(tif.get(), TIFFTAG_IMAGEWIDTH, &nx) == 0) {
-    throw Sipi::SipiImageError("ERROR in read_watermark: TIFFGetField of TIFFTAG_IMAGEWIDTH failed: " + wmfile);
+    return std::unexpected(SipiValueError{ ErrorCode::kMalformedInput,
+      "ERROR in read_watermark: TIFFGetField of TIFFTAG_IMAGEWIDTH failed: " + wmfile });
   }
 
   if (TIFFGetField(tif.get(), TIFFTAG_IMAGELENGTH, &ny) == 0) {
-    throw Sipi::SipiImageError("ERROR in read_watermark: TIFFGetField of TIFFTAG_IMAGELENGTH failed: " + wmfile);
+    return std::unexpected(SipiValueError{ ErrorCode::kMalformedInput,
+      "ERROR in read_watermark: TIFFGetField of TIFFTAG_IMAGELENGTH failed: " + wmfile });
   }
 
   TIFF_GET_FIELD(tif.get(), TIFFTAG_SAMPLESPERPIXEL, &spp, 1);
 
   TIFF_GET_FIELD(tif.get(), TIFFTAG_BITSPERSAMPLE, &bps, 1);
 
-  if (bps != 8) { throw Sipi::SipiImageError("ERROR in read_watermark: bps ≠ 8: " + wmfile); }
+  if (bps != 8) {
+    return std::unexpected(
+      SipiValueError{ ErrorCode::kUnsupportedFormat, "ERROR in read_watermark: bps ≠ 8: " + wmfile });
+  }
 
   TIFF_GET_FIELD(tif.get(), TIFFTAG_PHOTOMETRIC, &pmi, PHOTOMETRIC_MINISBLACK);
   TIFF_GET_FIELD(tif.get(), TIFFTAG_PLANARCONFIG, &pc, PLANARCONFIG_CONTIG);
 
   if (pc != PLANARCONFIG_CONTIG) {
-    throw Sipi::SipiImageError(
-      "ERROR in read_watermark: Tag TIFFTAG_PLANARCONFIG is not PLANARCONFIG_CONTIG: " + wmfile);
+    return std::unexpected(SipiValueError{ ErrorCode::kUnsupportedFormat,
+      "ERROR in read_watermark: Tag TIFFTAG_PLANARCONFIG is not PLANARCONFIG_CONTIG: " + wmfile });
   }
 
   sll = nx * spp * bps / 8;
@@ -415,8 +420,8 @@ std::vector<unsigned char> read_watermark(const std::string &wmfile, int &nx, in
 
   for (int i = 0; i < ny; i++) {
     if (TIFFReadScanline(tif.get(), wmbuf.data() + i * sll, i) == -1) {
-      throw Sipi::SipiImageError(
-        "ERROR in read_watermark: TIFFReadScanline failed on scanline " + std::to_string(i) + " in file " + wmfile);
+      return std::unexpected(SipiValueError{ ErrorCode::kDecodeFailed,
+        "ERROR in read_watermark: TIFFReadScanline failed on scanline " + std::to_string(i) + " in file " + wmfile });
     }
   }
 
