@@ -506,16 +506,18 @@ std::expected<ServeResponse, SipiStatus>
   // Image shape (no full decode) — needed for size math, the canonical URL, the
   // memory estimate, and the cache entry.
   SipiImgInfo info;
-  try {
+  {
     SipiImage probe;
     PhaseTimer phase_timer(SIPI_PHASE_SHAPE);
-    info = probe.read_shape(infile);
-  } catch (SipiImageError &err) {
-    ImageContext sentry_ctx;
-    sentry_ctx.input_file = infile;
-    sentry_ctx.file_size_bytes = get_file_size(infile);
-    report_image_error(req.report_error, req.report_ctx, err.to_string(), "read", sentry_ctx);
-    return std::unexpected(SipiStatus::InternalError);
+    auto shape = probe.read_shape(infile);
+    if (!shape) {
+      ImageContext sentry_ctx;
+      sentry_ctx.input_file = infile;
+      sentry_ctx.file_size_bytes = get_file_size(infile);
+      report_value_error(req.report_error, req.report_ctx, shape.error(), "read", sentry_ctx);
+      return std::unexpected(status_for(shape.error()));
+    }
+    info = *shape;
   }
   if (info.success == SipiImgInfo::FAILURE) { return std::unexpected(SipiStatus::InternalError); }
 

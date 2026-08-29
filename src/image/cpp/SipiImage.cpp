@@ -43,7 +43,7 @@ size_t checked_buf_size_or_throw(size_t nx_, size_t ny_, size_t nc_, size_t elem
 }
 
 // The single conversion point from a handler's `Result` failure to the
-// exception `SipiImage::read` / `read_shape` / `write` promise their callers:
+// exception `SipiImage::read` / `write` promise their callers:
 // a `SipiValueError` becomes a `SipiImageError` carrying the same message,
 // errno, and source location. `SipiImage::write` additionally checks for
 // `ErrorCode::kClientAbort` first, throwing the `SipiImageClientAbortError`
@@ -394,7 +394,7 @@ std::vector<std::byte> SipiImage::compute_pixel_hash(shttps::HashType type) cons
 
 //============================================================================
 
-SipiImgInfo SipiImage::read_shape(const std::string &filepath) const
+Result<SipiImgInfo> SipiImage::read_shape(const std::string &filepath) const
 {
   SIPI_ZONE_N("SipiImage::read_shape");
   size_t pos = filepath.find_last_of('.');
@@ -408,12 +408,6 @@ SipiImgInfo SipiImage::read_shape(const std::string &filepath) const
   std::string mimetype = shttps::Parsing::getFileMimetype(filepath).first;
   info.internalmimetype = mimetype;
 
-  auto dispatch_read_shape = [&](const std::string &key) {
-    auto result = io[key]->read_shape(filepath);
-    if (!result) { throw_from_value_error(result.error()); }
-    return *result;
-  };
-
   std::string dispatched_key;
   if ((mimetype == "image/tiff") || (mimetype == "image/x-tiff")) {
     dispatched_key = "tif";
@@ -424,9 +418,11 @@ SipiImgInfo SipiImage::read_shape(const std::string &filepath) const
   } else if ((mimetype == "image/jp2") || (mimetype == "image/jpx")) {
     dispatched_key = "jpx";
   } else {
-    throw SipiImageError("unknown mimetype: \"" + mimetype + "\"!");
+    return std::unexpected(SipiValueError(ErrorCode::kUnsupportedFormat, "unknown mimetype: \"" + mimetype + "\"!"));
   }
-  info = dispatch_read_shape(dispatched_key);
+  auto result = io[dispatched_key]->read_shape(filepath);
+  if (!result) { return std::unexpected(result.error()); }
+  info = *result;
 
   // A `FAILURE`-marked `SipiImgInfo` means the handler does not recognise the
   // file's actual format, so the search continues across every remaining
@@ -437,9 +433,9 @@ SipiImgInfo SipiImage::read_shape(const std::string &filepath) const
   if (info.success == SipiImgInfo::FAILURE) {
     for (auto const &iterator : io) {
       if (iterator.first == dispatched_key) continue;
-      auto result = iterator.second->read_shape(filepath);
-      if (!result) { throw_from_value_error(result.error()); }
-      info = *result;
+      auto result2 = iterator.second->read_shape(filepath);
+      if (!result2) { return std::unexpected(result2.error()); }
+      info = *result2;
       if (info.success != SipiImgInfo::FAILURE) break;
     }
   }
@@ -450,8 +446,8 @@ SipiImgInfo SipiImage::read_shape(const std::string &filepath) const
       if (!tried_keys.empty()) { tried_keys += ", "; }
       tried_keys += iterator.first;
     }
-    throw SipiImageError(
-      "Could not read file " + filepath + ": no registered format handler recognised it (tried: " + tried_keys + ")");
+    return std::unexpected(SipiValueError(ErrorCode::kShapeProbeFailed,
+      "Could not read file " + filepath + ": no registered format handler recognised it (tried: " + tried_keys + ")"));
   }
   return info;
 }

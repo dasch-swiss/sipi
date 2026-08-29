@@ -165,16 +165,12 @@ extern "C" int
 {
   return Sipi::ffi::sipi_guard([&] {
     Sipi::SipiImage img;
-    Sipi::SipiImgInfo info;
-    try {
-      info = img.read_shape(nz(path));
-    } catch (const Sipi::InfoError &) {
-      emit_str(err, err_ctx, "Couldn't get dimensions");
-      return 1;
-    } catch (const Sipi::SipiImageError &e) {
-      emit_str(err, err_ctx, e.message());
+    auto shape = img.read_shape(nz(path));
+    if (!shape) {
+      emit_str(err, err_ctx, shape.error().client_message());
       return 1;
     }
+    const Sipi::SipiImgInfo &info = *shape;
     *nx = info.width;
     *ny = info.height;
     *orientation = static_cast<int>(info.orientation);

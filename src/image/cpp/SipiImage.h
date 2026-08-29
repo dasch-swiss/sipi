@@ -53,8 +53,6 @@ enum SkipMetadata : std::uint8_t {
   SKIP_ALL = 0xFF
 };
 
-enum InfoError { INFO_ERROR };
-
 /*!
  * \struct PixelDelta
  *
@@ -499,9 +497,10 @@ public:
    * service-file handlers may take a fast path via the Essentials packet (ADR-0004).
    *
    * \param[in] filepath Pathname of the image file
-   * \return Info about image (see SipiImgInfo)
+   * \return Info about image (see SipiImgInfo), or a `SipiValueError` if the
+   *   mimetype is unrecognised or no registered format handler recognises the file.
    */
-  [[nodiscard]] SipiImgInfo read_shape(const std::string &filepath) const;
+  [[nodiscard]] Result<SipiImgInfo> read_shape(const std::string &filepath) const;
 
   /*!
    * Get the dimensions of an in-memory SipiImage (already loaded; no file I/O).
