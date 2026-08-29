@@ -18,6 +18,7 @@
 #include "iiifparser/SipiSize.h"
 #include "format_handlers/output_sink.h"
 #include "SipiImageError.h"
+#include "error/SipiValueError.h"
 
 #include <memory>
 
@@ -153,7 +154,12 @@ public:
 
 
   /*!
-   * Method used to read an image file
+   * Read an image file into `img`. The returned `bool` (on success) reports
+   * whether this handler recognised and decoded the file at `filepath` —
+   * `false` lets the caller fall through to another registered handler rather
+   * than treating a format mismatch as an error. A `Result` holding no value
+   * reports a genuine decode failure (malformed input, an unsupported
+   * variant, a codec error) for a file this handler did recognise.
    *
    * \param img Pointer to SipiImage instance
    * \param filepath Image file path
@@ -162,24 +168,24 @@ public:
    * \param force_bps_8 Convert the file to 8 bits/sample on reading thus enforcing an 8 bit image
    * \param scaling_quality Quality of the scaling algorithm
    */
-  virtual bool read(SipiImage *img,
+  [[nodiscard]] virtual Result<bool> read(SipiImage *img,
     const std::string &filepath,
     std::shared_ptr<SipiRegion> region,
     std::shared_ptr<SipiSize> size,
     bool force_bps_8,
     ScalingQuality scaling_quality) = 0;
 
-  bool read(SipiImage *img, const std::string &filepath)
+  [[nodiscard]] Result<bool> read(SipiImage *img, const std::string &filepath)
   {
     return read(img, filepath, nullptr, nullptr, false, { ScalingMethod::HIGH, ScalingMethod::HIGH, ScalingMethod::HIGH, ScalingMethod::HIGH });
   }
 
-  bool read(SipiImage *img, const std::string &filepath, const std::shared_ptr<SipiRegion> region)
+  [[nodiscard]] Result<bool> read(SipiImage *img, const std::string &filepath, const std::shared_ptr<SipiRegion> region)
   {
     return read(img, filepath, region, nullptr, false, { ScalingMethod::HIGH, ScalingMethod::HIGH, ScalingMethod::HIGH, ScalingMethod::HIGH });
   }
 
-  bool read(SipiImage *img,
+  [[nodiscard]] Result<bool> read(SipiImage *img,
     const std::string &filepath,
     const std::shared_ptr<SipiRegion> region,
     const std::shared_ptr<SipiSize> size)
@@ -187,7 +193,7 @@ public:
     return read(img, filepath, region, size, false, { ScalingMethod::HIGH, ScalingMethod::HIGH, ScalingMethod::HIGH, ScalingMethod::HIGH });
   }
 
-  bool read(SipiImage *img,
+  [[nodiscard]] Result<bool> read(SipiImage *img,
     const std::string &filepath,
     const std::shared_ptr<SipiRegion> region,
     std::shared_ptr<SipiSize> size,
@@ -199,15 +205,20 @@ public:
   /*!
    * Read the image shape (dimensions, tiling, levels, channels, bit depth) from a file
    * without performing a full decode. Service-file overrides may take a fast path via
-   * the Essentials packet when present (ADR-0004 / DEV-6537).
+   * the Essentials packet when present (ADR-0004 / DEV-6537). A `Result` holding no
+   * value reports a genuine shape-probe failure; a recognised file whose shape cannot
+   * be determined yet (e.g. no matching handler) is reported through `SipiImgInfo::success`.
    *
    * \param filepath Pathname of the image file
    */
-  [[nodiscard]] virtual SipiImgInfo read_shape(const std::string &filepath) = 0;
+  [[nodiscard]] virtual Result<SipiImgInfo> read_shape(const std::string &filepath) = 0;
 
 
   /*!
-   * Write an image using the given file format implemented by the subclass.
+   * Write an image using the given file format implemented by the subclass. A
+   * `Result` holding no value reports a write failure; its `ErrorCode`
+   * distinguishes a client-initiated abort of the destination stream from
+   * every other write failure.
    *
    * \param img Pointer to SipiImage instance
    * \param sink Where the encoded bytes go (ADR-0006). A `FilePath` is written
@@ -215,7 +226,8 @@ public:
    * a `CallbackSink` or `TeeSink` is streamed through `SinkStream`.
    * \param params Compression parameters
    */
-  virtual void write(SipiImage *img, const OutputSink &sink, const SipiCompressionParams *params) = 0;
+  [[nodiscard]] virtual Result<void>
+    write(SipiImage *img, const OutputSink &sink, const SipiCompressionParams *params) = 0;
 };
 }// namespace Sipi
 

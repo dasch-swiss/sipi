@@ -19,20 +19,6 @@ namespace Sipi {
 
 class SipiIOPng : public SipiIO
 {
-private:
-  /*! Decodes a PNG file into img, reporting failure as a Result value. */
-  [[nodiscard]] static Result<bool> read_impl(SipiImage *img,
-    const std::string &filepath,
-    std::shared_ptr<SipiRegion> region,
-    std::shared_ptr<SipiSize> size,
-    bool force_bps_8,
-    ScalingQuality scaling_quality);
-
-  /*! Encodes img to the given sink, reporting failure as a Result value. */
-  [[nodiscard]] static Result<void> write_impl(SipiImage *img,
-    const OutputSink &sink,
-    const SipiCompressionParams *params);
-
 public:
   ~SipiIOPng() override = default;
   ;
@@ -44,7 +30,7 @@ public:
    * \param filepath Image file path
    * \param reduce Reducing factor. Not used reading TIFF files
    */
-  bool read(SipiImage *img,
+  [[nodiscard]] Result<bool> read(SipiImage *img,
     const std::string &filepath,
     std::shared_ptr<SipiRegion> region,
     std::shared_ptr<SipiSize> size,
@@ -58,7 +44,7 @@ public:
    * \param[out] width Width of the image in pixels
    * \param[out] height Height of the image in pixels
    */
-  Sipi::SipiImgInfo read_shape(const std::string &filepath) override;
+  [[nodiscard]] Result<SipiImgInfo> read_shape(const std::string &filepath) override;
 
 
   /*!
@@ -68,7 +54,9 @@ public:
    * \param sink Where the encoded bytes go (ADR-0006): a FilePath (file or
    * stdout via "-"/"stdout:"), or a streamed CallbackSink / TeeSink.
    */
-  void write(SipiImage *img, const OutputSink &sink, const SipiCompressionParams *params) override;
+  [[nodiscard]] Result<void> write(SipiImage *img,
+    const OutputSink &sink,
+    const SipiCompressionParams *params) override;
 };
 }// namespace Sipi
 

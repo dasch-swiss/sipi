@@ -268,7 +268,7 @@ static bool is_jpx(const char *fname)
 //=============================================================================
 
 
-Result<bool> SipiIOJ2k::read_impl(SipiImage *img,
+Result<bool> SipiIOJ2k::read(SipiImage *img,
   const std::string &filepath,
   std::shared_ptr<SipiRegion> region,
   std::shared_ptr<SipiSize> size,
@@ -831,30 +831,10 @@ Result<bool> SipiIOJ2k::read_impl(SipiImage *img,
   }
   return true;
 }
-
-bool SipiIOJ2k::read(SipiImage *img,
-  const std::string &filepath,
-  const std::shared_ptr<SipiRegion> region,
-  const std::shared_ptr<SipiSize> size,
-  bool force_bps_8,
-  ScalingQuality scaling_quality)
-{
-  auto result = read_impl(img, filepath, region, size, force_bps_8, scaling_quality);
-  if (!result) {
-    const auto &err = result.error();
-    throw SipiImageError(err.raw_message(), err.errnum(), err.location());
-  }
-  return *result;
-}
 //=============================================================================
 
 
-namespace {
-
-// The shape probe proper: reports a Kakadu failure as a SipiValueError value
-// rather than by throwing. File-local so it can reuse is_jpx, the kdu_sipi_*
-// statics and the rest of this TU.
-[[nodiscard]] Result<SipiImgInfo> read_shape_impl(const std::string &filepath)
+Result<SipiImgInfo> SipiIOJ2k::read_shape(const std::string &filepath)
 {
   SIPI_ZONE_N("SipiIOJ2k::read_shape");
   SipiImgInfo info;
@@ -1057,18 +1037,6 @@ namespace {
 
   return info;
 }
-
-}// namespace
-
-SipiImgInfo SipiIOJ2k::read_shape(const std::string &filepath)
-{
-  auto result = read_shape_impl(filepath);
-  if (!result) {
-    const auto &err = result.error();
-    throw SipiImageError(err.raw_message(), err.errnum(), err.location());
-  }
-  return *result;
-}
 //=============================================================================
 
 
@@ -1122,7 +1090,7 @@ static void write_essentials_box(kdu_supp::jp2_family_tgt *tgt, const std::vecto
 }
 //=============================================================================
 
-Result<void> SipiIOJ2k::write_impl(SipiImage *img, const OutputSink &sink, const SipiCompressionParams *params)
+Result<void> SipiIOJ2k::write(SipiImage *img, const OutputSink &sink, const SipiCompressionParams *params)
 {
   SIPI_ZONE_N("SipiIOJ2k::write");
   // A streamed sink (callback/tee) writes via J2kHttpStream → SinkStream; a
@@ -1615,17 +1583,5 @@ Result<void> SipiIOJ2k::write_impl(SipiImage *img, const OutputSink &sink, const
         + std::to_string(img->nc) + ", bps=" + std::to_string(img->bps) + ", colorspace=" + to_string(img->photo) });
   }
   return {};
-}
-
-void SipiIOJ2k::write(SipiImage *img, const OutputSink &sink, const SipiCompressionParams *params)
-{
-  auto result = write_impl(img, sink, params);
-  if (!result) {
-    const auto &err = result.error();
-    if (err.code() == ErrorCode::kClientAbort) {
-      throw SipiImageClientAbortError(err.raw_message(), err.errnum(), err.location());
-    }
-    throw SipiImageError(err.raw_message(), err.errnum(), err.location());
-  }
 }
 }// namespace Sipi

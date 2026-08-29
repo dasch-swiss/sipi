@@ -65,11 +65,13 @@ static const std::string kPhotoshopOvershootApp13 = kMalformedRoot + "/jpeg_phot
 TEST(JpegMarkerRegression, XmpTruncatedReadShapeDoesNotCrash)
 {
   Sipi::SipiIOJpeg io;
-  Sipi::SipiImgInfo info;
+  Sipi::Result<Sipi::SipiImgInfo> result{ Sipi::SipiImgInfo{} };
   // The bounded extraction must not walk past marker->data_length; the
   // underlying JPEG image data is well-formed, so the shape probe still
   // succeeds once the XMP segment is safely skipped.
-  ASSERT_NO_THROW(info = io.read_shape(kXmpTruncated));
+  ASSERT_NO_THROW(result = io.read_shape(kXmpTruncated));
+  ASSERT_TRUE(result.has_value());
+  const auto &info = *result;
   EXPECT_EQ(info.success, Sipi::SipiImgInfo::DIMS);
   EXPECT_GT(info.width, 0);
   EXPECT_GT(info.height, 0);
@@ -102,8 +104,10 @@ TEST(JpegMarkerRegression, IccShortApp2ReadDoesNotCrash)
 TEST(JpegMarkerRegression, PhotoshopShortApp13ReadShapeDoesNotCrash)
 {
   Sipi::SipiIOJpeg io;
-  Sipi::SipiImgInfo info;
-  ASSERT_NO_THROW(info = io.read_shape(kPhotoshopShortApp13));
+  Sipi::Result<Sipi::SipiImgInfo> result{ Sipi::SipiImgInfo{} };
+  ASSERT_NO_THROW(result = io.read_shape(kPhotoshopShortApp13));
+  ASSERT_TRUE(result.has_value());
+  const auto &info = *result;
   EXPECT_EQ(info.success, Sipi::SipiImgInfo::DIMS);
 }
 
@@ -129,8 +133,10 @@ TEST(JpegMarkerRegression, PhotoshopShortApp13FullReadDoesNotCrash)
 TEST(JpegMarkerRegression, PhotoshopOvershootApp13ReadShapeDoesNotCrash)
 {
   Sipi::SipiIOJpeg io;
-  Sipi::SipiImgInfo info;
-  ASSERT_NO_THROW(info = io.read_shape(kPhotoshopOvershootApp13));
+  Sipi::Result<Sipi::SipiImgInfo> result{ Sipi::SipiImgInfo{} };
+  ASSERT_NO_THROW(result = io.read_shape(kPhotoshopOvershootApp13));
+  ASSERT_TRUE(result.has_value());
+  const auto &info = *result;
   EXPECT_EQ(info.success, Sipi::SipiImgInfo::DIMS);
   EXPECT_GT(info.width, 0);
   EXPECT_GT(info.height, 0);

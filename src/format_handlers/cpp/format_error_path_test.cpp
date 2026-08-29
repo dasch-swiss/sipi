@@ -75,8 +75,9 @@ TEST(PngErrorPath, TruncatedPngReadShapeReturnsFailure)
   ASSERT_FALSE(create_truncated(src, truncated, 20).empty());
 
   Sipi::SipiIOPng io;
-  auto info = io.read_shape(truncated);
-  EXPECT_EQ(info.success, Sipi::SipiImgInfo::FAILURE);
+  auto result = io.read_shape(truncated);
+  ASSERT_TRUE(result.has_value());
+  EXPECT_EQ(result->success, Sipi::SipiImgInfo::FAILURE);
 
   std::remove(truncated.c_str());
 }
@@ -84,8 +85,9 @@ TEST(PngErrorPath, TruncatedPngReadShapeReturnsFailure)
 TEST(PngErrorPath, NonPngFileReadShapeReturnsFailure)
 {
   Sipi::SipiIOPng io;
-  auto info = io.read_shape(test_images + "unit/lena512.tif");  // not a PNG
-  EXPECT_EQ(info.success, Sipi::SipiImgInfo::FAILURE);
+  auto result = io.read_shape(test_images + "unit/lena512.tif");  // not a PNG
+  ASSERT_TRUE(result.has_value());
+  EXPECT_EQ(result->success, Sipi::SipiImgInfo::FAILURE);
 }
 
 // ============================================================
@@ -122,9 +124,11 @@ TEST(TiffErrorPath, TruncatedTiffReadShapeHandledCleanly)
   ASSERT_FALSE(create_truncated(src, truncated, 50).empty());
 
   Sipi::SipiIOTiff io;
-  auto info = io.read_shape(truncated);
-  // Should return FAILURE or default, not crash
-  EXPECT_NE(info.success, Sipi::SipiImgInfo::DIMS);
+  auto result = io.read_shape(truncated);
+  // A successful probe reporting FAILURE (TIFFOpen cannot read the truncated
+  // directory), not a crash and not DIMS.
+  ASSERT_TRUE(result.has_value());
+  EXPECT_NE(result->success, Sipi::SipiImgInfo::DIMS);
 
   std::remove(truncated.c_str());
 }
@@ -142,8 +146,9 @@ TEST(JpegErrorPath, TruncatedJpegReadShapeReturnsFailure)
   ASSERT_FALSE(create_truncated(src, truncated, 100).empty());
 
   Sipi::SipiIOJpeg io;
-  auto info = io.read_shape(truncated);
-  EXPECT_EQ(info.success, Sipi::SipiImgInfo::FAILURE);
+  auto result = io.read_shape(truncated);
+  ASSERT_TRUE(result.has_value());
+  EXPECT_EQ(result->success, Sipi::SipiImgInfo::FAILURE);
 
   std::remove(truncated.c_str());
 }
