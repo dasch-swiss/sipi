@@ -99,6 +99,29 @@ harness also has a bare `catch (...)` alongside `catch (const std::exception
 without it, a Kakadu-thrown rejection on a malformed JP2 would itself register
 as an uncaught-exception finding.
 
+### The decode-size budget
+
+The shape probe (`read_shape`) always runs, on every input — the full second
+step, `read`, does not. The harness estimates the decode buffer implied by the
+probe's geometry and skips `read` entirely once that estimate exceeds 512 MiB
+(`kMaxHarnessDecodeBytes` in `codec_fuzz_harness.h`); container/header parsing
+coverage is untouched by the skip, since `read_shape` is where that coverage
+lives.
+
+The budget exists because `validate_decode_dims` (`src/image/cpp/SipiIO.h`)
+caps each dimension and the channel count individually, but never their
+product — so a small, cheaply crafted header can legally claim a
+multi-gigabyte decode buffer and still pass the guard. In production, that
+claim is bounded at the FFI seam by the full-lane decode memory budget
+(`MemoryBudgetGuard`, `src/ffi/cpp/serve_image.cpp`); the harness drives the
+handler directly and has no equivalent budget, so without the skip a
+275-byte file can end a fuzzing leg on an out-of-memory that says nothing
+about codec correctness.
+
+Raising `-rss_limit_mb` is not a substitute: a crafted header can claim
+dimensions up to the per-dimension cap on both axes at once, so no fixed RSS
+limit survives that argument — only skipping the oversized decode does.
+
 ### Per-target knobs
 
 Each codec target passes `-max_len` and (except J2K) a `-dict=` flag; all five
@@ -401,14 +424,43 @@ A nightly failure is a manual triage, not an auto-filed issue:
    ./bazel-bin/src/format_handlers/fuzz/tiff_decode_fuzz_bin path/to/crash-<sha1>
    ```
 
-2. **Fix as its own commit**, typed `fix:` — the bug already exists on `main`,
+   The artifact directory is not exclusively crashes: libFuzzer names a saved
+   reproducer `crash-`, `oom-`, or `timeout-` depending on how the process
+   died, and the CI artifact is uploaded as `fuzz-crashes-<target>` regardless
+   of which prefix it holds.
+
+2. **Classify the finding** before deciding what to do with it — a nightly
+   failure is not automatically a codec bug:
+   - **Sanitizer report inside SIPI code.** A real bug. Steps 3-5 below apply
+     as written.
+   - **Sanitizer report whose stack is entirely inside libFuzzer or the C++
+     runtime.** Not a SIPI finding. One observed instance was an ASan report
+     inside libFuzzer's own `Sha1ToString` → `std::basic_stringbuf::str()` →
+     libc++'s internal-buffer initialisation, with the saved reproducer being
+     the *empty input* — a tell that the finding sits outside the target
+     entirely. This gets its own issue against the toolchain, not a `fix:` on
+     a codec.
+   - **Out-of-memory (`oom-` prefix).** Check the reproducer's claimed
+     geometry first. An allocation the decode-size budget above is meant to
+     prevent means the harness needs adjusting, not the codec — the codec
+     never got the chance to reject it. An allocation the codec should have
+     refused on its own is a real bug.
+   - **Timeout (`timeout-` prefix).** Reproduce with the timeout raised before
+     dismissing it as a slow decode. A genuine hang inside a third-party codec
+     is still a finding — it is an availability bug on the production
+     `read_shape`/`read` path, even though the fix cannot be a patch to that
+     codec's source. **Never pin a hanging input into the seed corpus**: the
+     corpus is replayed by `bazel test` on every PR, so a hanging seed would
+     hang the test suite instead of failing it.
+3. **Fix as its own commit**, typed `fix:` — the bug already exists on `main`,
    so `fix:` is the correct Conventional Commit type regardless of when the
    fuzz target that found it landed.
-3. **Commit the reproducer** into the target's checked-in corpus directory
+4. **Commit the reproducer** into the target's checked-in corpus directory
    (`src/iiifparser/corpus/` or `src/format_handlers/corpus/<fmt>/`) alongside the fix,
    so it replays forever in the `//src/...` sweeps rather than only living in a
-   30-day CI artifact.
-4. **Open a Linear issue** tracking the finding and its fix.
+   30-day CI artifact. Skip this for a finding classified outside SIPI code, and
+   never do it for a timeout.
+5. **Open a Linear issue** tracking the finding and its fix.
 
 No step here is automated: the nightly preserves the reproducer and fails
 loudly, and a person decides what — if anything — a given finding is worth.
