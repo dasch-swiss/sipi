@@ -46,17 +46,21 @@ inline const std::string &fuzz_temp_path(const char *suffix)
 // Writes `data`/`size` to the per-process temp file, then drives `Handler`'s
 // `read_shape` and `read` entry points over it. Each call is wrapped in its
 // own try/catch so a clean rejection from `read_shape` still lets `read` run.
-// Both entry points return a `Result`, which the harness discards on purpose:
-// a codec rejecting malformed input reports that through the `Result` holding
-// no value, not through an exception, so the harness's finding surface is
-// what escapes the catch blocks entirely (SIGSEGV/SIGABRT/sanitizer reports).
-// The try/catch blocks stay because a decoder can still throw en route to
-// producing that `Result`: Kakadu's `kdu_exception` (an `int`-like type, not a
-// `std::exception`, which is why the bare `catch (...)` matters), `std::bad_alloc`
-// and the allocation-guard throws that stay exception-based by design
-// (`checked_buf_size_or_throw`, `memTiffOpen`'s raw `malloc` failures), and the
-// metadata constructors (`Iptc`/`Exif`/`Xmp`) the decoders still call inside
-// `try`/`catch`.
+// Both entry points return a `Result`, which the harness intentionally checks
+// only for presence: a codec rejecting malformed input reports that through
+// the `Result` holding no value, not through an exception, so the harness's
+// finding surface is what escapes the catch blocks entirely (SIGSEGV/SIGABRT/
+// sanitizer reports). The try/catch blocks stay because a decoder can still
+// throw en route to producing that `Result`: Kakadu's `kdu_exception` (an
+// `int`-like type, not a `std::exception`, which is why the bare `catch (...)`
+// matters — SipiIOJ2k.cpp's decode path calls several Kakadu accessors, e.g.
+// `codestream.access_siz()`/`jpx_layer.access_colour()`, that are not
+// individually try/caught) and `std::bad_alloc`, including the allocation-guard
+// throws that stay exception-based by design (`checked_buf_size_or_throw`,
+// `memTiffOpen`'s raw `malloc` failures). The `Iptc`/`Exif`/`Icc` metadata
+// parsers are `Result`-returning factories and `Xmp`'s constructor is
+// infallible (it stores the given bytes verbatim, never parsing them), so
+// none of the four metadata types can still throw here.
 template<typename Handler> int run_decode(const uint8_t *data, size_t size, const char *suffix)
 {
   const std::string &path = fuzz_temp_path(suffix);
@@ -68,7 +72,7 @@ template<typename Handler> int run_decode(const uint8_t *data, size_t size, cons
   Handler handler;
 
   try {
-    static_cast<void>(handler.read_shape(path));
+    if (const auto r = handler.read_shape(path); !r) { /* a rejection is a valid fuzz outcome */ }
   } catch (const std::exception &) {
   } catch (...) {
   }
@@ -80,7 +84,7 @@ template<typename Handler> int run_decode(const uint8_t *data, size_t size, cons
     // `read`, which hides all base-class `read` overloads from unqualified
     // lookup on the derived type. The base overload still dispatches
     // virtually into the derived handler's 6-arg override.
-    static_cast<void>(handler.Sipi::SipiIO::read(&img, path));
+    if (const auto r = handler.Sipi::SipiIO::read(&img, path); !r) { /* a rejection is a valid fuzz outcome */ }
   } catch (const std::exception &) {
   } catch (...) {
   }
