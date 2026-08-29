@@ -6,7 +6,7 @@ status: proposed
 
 The format-handler API (`Sipi::SipiIO` base class + `SipiIOJ2k` / `SipiIOTiff` / `SipiIOJpeg` / `SipiIOPng` subclasses) is modernized as a coordinated set of changes that bring the C++ surface closer to the Rust idioms it will eventually be ported to under [ADR-0001](./0001-shttps-as-strangler-fig-target.md):
 
-1. **`std::expected<T, E>` for fallible operations** — replacing `bool` returns + out-parameters and the tri-state `SipiImgInfo::success` enum.
+1. **`std::expected<T, E>` for fallible operations** — replacing `bool` returns + out-parameters. (Settled by [ADR-0024](./0024-value-based-image-errors.md): every `format_handlers` fallible operation returns the shared `Result<T>` = `std::expected<T, SipiValueError>`, not a per-operation error type; `SipiImgInfo`'s tri-state `success` field is retained, not replaced.)
 2. **C++ default arguments instead of overload sets** for `read()` and `write()` — replacing the five `read()` overloads in `SipiIO.h`.
 3. **Typed sum types for I/O abstractions** — symmetric write- and read-path variants. Write side: `OutputSink = std::variant<FilePath, StdoutSink, HttpSink, TeeSink>` replaces magic-string filepath sentinels (`"-"` for stdout, `"HTTP"` for the HTTP server output). Read side: `InputSource = std::variant<FilePath, RangeSource>` replaces the path-string-only read assumption, enabling byte-range-capable backends (S3 per [ADR-0004](./0004-image-shape-ownership.md)) without changing handler signatures. `HttpSink` and `RangeSource` carry opaque callbacks, so `format_handlers/` does not depend on `shttps/` (write path) or on a remote-storage SDK (read path). `TeeSink` composes outputs for the dual-write-to-HTTP-and-cache optimization. *(Read-side variant added 2026-05-08 per [Probe 5](../archive/2026-05-08-modularization-analysis.md#probe-5--sipihttpserver-decomposition).)*
 4. **Per-codec typed parameter structs in a `std::variant`** — replacing the stringly-typed `SipiCompressionParams = std::unordered_map<int, std::string>` with `std::variant<JpegParams, J2kParams, TiffParams, PngParams>`.
@@ -16,8 +16,8 @@ We accept these because the [Rust-aligned, transitional C++](../archive/2026-05-
 
 | C++ pattern (current) | C++ pattern (target) | Rust equivalent (post-port) |
 | --- | --- | --- |
-| `bool read(...)` + out-params | `std::expected<void, IoError>` | `Result<(), IoError>` |
-| `SipiImgInfo::success` enum | `std::expected<SipiImgInfo, ImgInfoError>` | `Result<ImgInfo, ImgInfoError>` |
+| `bool read(...)` + out-params | `std::expected<void, SipiValueError>` (`Result<void>`) | `Result<(), SipiValueError>` |
+| `SipiImgInfo::success` enum | `std::expected<SipiImgInfo, SipiValueError>` (`Result<SipiImgInfo>`), `success` field retained | `Result<ImgInfo, SipiValueError>` |
 | 5 `read()` overloads | C++ default args | Default args / Builder |
 | Magic strings (`"-"`, `"HTTP"`) for write; path-string-only for read | `std::variant<FilePath, StdoutSink, HttpSink, TeeSink>` (write); `std::variant<FilePath, RangeSource>` (read) | Rust enum |
 | `unordered_map<int, string>` params | `std::variant<JpegParams, J2kParams, ...>` | Rust enum |
@@ -74,7 +74,7 @@ fn render_thumbnail(path: &Path) -> Result<Thumbnail, RenderError> {
 
 - **Every fallible function in `format_handlers/`** is rewritten to return `std::expected<T, E>`. Callers update from `if (!handler->read(...)) { ... }` to `SIPI_TRY` or monadic `.and_then` chains.
 
-- **`SipiImgInfo::success` enum is removed**. The "DIMS" partial-success case becomes a `bool partial` field on the success branch: `std::expected<SipiImgInfo, ImgInfoError>` where `SipiImgInfo` carries `partial = true` when only dimensions could be read (no full shape).
+- **`SipiImgInfo::success` enum is retained.** `read_shape` returns `Result<SipiImgInfo>` (`std::expected<SipiImgInfo, SipiValueError>`, [ADR-0024](./0024-value-based-image-errors.md)); the `Result` communicates whether `read_shape` produced a `SipiImgInfo` at all, and the `success` field (`FAILURE`/`DIMS`/`ALL`) still communicates how much of the shape a returned `SipiImgInfo` carries.
 
 - **`SipiCompressionParams` becomes a `std::variant`** of per-codec parameter structs. The existing `SipiCompressionParamName` enum collapses into the variant alternatives. Each format handler's `write` accepts only its own variant alternative; mismatch is a compile-time error via `std::get` or `std::visit`.
 
@@ -88,4 +88,4 @@ fn render_thumbnail(path: &Path) -> Result<Thumbnail, RenderError> {
 
 - **Rust port preview**: when a `format_handlers/` module is eventually rewritten in Rust under the strangler-fig plan, the API's shape requires no redesign — only a syntax translation. This is the load-bearing benefit of the modernization.
 
-- **Coupled with [ADR-0004](./0004-image-shape-ownership.md)**: `read_shape` (the renamed `getDim`) is the first method to land the new return-type style — `std::expected<SipiImgInfo, ImgInfoError>`. The `read_shape` modernization rides ADR-0004's amendment commit; the rest of the format-handler API follows in subsequent PRs.
+- **Coupled with [ADR-0004](./0004-image-shape-ownership.md)**: `read_shape` (the renamed `getDim`) is the first method to land the new return-type style — `std::expected<SipiImgInfo, SipiValueError>`. The `read_shape` modernization rides ADR-0004's amendment commit; the rest of the format-handler API follows in subsequent PRs.

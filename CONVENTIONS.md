@@ -263,8 +263,9 @@ C++ engine:
 
 | Situation | Mechanism |
 |---|---|
-| Fallible operations (parsing, I/O, validation) | `std::expected<T, E>` (new code) or `SipiError` (existing) |
-| Truly unrecoverable errors | `throw SipiError(...)` |
+| Fallible operation in the image/codec layer (`image`, `image_processing`, `format_handlers`, `metadata`) | `Result<T>` (`std::expected<T, SipiValueError>`) |
+| Fallible operation in `iiifparser` (URL/request parsing) | `throw SipiError`/`SipiSizeError` — a different package, unchanged (ADR-0021) |
+| Truly unrecoverable / invariant errors in the image/codec layer | `throw SipiImageError(...)` |
 | Engine errors to the client | The engine returns a `SipiStatus` over the FFI seam; the Rust shell maps it to an axum HTTP response |
 | Resource exhaustion (OOM) | Catch `std::bad_alloc`, return an error status over the seam, log, continue serving |
 

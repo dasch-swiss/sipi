@@ -2,9 +2,10 @@
 
 The image/codec layer's failure contract: what type carries an error, what
 policy each failure maps to at the three seams that consume it, and which
-legacy exception mechanisms remain. The decision this document reflects is
-[ADR-0024](../../adr/0024-value-based-image-errors.md); this page is the living
-catalog kept current as the migration lands, not the decision record itself.
+exception mechanisms remain in permanent, deliberate use. The decision this
+document reflects is [ADR-0024](../../adr/0024-value-based-image-errors.md);
+this page is the living catalog of the contract as it stands, not the
+decision record itself.
 
 ## The value type: `Sipi::SipiValueError`
 
@@ -29,10 +30,11 @@ catalog kept current as the migration lands, not the decision record itself.
 
 A `constexpr ErrorPolicy policy_for(ErrorCode)` returns
 `{ HttpStatusClass, SentryPolicy, MetricHint }` for a given code. This is the
-single source of truth for what today's exception-type dispatch encodes as
-scattered `catch` clauses. Each seam maps the returned `HttpStatusClass` to its
-own vocabulary — a concrete `SipiStatus` on the HTTP seam, an emitted error
-string on the Lua seam, an exit code on the CLI seam.
+single source of truth for a `SipiValueError`'s failure policy — no seam
+dispatches on `ErrorCode` with its own scattered `catch`-equivalent `switch`.
+Each seam maps the returned `HttpStatusClass` to its own vocabulary — a
+concrete `SipiStatus` on the HTTP seam, an emitted error string on the Lua
+seam, an exit code on the CLI seam.
 
 | `ErrorCode` | `HttpStatusClass` | `SentryPolicy` | `MetricHint` |
 |---|---|---|---|
@@ -45,9 +47,11 @@ string on the Lua seam, an exit code on the CLI seam.
 | `kMetadataParseFailed` | `kInternalError` | `kReport` | none |
 
 `std::bad_alloc` is deliberately not an `ErrorCode` and never appears in this
-table — it stays exception-based permanently (ADR-0024 Decision 7). Its policy
-is fixed at every seam: `kInternalError`, Sentry skipped, `MetricHint::
-kMemoryAllocFailure`.
+table — it stays exception-based permanently (ADR-0024 Decision 7). It has no
+`MetricHint` to key on, since it never carries an `ErrorCode`: every seam maps
+it to `HttpStatusClass::kInternalError` and increments the
+`memory_alloc_failures_total` metric (`src/observability/cpp/metrics.h`)
+directly at the `catch` site, outside `policy_for`.
 
 ## Legacy mechanisms and their disposition
 
@@ -55,23 +59,31 @@ kMemoryAllocFailure`.
 |---|---|---|
 | `Sipi::SipiError` | `iiifparser` | Unchanged. Exception-based, out of scope for this migration — a different package with its own lifetime (ADR-0021). The seams keep catching it by type for HTTP-400 dispatch. |
 | `Sipi::SipiSizeError` | `iiifparser` | Unchanged, same reasoning as `SipiError`. |
-| `Sipi::SipiImageError` (+ `SipiImageClientAbortError`) | `image` | Replaced for every fallible-operation throw site by `SipiValueError`. The type itself is narrowed to genuinely unrecoverable, non-fallible conditions (or removed) once no fallible call site throws it. |
-| `Sipi::InfoError` (bare `enum`) | `image` | Replaced by a dedicated `ErrorCode` variant (`kShapeProbeFailed`). |
+| `Sipi::SipiImageError` | `image` | No fallible operation throws it. Narrowed to the unrecoverable/invariant class: allocation-size overflow (`checked_buf_size_or_throw` in `SipiImage.cpp`, `SipiIOTiff.cpp`, `compose.cpp`), `memTiffOpen`'s raw `malloc` failures, `SipiImage`'s construction/geometry invariants, and the `getPixel`/`setPixel` accessors — all programming errors with no input path. |
+| `Sipi::InfoError` (bare `enum`) | `image` | Deleted; superseded by the dedicated `ErrorCode` variant `kShapeProbeFailed`. |
 | `std::bad_alloc` | n/a | Unchanged, permanent. See above. |
 
 ## The three seams
 
-Each seam converts `Result`/`SipiValueError` (or, before a handler's migration
-lands, the exception it still throws) into its own failure vocabulary:
+Each seam converts a fallible operation's `Result`/`SipiValueError` into its
+own failure vocabulary. What each seam catches by exception type differs:
 
 - **`src/ffi/cpp/serve_image.cpp`** (HTTP) — `HttpStatusClass` → `SipiStatus`;
   `SentryPolicy::kReport` populates an `ImageContext` and calls
   `report_image_error`; `MetricHint` increments the matching
-  `Sipi::observability::Metrics` counter.
+  `Sipi::observability::Metrics` counter. Its own `try`/`catch` blocks vary by
+  step: the image-read step catches `std::bad_alloc`, `SipiImageError`, and
+  `Sipi::SipiSizeError`; the later rotate/quality-conversion steps catch
+  `std::bad_alloc` and `Sipi::SipiError`; the watermark step catches
+  `Sipi::SipiError` and `std::exception`. It also catches `iiifparser`'s
+  `SipiError`/`SipiSizeError` elsewhere in the file (out of scope for this
+  migration, ADR-0021) for its HTTP 400. None of these name `kdu_exception`.
 - **`src/ffi/cpp/image_handle.cpp`** (Lua userdata surface, behind
   `src/scripting/rust/bindings/image.rs`) — `client_message()` is emitted as the
   Lua-visible error string; there is no HTTP status or Sentry report on this
-  surface.
+  surface. `sipi_image_new` (the entry that calls `SipiImage::read`) hand-rolls
+  its own three-stage catch, in order: `Sipi::SipiError`, then `std::exception`,
+  then a bare `catch (...)`.
 - **CLI offline verbs** (`src/cli/cpp/cli_app.cpp`,
   `src/cli/cpp/commands/convert_access_file.cpp`, `convert_service_file.cpp`,
   `verify.cpp`, `health.cpp`) — `diagnostic_message()` reaches the operator
@@ -79,7 +91,28 @@ lands, the exception it still throws) into its own failure vocabulary:
   optional `--json` report on `sipi convert` (`emit_json_report`) or
   `report_error` on `convert access-file`. The exit code is a plain binary
   `EXIT_SUCCESS`/`EXIT_FAILURE` — a richer `HttpStatusClass`-derived exit-code
-  mapping is not implemented today.
+  mapping is not implemented today. Each verb body catches `SipiImageError`
+  and/or `std::exception` around its own calls; none name `kdu_exception`.
+
+None of the three seams' own `try`/`catch` blocks name Kakadu's
+`kdu_exception` (an `int`-like type, not a `std::exception`) — and none need
+to, because it is stopped further out by a bare `catch (...)` wall. Inside
+`SipiIOJ2k::read`, only the source-open/`access_codestream`/`open_stream` call
+and the `codestream.create` call are wrapped in `try`/`catch (kdu_exception&)`,
+converting those two failures to a `Result`. Several later calls on the same
+decode path are not inside any `try`: `codestream.access_siz()`,
+`codestream.apply_input_restrictions(...)`, `codestream.get_dims(...)`, and
+`jpx_layer.access_colour(0)`. A `kdu_exception` raised from any of those
+escapes `SipiIOJ2k::read` uncaught by any type-specific handler in the call
+chain above it, and is stopped only by the outer catch-all at each seam's
+boundary: `sipi_guard`'s bare `catch (...)` at the `extern "C"` boundary
+(`src/ffi/cpp/serve_response.h`) for the HTTP entries that go through
+`sipi_serve_image`, `sipi_image_new`'s own bare `catch (...)` for the Lua
+userdata surface, and `sipi_cli_main`'s bare `catch (...)` around
+`CLI11_PARSE` for the CLI. This is why
+`src/format_handlers/fuzz/codec_fuzz_harness.h` keeps a bare `catch (...)`
+around its own `read` calls — it exercises the same decode path directly,
+outside any seam.
 
 ## Error-variant principle
 
