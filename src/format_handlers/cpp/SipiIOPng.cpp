@@ -56,16 +56,102 @@
 #if !defined(PNG_iTXt_SUPPORTED)
 #define PNG_iTXt_SUPPORTED 1
 #endif
+#if !defined(PNG_eXIf_SUPPORTED)
+#define PNG_eXIf_SUPPORTED 1
+#endif
 
 #define PNG_BYTES_TO_CHECK 4
 
 namespace Sipi {
 
 static char lang_en[] = "en";
-static char exif_tag[] = "Raw profile type exif";
 static char iptc_tag[] = "Raw profile type iptc";
 static char xmp_tag[] = "XML:com.adobe.xmp";
 static char sipi_tag[] = "SIPI:io.sipi.essentials";
+
+// ImageMagick's "raw profile" text-chunk convention: a name line, an 8-wide
+// decimal length, then the profile bytes as lowercase hex wrapped at 72
+// columns. Used here to carry IPTC (which has no dedicated PNG chunk) inside
+// a text chunk without the NUL-truncation that binary data would suffer.
+static std::string encode_raw_profile(const char *name, const std::vector<unsigned char> &data)
+{
+  std::string out;
+  out += '\n';
+  out += name;
+  out += '\n';
+  char len_buf[16];
+  std::snprintf(len_buf, sizeof(len_buf), "%8lu", static_cast<unsigned long>(data.size()));
+  out += len_buf;
+  out += '\n';
+  static const char hex_digits[] = "0123456789abcdef";
+  for (size_t i = 0; i < data.size(); i++) {
+    if (i > 0 && i % 36 == 0) { out += '\n'; }
+    out += hex_digits[(data[i] >> 4) & 0x0f];
+    out += hex_digits[data[i] & 0x0f];
+  }
+  out += '\n';
+  return out;
+}
+
+static Result<std::vector<unsigned char>> decode_raw_profile(const char *text, size_t text_len)
+{
+  const char *p = text;
+  const char *end = text + text_len;
+
+  if (p >= end || *p != '\n') {
+    return std::unexpected(
+      SipiValueError{ ErrorCode::kMetadataParseFailed, "malformed raw profile in PNG: missing leading newline" });
+  }
+  ++p;// skip leading newline
+
+  // skip the profile-name line
+  while (p < end && *p != '\n') { ++p; }
+  if (p >= end) {
+    return std::unexpected(
+      SipiValueError{ ErrorCode::kMetadataParseFailed, "malformed raw profile in PNG: missing name line" });
+  }
+  ++p;// skip newline after name
+
+  // read the length line: leading spaces tolerated, terminated by '\n'
+  const char *len_start = p;
+  while (p < end && *p != '\n') { ++p; }
+  if (p >= end) {
+    return std::unexpected(
+      SipiValueError{ ErrorCode::kMetadataParseFailed, "malformed raw profile in PNG: missing length line" });
+  }
+  std::string len_str(len_start, p);
+  char *len_end = nullptr;
+  const unsigned long length = std::strtoul(len_str.c_str(), &len_end, 10);
+  if (len_end == len_str.c_str()) {
+    return std::unexpected(
+      SipiValueError{ ErrorCode::kMetadataParseFailed, "malformed raw profile in PNG: unparseable length" });
+  }
+  ++p;// skip newline after length
+
+  std::vector<unsigned char> result;
+  result.reserve(length);
+  int hi_nibble = -1;
+  while (p < end && result.size() < length) {
+    const char c = *p++;
+    int nibble;
+    if (c >= '0' && c <= '9') {
+      nibble = c - '0';
+    } else if (c >= 'a' && c <= 'f') {
+      nibble = c - 'a' + 10;
+    } else if (c >= 'A' && c <= 'F') {
+      nibble = c - 'A' + 10;
+    } else {
+      continue;// ignore embedded newlines/whitespace
+    }
+    if (hi_nibble < 0) {
+      hi_nibble = nibble;
+    } else {
+      result.push_back(static_cast<unsigned char>((hi_nibble << 4) | nibble));
+      hi_nibble = -1;
+    }
+  }
+  return result;
+}
 
 //============== HELPER CLASS ==================
 // NOTE: pointers returned by next() are invalidated by the following next()
@@ -275,23 +361,37 @@ Result<bool> SipiIOPng::read(SipiImage *img,
       img->set_icc(*icc);
     }
   }
+
+  // EXIF travels in the binary-safe eXIf chunk (libpng >= 1.6.32), carrying
+  // the raw TIFF-header-relative byte stream exifBytes() emits directly.
+  png_uint_32 num_exif = 0;
+  png_bytep exif_data = nullptr;
+  if (png_get_eXIf_1(png_ptr, info_ptr, &num_exif, &exif_data) != 0 && exif_data != nullptr && num_exif > 0) {
+    // A PNG whose EXIF block does not parse is not decoded.
+    if (auto exif = Exif::parse(exif_data, num_exif)) {
+      img->set_exif(*exif);
+    } else {
+      png_destroy_read_struct(&png_ptr, &info_ptr, nullptr);
+      return std::unexpected(exif.error());
+    }
+  }
+
   png_text *png_texts;
   int num_comments = png_get_text(png_ptr, info_ptr, &png_texts, nullptr);
 
   for (int i = 0; i < num_comments; i++) {
     if (strcmp(png_texts[i].key, xmp_tag) == 0) {
       img->set_xmp(std::make_shared<Xmp>((char *)png_texts[i].text, (int)png_texts[i].text_length));
-    } else if (strcmp(png_texts[i].key, exif_tag) == 0) {
-      // A PNG whose EXIF block does not parse is not decoded.
-      if (auto exif = Exif::parse((unsigned char *)png_texts[i].text, (unsigned int)png_texts[i].text_length)) {
-        img->set_exif(*exif);
-      } else {
-        png_destroy_read_struct(&png_ptr, &info_ptr, nullptr);
-        return std::unexpected(exif.error());
-      }
     } else if (strcmp(png_texts[i].key, iptc_tag) == 0) {
+      const size_t iptc_text_len =
+        png_texts[i].text_length > 0 ? png_texts[i].text_length : strlen(png_texts[i].text);
+      auto raw_profile = decode_raw_profile(png_texts[i].text, iptc_text_len);
+      if (!raw_profile) {
+        png_destroy_read_struct(&png_ptr, &info_ptr, nullptr);
+        return std::unexpected(raw_profile.error());
+      }
       // A PNG whose IPTC block does not parse is not decoded.
-      if (auto iptc = Iptc::parse((unsigned char *)png_texts[i].text, (unsigned int)png_texts[i].text_length)) {
+      if (auto iptc = Iptc::parse(raw_profile->data(), (unsigned int)raw_profile->size())) {
         img->set_iptc(*iptc);
       } else {
         png_destroy_read_struct(&png_ptr, &info_ptr, nullptr);
@@ -635,18 +735,25 @@ Result<void> SipiIOPng::write(SipiImage *img, const OutputSink &sink, const Sipi
   // other metadata comes here
   //
 
+  // exif_buf must outlive png_write_info()/png_write_png() below — libpng
+  // keeps the pointer handed to png_set_eXIf_1 rather than copying it.
   std::vector<unsigned char> exif_buf;
   std::shared_ptr<Exif> exif = img->getExif();
   if (exif) {
     exif_buf = exif->exifBytes();
-    chunk_ptr.add_zTXt(exif_tag, (char *)exif_buf.data(), exif_buf.size());
+    if (!exif_buf.empty()) { png_set_eXIf_1(png_ptr, info_ptr, (png_uint_32)exif_buf.size(), exif_buf.data()); }
   }
 
+  // iptc_profile must likewise outlive png_write_info()/png_write_png().
   std::vector<unsigned char> iptc_buf;
   std::shared_ptr<Iptc> iptc = img->getIptc();
+  std::string iptc_profile;
   if (iptc) {
     iptc_buf = iptc->iptcBytes();
-    chunk_ptr.add_zTXt(iptc_tag, (char *)iptc_buf.data(), iptc_buf.size());
+    if (!iptc_buf.empty()) {
+      iptc_profile = encode_raw_profile("iptc", iptc_buf);
+      chunk_ptr.add_zTXt(iptc_tag, iptc_profile.data(), (unsigned int)iptc_profile.size());
+    }
   }
 
   std::string xmp_buf;
@@ -675,10 +782,8 @@ Result<void> SipiIOPng::write(SipiImage *img, const OutputSink &sink, const Sipi
 
   png_set_rows(png_ptr, info_ptr, row_pointers);
 
-  png_write_info(png_ptr, info_ptr);
   png_write_png(png_ptr, info_ptr, PNG_TRANSFORM_SWAP_ENDIAN,
     nullptr);// we expect the data to be little endian...
-  png_write_end(png_ptr, info_ptr);
 
   png_free(png_ptr, row_pointers);
   row_pointers = nullptr;
