@@ -72,13 +72,6 @@ private:
     const std::string &compression = "");
 
   /*!
-   * Converts an image from RRRRRR...GGGGGG...BBBBB to RGBRGBRGBRGB....
-   * \param img Pointer to SipiImage instance
-   * \param[in] sll Scanline length in bytes
-   */
-  void separateToContig(SipiImage *img, unsigned int sll);
-
-  /*!
    * Converts a 8 bps bitonal image to 1 bps bitonal image
    *
    * \param[in] img Reference to SipiImage instance
