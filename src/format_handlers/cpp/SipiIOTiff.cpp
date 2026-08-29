@@ -1003,7 +1003,10 @@ Result<bool> SipiIOTiff::read(SipiImage *img,
 
     img->set_geometry(tiff_width, tiff_height, tiff_nc, tiff_bps);
 
-    validate_decode_dims(img->getNx(), img->getNy(), img->getNc(), static_cast<int>(img->getBps()), filepath);
+    if (auto r = validate_decode_dims(img->getNx(), img->getNy(), img->getNc(), static_cast<int>(img->getBps()), filepath);
+        !r) {
+      return std::unexpected(r.error());
+    }
 
     TIFF_GET_FIELD(tif, TIFFTAG_ORIENTATION, &ori, ORIENTATION_TOPLEFT);
     img->setOrientation(static_cast<Orientation>(ori));

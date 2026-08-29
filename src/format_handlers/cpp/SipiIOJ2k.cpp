@@ -521,7 +521,10 @@ Result<bool> SipiIOJ2k::read(SipiImage *img,
   // the number of colors. No pixel buffer exists yet, so geometry alone moves.
   img->set_geometry(dims.size.x, dims.size.y, codestream.get_num_components(), codestream.get_bit_depth(0));
 
-  validate_decode_dims(img->getNx(), img->getNy(), img->getNc(), static_cast<int>(img->getBps()), filepath);
+  if (auto r = validate_decode_dims(img->getNx(), img->getNy(), img->getNc(), static_cast<int>(img->getBps()), filepath);
+      !r) {
+    return std::unexpected(r.error());
+  }
 
   //
   // The following definitions we need in case we get a palette color image!

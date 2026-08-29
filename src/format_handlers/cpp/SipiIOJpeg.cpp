@@ -734,7 +734,11 @@ Result<bool> SipiIOJpeg::read(SipiImage *img,
   jpeg_start_decompress(&cinfo);
 
   img->set_geometry(cinfo.output_width, cinfo.output_height, cinfo.output_components, 8);
-  validate_decode_dims(img->getNx(), img->getNy(), img->getNc(), static_cast<int>(img->getBps()), filepath);
+  if (auto r = validate_decode_dims(img->getNx(), img->getNy(), img->getNc(), static_cast<int>(img->getBps()), filepath);
+      !r) {
+    jpeg_destroy_decompress(&cinfo);
+    return std::unexpected(r.error());
+  }
   int colspace = cinfo.out_color_space;
   // JCS_UNKNOWN, JCS_GRAYSCALE, JCS_RGB, JCS_YCbCr, JCS_CMYK, JCS_YCCK
   switch (colspace) {
