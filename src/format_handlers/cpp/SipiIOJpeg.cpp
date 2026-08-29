@@ -373,7 +373,7 @@ static void jpeg_html_dest(struct jpeg_compress_struct *cinfo,
 
 //=============================================================================
 
-void SipiIOJpeg::parse_photoshop(SipiImage *img, char *data, int length)
+Result<bool> SipiIOJpeg::parse_photoshop(SipiImage *img, char *data, int length)
 {
   int slen;
   unsigned int datalen = 0;
@@ -419,17 +419,16 @@ void SipiIOJpeg::parse_photoshop(SipiImage *img, char *data, int length)
     // Bounds check: validate datalen against remaining buffer
     if (datalen > (size_t)(end - ptr)) break;
 
-    // A resource block that fails to parse is logged and abandons the rest
-    // of this Photoshop resource block scan, leaving the image with whatever
-    // parsed before it.
+    // A malformed resource block is fatal: SIPI is a repository and must
+    // not admit corrupt embedded metadata, so the failure propagates to
+    // the caller instead of leaving the image with partial metadata.
     switch (id) {
     case 0x0404: {
       if (img->getIptc() == nullptr) {
         if (auto iptc = Iptc::parse((unsigned char *)ptr, datalen)) {
           img->set_iptc(*iptc);
         } else {
-          log_warn("Failed to parse Photoshop APP13 resource block: %s", iptc.error().diagnostic_message().c_str());
-          return;
+          return std::unexpected(iptc.error());
         }
       }
       break;
@@ -439,8 +438,7 @@ void SipiIOJpeg::parse_photoshop(SipiImage *img, char *data, int length)
         if (auto icc = Icc::parse((unsigned char *)ptr, datalen)) {
           img->set_icc(*icc);
         } else {
-          log_warn("Failed to parse Photoshop APP13 resource block: %s", icc.error().diagnostic_message().c_str());
-          return;
+          return std::unexpected(icc.error());
         }
       }
       break;
@@ -450,8 +448,7 @@ void SipiIOJpeg::parse_photoshop(SipiImage *img, char *data, int length)
         if (auto exif = Exif::parse((unsigned char *)ptr, datalen)) {
           img->set_exif(*exif);
         } else {
-          log_warn("Failed to parse Photoshop APP13 resource block: %s", exif.error().diagnostic_message().c_str());
-          return;
+          return std::unexpected(exif.error());
         }
       }
       uint16_t ori;
@@ -474,6 +471,7 @@ void SipiIOJpeg::parse_photoshop(SipiImage *img, char *data, int length)
     if (datalen > static_cast<size_t>(end - ptr)) break;
     ptr += datalen;
   }
+  return true;
 }
 
 //=============================================================================
@@ -631,8 +629,8 @@ Result<bool> SipiIOJpeg::read(SipiImage *img,
       //
       auto *pos = static_cast<unsigned char *>(memmem(marker->data, marker->data_length, "Exif\000\000", 6));
       if (pos != nullptr) {
-        // A malformed EXIF blob from legacy Photoshop files (e.g.
-        // APP13-before-APP1 with non-ASCII IPTC) does not abort the whole read.
+        // A malformed EXIF blob is fatal: SIPI is a repository and must not
+        // admit corrupt embedded metadata.
         if (auto exif = Exif::parse(pos + 6, marker->data_length - (pos - marker->data) - 6)) {
           img->set_exif(*exif);
           uint16_t ori;
@@ -640,7 +638,10 @@ Result<bool> SipiIOJpeg::read(SipiImage *img,
             img->setOrientation(static_cast<Orientation>(ori));
           }
         } else {
-          log_warn("Failed to parse EXIF metadata from JPEG: %s", exif.error().diagnostic_message().c_str());
+          free(icc_buffer);
+          icc_buffer = nullptr;
+          jpeg_destroy_decompress(&cinfo);
+          return std::unexpected(exif.error());
         }
       }
 
@@ -698,12 +699,15 @@ Result<bool> SipiIOJpeg::read(SipiImage *img,
         }
       }
     } else if (marker->marker == JPEG_APP0 + 13) {
-      // PHOTOSHOP MARKER.... parse_photoshop logs and returns early on a
-      // malformed resource block itself, leaving the image with whatever
-      // metadata parsed successfully; nothing on this path can throw but
-      // std::bad_alloc.
+      // PHOTOSHOP MARKER.... a malformed resource block is fatal: SIPI is a
+      // repository and must not admit corrupt embedded metadata.
       if (marker->data_length >= 14 && strncmp("Photoshop 3.0", (char *)marker->data, 14) == 0) {
-        parse_photoshop(img, (char *)marker->data + 14, (int)marker->data_length - 14);
+        if (auto ps = parse_photoshop(img, (char *)marker->data + 14, (int)marker->data_length - 14); !ps) {
+          free(icc_buffer);
+          icc_buffer = nullptr;
+          jpeg_destroy_decompress(&cinfo);
+          return std::unexpected(ps.error());
+        }
       }
     } else if (marker->marker == JPEG_APP0 + 14) {
       // Adobe APP14 marker — 12-byte segment payload (data_length excludes
@@ -987,14 +991,13 @@ Result<SipiImgInfo> SipiIOJpeg::read_shape(const std::string &filepath)
         }
       }
     } else if (marker->marker == JPEG_APP0 + 13) {
-      // PHOTOSHOP MARKER.... parse_photoshop logs and returns early on a
-      // malformed resource block itself, leaving the shape probe with
-      // whatever metadata parsed successfully; nothing on this path can
-      // throw but std::bad_alloc, which unwinds past the live decompress
-      // struct on every other allocation in this function too and is not
-      // caught at this layer.
+      // PHOTOSHOP MARKER.... a malformed resource block is fatal: SIPI is a
+      // repository and must not admit corrupt embedded metadata.
       if (marker->data_length >= 14 && strncmp("Photoshop 3.0", (char *)marker->data, 14) == 0) {
-        parse_photoshop(&img, (char *)marker->data + 14, (int)marker->data_length - 14);
+        if (auto ps = parse_photoshop(&img, (char *)marker->data + 14, (int)marker->data_length - 14); !ps) {
+          jpeg_destroy_decompress(&cinfo);
+          return std::unexpected(ps.error());
+        }
       }
     }
     marker = marker->next;

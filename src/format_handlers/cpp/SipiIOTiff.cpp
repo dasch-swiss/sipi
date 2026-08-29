@@ -1151,10 +1151,13 @@ Result<bool> SipiIOTiff::read(SipiImage *img,
     unsigned char *iptc_content = nullptr;
 
     if (TIFFGetField(tif, TIFFTAG_RICHTIFFIPTC, &iptc_length, &iptc_content) != 0) {
+      // A malformed IPTC block is fatal: SIPI is a repository and must not
+      // admit corrupt embedded metadata. tif_guard closes the TIFF handle on
+      // this early return.
       if (auto iptc = Iptc::parse(iptc_content, iptc_length)) {
         img->set_iptc(*iptc);
       } else {
-        log_err("%s", iptc.error().diagnostic_message().c_str());
+        return std::unexpected(iptc.error());
       }
     }
 
@@ -1187,10 +1190,13 @@ Result<bool> SipiIOTiff::read(SipiImage *img,
     float whitepoint[2];
 
     if (1 == TIFFGetField(tif, TIFFTAG_ICCPROFILE, &icc_len, &icc_buf)) {
+      // A malformed ICC profile is fatal: SIPI is a repository and must not
+      // admit corrupt embedded metadata. tif_guard closes the TIFF handle on
+      // this early return.
       if (auto icc = Icc::parse(icc_buf, icc_len)) {
         img->set_icc(*icc);
       } else {
-        log_err("%s", icc.error().diagnostic_message().c_str());
+        return std::unexpected(icc.error());
       }
     } else if (1 == TIFFGetField(tif, TIFFTAG_WHITEPOINT, &whitepoint_ti)) {
       whitepoint[0] = whitepoint_ti[0];

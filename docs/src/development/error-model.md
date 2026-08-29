@@ -53,6 +53,27 @@ it to `HttpStatusClass::kInternalError` and increments the
 `memory_alloc_failures_total` metric (`src/observability/cpp/metrics.h`)
 directly at the `catch` site, outside `policy_for`.
 
+## Embedded metadata parse failures are fatal on read
+
+SIPI is a repository: it must not admit corrupt material. Every embedded
+metadata blob a decode path hands to `Exif::parse`, `Iptc::parse`, or
+`Icc::parse` (JPEG's APP1/APP2/APP13 segments, J2K's UUID boxes and
+`colr` box, PNG's `iCCP`/`zTXt` chunks, TIFF's IPTC/ICC tags) must parse
+cleanly or the read fails with `kMetadataParseFailed` — there is no
+partial-metadata success path. A handler that decoded past a malformed
+blob with the metadata simply dropped was a pre-repository-era shortcut,
+not a supported outcome. `Icc::createRGB` is a different operation — it
+synthesizes an ICC profile from a file's colour tags rather than parsing
+an embedded blob — and is unaffected by this contract. `Xmp` is stored
+verbatim (see `src/metadata/cpp/xmp.h`) and has no parse step to fail.
+
+The one stated exception: the PNG reader's "Raw profile type exif" text
+chunk is ignored, not fatal, when it fails to parse — the image still
+decodes. Malformed ICC and IPTC are fatal in all four codec handlers
+(JPEG, J2K, PNG, TIFF), and malformed EXIF is fatal in JPEG, J2K, and
+TIFF; PNG's EXIF arm is the sole reader that tolerates an unparseable
+blob (`src/format_handlers/cpp/SipiIOPng.cpp`).
+
 ## Legacy mechanisms and their disposition
 
 | Mechanism | Package | Status |

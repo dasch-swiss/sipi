@@ -21,7 +21,7 @@ namespace Sipi {
 class SipiIOJpeg : public SipiIO
 {
 private:
-  static void parse_photoshop(SipiImage *img, char *data, int length);
+  [[nodiscard]] static Result<bool> parse_photoshop(SipiImage *img, char *data, int length);
 
 public:
   ~SipiIOJpeg() override = default;

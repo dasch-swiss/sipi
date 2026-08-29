@@ -376,19 +376,25 @@ Result<bool> SipiIOJ2k::read(SipiImage *img,
             auto iptc_len = box.get_remaining_bytes();
             auto iptc_buf = std::make_unique<unsigned char[]>(iptc_len);
             box.read(iptc_buf.get(), iptc_len);
+            // A malformed IPTC blob is fatal: SIPI is a repository and must
+            // not admit corrupt embedded metadata. kdu_teardown releases the
+            // live Kakadu resources on this early return.
             if (auto iptc = Iptc::parse(iptc_buf.get(), iptc_len)) {
               img->set_iptc(*iptc);
             } else {
-              log_err("%s", iptc.error().diagnostic_message().c_str());
+              return std::unexpected(iptc.error());
             }
           } else if (memcmp(buf, exif_uuid, 16) == 0) {
             auto exif_len = box.get_remaining_bytes();
             auto exif_buf = std::make_unique<unsigned char[]>(exif_len);
             box.read(exif_buf.get(), exif_len);
+            // A malformed EXIF blob is fatal: SIPI is a repository and must
+            // not admit corrupt embedded metadata. kdu_teardown releases the
+            // live Kakadu resources on this early return.
             if (auto exif = Exif::parse(exif_buf.get(), exif_len)) {
               img->set_exif(*exif);
             } else {
-              log_err("%s", exif.error().diagnostic_message().c_str());
+              return std::unexpected(exif.error());
             }
           } else if (memcmp(buf, sipi_essentials_uuid, 16) == 0) {
             // SIPI Essentials carrier (ADR-0005 / DEV-6410). New on-disk
