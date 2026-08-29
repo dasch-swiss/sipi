@@ -347,7 +347,7 @@ namespace {
           Metrics::instance().client_disconnected_total.Increment();
           return 1;
         }
-        capture_write_error(err.diagnostic_message());
+        if (policy_for(err.code()).sentry_policy != SentryPolicy::kSkip) { capture_write_error(err.diagnostic_message()); }
         log_err("GET %s: error writing image: %s", request_uri_.c_str(), err.diagnostic_message().c_str());
         return 1;
       }
