@@ -738,9 +738,10 @@ Result<bool> SipiIOJ2k::read(SipiImage *img,
     byte *dst = img->pixels_writable().data();
     try {
       decompressor.pull_stripe(dst, stripe_heights);
-    } catch (kdu_exception &exc) {
+    } catch (kdu_exception&) {
       log_err("Error while decompressing image: %s.", filepath.c_str());
-      return false;
+      return std::unexpected(SipiValueError{ ErrorCode::kMalformedInput,
+        "Cannot read JPEG2000 file \"" + filepath + "\": corrupt codestream (stripe decode failed)" });
     }
     break;
   }
@@ -762,9 +763,10 @@ Result<bool> SipiIOJ2k::read(SipiImage *img,
         nullptr,
         nullptr,
         reinterpret_cast<bool *>(get_signed.data()));
-    } catch (kdu_exception &exc) {
+    } catch (kdu_exception&) {
       log_err("Error while decompressing image: %s.", filepath.c_str());
-      return false;
+      return std::unexpected(SipiValueError{ ErrorCode::kMalformedInput,
+        "Cannot read JPEG2000 file \"" + filepath + "\": corrupt codestream (stripe decode failed)" });
     }
     break;
   }
@@ -786,9 +788,10 @@ Result<bool> SipiIOJ2k::read(SipiImage *img,
         nullptr,
         nullptr,
         reinterpret_cast<bool *>(get_signed.data()));
-    } catch (kdu_exception &exc) {
+    } catch (kdu_exception&) {
       log_err("Error while decompressing image: %s.", filepath.c_str());
-      return false;
+      return std::unexpected(SipiValueError{ ErrorCode::kMalformedInput,
+        "Cannot read JPEG2000 file \"" + filepath + "\": corrupt codestream (stripe decode failed)" });
     }
     break;
   }
