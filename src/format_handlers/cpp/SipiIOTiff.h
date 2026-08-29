@@ -15,6 +15,7 @@
 #include "tiff.h"
 #include "tiffio.h"
 
+#include "error/SipiValueError.h"
 #include "image/SipiImage.h"
 #include "image/SipiIO.h"
 
@@ -47,14 +48,22 @@ private:
    * \param[in] tif Pointer to TIFF file handle
    * \param[in] exif_offset Offset of EXIF directory in TIFF file
    */
-  void readExif(SipiImage *img, TIFF *tif, toff_t exif_offset);
+  static void readExif(SipiImage *img, TIFF *tif, toff_t exif_offset);
+
+  /*! Decodes a TIFF file into img, reporting failure as a Result value. */
+  [[nodiscard]] static Result<bool> read_impl(SipiImage *img,
+    const std::string &filepath,
+    std::shared_ptr<SipiRegion> region,
+    std::shared_ptr<SipiSize> size,
+    bool force_bps_8,
+    ScalingQuality scaling_quality);
 
   /*!
    * Write the EXIF data to the TIFF file
    * \param img Pointer to SipiImage instance
    * \param[in] tif Pointer to TIFF file handle
    */
-  void writeExif(SipiImage *img, TIFF *tif);
+  static void writeExif(SipiImage *img, TIFF *tif);
 
   static void write_basic_tags(const SipiImage &img,
     TIFF *tif,
@@ -82,9 +91,15 @@ private:
    *
    * \param[in] img Reference to SipiImage instance
    * \param[out] sll Scan line lengt
-   * \returns Buffer of 1-bit data (padded to bytes)
+   * \returns Buffer of 1-bit data (padded to bytes) on success, or a value error
+   *          if the image's photometric interpretation or bits per sample is
+   *          not supported
    */
-  std::vector<unsigned char> cvrt8BitTo1bit(const SipiImage &img, unsigned int &sll);
+  [[nodiscard]] static Result<std::vector<unsigned char>> cvrt8BitTo1bit(const SipiImage &img, unsigned int &sll);
+
+  /*! Encodes img to the given sink, reporting failure as a Result value. */
+  [[nodiscard]] static Result<void>
+    write_impl(SipiImage *img, const OutputSink &sink, const SipiCompressionParams *params);
 
 public:
   virtual ~SipiIOTiff(){};

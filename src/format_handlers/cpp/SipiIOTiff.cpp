@@ -41,6 +41,7 @@
 
 #include "logging/logger.h"
 #include "error/SipiError.h"
+#include "error/SipiValueError.h"
 #include "image/SipiIO.h"
 #include "image/SipiImage.h"
 #include "image/SipiImageError.h"
@@ -577,7 +578,8 @@ std::vector<T> separateToContig(std::vector<T> &&inbuf, uint32_t nx, uint32_t ny
 }
 
 template<typename T>
-static std::vector<T> read_standard_data(TIFF *tif, int32_t roi_x, int32_t roi_y, uint32_t roi_w, uint32_t roi_h)
+static Result<std::vector<T>> read_standard_data(
+  TIFF *tif, int32_t roi_x, int32_t roi_y, uint32_t roi_w, uint32_t roi_h)
 {
   uint16_t planar;
   TIFF_GET_FIELD(tif, TIFFTAG_PLANARCONFIG, &planar, PLANARCONFIG_CONTIG)
@@ -626,9 +628,10 @@ static std::vector<T> read_standard_data(TIFF *tif, int32_t roi_x, int32_t roi_y
       line = std::make_unique<T[]>(nx * nc);
       for (uint32_t i = roi_y; i < roi_y + roi_h; ++i) {
         if (TIFFReadScanline(tif, scanline.get(), i, 0) != 1) {
-          throw Sipi::SipiImageError("TIFFReadScanline failed on scanline " + std::to_string(i)
-            + ", dimensions=" + std::to_string(nx) + "x" + std::to_string(ny)
-            + ", channels=" + std::to_string(nc) + ", bps=" + std::to_string(bps));
+          return std::unexpected(SipiValueError{ ErrorCode::kDecodeFailed,
+            "TIFFReadScanline failed on scanline " + std::to_string(i)
+              + ", dimensions=" + std::to_string(nx) + "x" + std::to_string(ny)
+              + ", channels=" + std::to_string(nc) + ", bps=" + std::to_string(bps) });
         }
         // All memcpy destination offsets use `(i - roi_y)` so the first
         // destination row is always row 0 of `inbuf`. Previously cases 1
@@ -660,9 +663,10 @@ static std::vector<T> read_standard_data(TIFF *tif, int32_t roi_x, int32_t roi_y
       for (uint32_t c = 0; c < nc; ++c) {
         for (uint32_t i = roi_y; i < roi_h; ++i) {
           if (TIFFReadScanline(tif, scanline.get(), i, c) == -1) {
-            throw Sipi::SipiImageError("TIFFReadScanline failed on scanline " + std::to_string(i)
-              + ", dimensions=" + std::to_string(nx) + "x" + std::to_string(ny)
-              + ", channels=" + std::to_string(nc) + ", bps=" + std::to_string(bps));
+            return std::unexpected(SipiValueError{ ErrorCode::kDecodeFailed,
+              "TIFFReadScanline failed on scanline " + std::to_string(i)
+                + ", dimensions=" + std::to_string(nx) + "x" + std::to_string(ny)
+                + ", channels=" + std::to_string(nc) + ", bps=" + std::to_string(bps) });
           }
           switch (bps) {
           case 1:
@@ -694,9 +698,10 @@ static std::vector<T> read_standard_data(TIFF *tif, int32_t roi_x, int32_t roi_y
       line = std::make_unique<T[]>(nx * nc);
       for (uint32_t i = 0; i < ny; ++i) {
         if (TIFFReadScanline(tif, scanline.get(), i, 0) != 1) {
-          throw Sipi::SipiImageError("TIFFReadScanline failed on scanline " + std::to_string(i)
-            + ", dimensions=" + std::to_string(nx) + "x" + std::to_string(ny)
-            + ", channels=" + std::to_string(nc) + ", bps=" + std::to_string(bps));
+          return std::unexpected(SipiValueError{ ErrorCode::kDecodeFailed,
+            "TIFFReadScanline failed on scanline " + std::to_string(i)
+              + ", dimensions=" + std::to_string(nx) + "x" + std::to_string(ny)
+              + ", channels=" + std::to_string(nc) + ", bps=" + std::to_string(bps) });
         }
         if ((i >= roi_y) && (i < (roi_y + roi_h))) {
           // All memcpy destination offsets use `(i - roi_y)` so that the
@@ -732,9 +737,10 @@ static std::vector<T> read_standard_data(TIFF *tif, int32_t roi_x, int32_t roi_y
       for (uint32_t c = 0; c < nc; ++c) {
         for (uint32_t i = 0; i < ny; ++i) {
           if (TIFFReadScanline(tif, scanline.get(), i, c) == -1) {
-            throw Sipi::SipiImageError("TIFFReadScanline failed on scanline " + std::to_string(i)
-              + ", dimensions=" + std::to_string(nx) + "x" + std::to_string(ny)
-              + ", channels=" + std::to_string(nc) + ", bps=" + std::to_string(bps));
+            return std::unexpected(SipiValueError{ ErrorCode::kDecodeFailed,
+              "TIFFReadScanline failed on scanline " + std::to_string(i)
+                + ", dimensions=" + std::to_string(nx) + "x" + std::to_string(ny)
+                + ", channels=" + std::to_string(nc) + ", bps=" + std::to_string(bps) });
           }
           if ((i >= roi_y) && (i < (roi_y + roi_h))) {
             switch (bps) {
@@ -802,7 +808,7 @@ size_t epsilon_floor_division(float a, float b)
 }
 
 template<typename T>
-static std::vector<T> read_tiled_data(TIFF *tif, int32_t roi_x, int32_t roi_y, uint32_t roi_w, uint32_t roi_h)
+static Result<std::vector<T>> read_tiled_data(TIFF *tif, int32_t roi_x, int32_t roi_y, uint32_t roi_w, uint32_t roi_h)
 {
   uint16_t planar;
   TIFF_GET_FIELD(tif, TIFFTAG_PLANARCONFIG, &planar, PLANARCONFIG_CONTIG)
@@ -811,7 +817,8 @@ static std::vector<T> read_tiled_data(TIFF *tif, int32_t roi_x, int32_t roi_y, u
   TIFF_GET_FIELD(tif, TIFFTAG_TILEWIDTH, &tile_width, 0)
   TIFF_GET_FIELD(tif, TIFFTAG_TILELENGTH, &tile_length, 0)
   if ((tile_width == 0) || (tile_length == 0)) {
-    throw Sipi::SipiImageError("Expected tiled image, but no tile dimension given!");
+    return std::unexpected(
+      SipiValueError{ ErrorCode::kMalformedInput, "Expected tiled image, but no tile dimension given!" });
   }
 
   uint32_t nx, ny, nc, bps;
@@ -821,11 +828,12 @@ static std::vector<T> read_tiled_data(TIFF *tif, int32_t roi_x, int32_t roi_y, u
   uint32_t ntiles_y = epsilon_ceil_division(static_cast<float>(ny), static_cast<float>(tile_length));
   uint32_t ntiles = TIFFNumberOfTiles(tif);
   if (ntiles != (ntiles_x * ntiles_y)) {
-    throw Sipi::SipiImageError("Number of tiles not consistent: expected " + std::to_string(ntiles_x * ntiles_y)
-      + " (" + std::to_string(ntiles_x) + "x" + std::to_string(ntiles_y) + ")"
-      + ", got " + std::to_string(ntiles)
-      + ", dimensions=" + std::to_string(nx) + "x" + std::to_string(ny)
-      + ", tile=" + std::to_string(tile_width) + "x" + std::to_string(tile_length));
+    return std::unexpected(SipiValueError{ ErrorCode::kMalformedInput,
+      "Number of tiles not consistent: expected " + std::to_string(ntiles_x * ntiles_y)
+        + " (" + std::to_string(ntiles_x) + "x" + std::to_string(ntiles_y) + ")"
+        + ", got " + std::to_string(ntiles)
+        + ", dimensions=" + std::to_string(nx) + "x" + std::to_string(ny)
+        + ", tile=" + std::to_string(tile_width) + "x" + std::to_string(tile_length) });
   }
   uint32_t starttile_x = epsilon_floor_division(static_cast<float>(roi_x), static_cast<float>(tile_width));
   uint32_t starttile_y = epsilon_floor_division(static_cast<float>(roi_y), static_cast<float>(tile_length));
@@ -840,10 +848,11 @@ static std::vector<T> read_tiled_data(TIFF *tif, int32_t roi_x, int32_t roi_y, u
   bps = static_cast<uint32_t>(stmp);
 
   if ((bps != 8) && (bps != 16)) {
-    throw Sipi::SipiImageError(std::to_string(bps) + " bits/sample not supported for tiled TIFFs (only 8 and 16 supported)"
-      + ", dimensions=" + std::to_string(nx) + "x" + std::to_string(ny)
-      + ", channels=" + std::to_string(nc)
-      + ", tile=" + std::to_string(tile_width) + "x" + std::to_string(tile_length));
+    return std::unexpected(SipiValueError{ ErrorCode::kUnsupportedFormat,
+      std::to_string(bps) + " bits/sample not supported for tiled TIFFs (only 8 and 16 supported)"
+        + ", dimensions=" + std::to_string(nx) + "x" + std::to_string(ny)
+        + ", channels=" + std::to_string(nc)
+        + ", tile=" + std::to_string(tile_width) + "x" + std::to_string(tile_length) });
   }
 
   uint32_t tile_size = TIFFTileSize(tif);
@@ -852,9 +861,10 @@ static std::vector<T> read_tiled_data(TIFF *tif, int32_t roi_x, int32_t roi_y, u
   for (uint32_t ty = starttile_y; ty < endtile_y; ++ty) {
     for (uint32_t tx = starttile_x; tx < endtile_x; ++tx) {
       if (TIFFReadTile(tif, tilebuf.get(), tx * tile_width, ty * tile_length, 0, 0) < 0) {
-        throw Sipi::SipiImageError("TIFFReadTile failed on tile (" + std::to_string(tx) + ", " + std::to_string(ty) + ")"
-          + ", dimensions=" + std::to_string(nx) + "x" + std::to_string(ny)
-          + ", channels=" + std::to_string(nc) + ", bps=" + std::to_string(bps));
+        return std::unexpected(SipiValueError{ ErrorCode::kDecodeFailed,
+          "TIFFReadTile failed on tile (" + std::to_string(tx) + ", " + std::to_string(ty) + ")"
+            + ", dimensions=" + std::to_string(nx) + "x" + std::to_string(ny)
+            + ", channels=" + std::to_string(nc) + ", bps=" + std::to_string(bps) });
       }
 
       if (planar == PLANARCONFIG_SEPARATE) {
@@ -937,7 +947,7 @@ std::ostream &operator<<(std::ostream &os, const SubImageInfo &s)
  * "II" for little-endian (a.k.a. "Intel byte ordering" or "MM" for big-endian (a.k.a. "Motorola byte ordering" byte
  * ordering. I don't see where this is handled in the code.
  */
-bool SipiIOTiff::read(SipiImage *img,
+Result<bool> SipiIOTiff::read_impl(SipiImage *img,
   const std::string &filepath,
   std::shared_ptr<SipiRegion> region,
   std::shared_ptr<SipiSize> size,
@@ -969,14 +979,14 @@ bool SipiIOTiff::read(SipiImage *img,
     // out-params first.
     uint32_t tiff_width = 0, tiff_height = 0;
     if (TIFFGetField(tif, TIFFTAG_IMAGEWIDTH, &tiff_width) == 0) {
-      std::string msg = "TIFFGetField of TIFFTAG_IMAGEWIDTH failed: " + filepath;
-      throw Sipi::SipiImageError(msg);
+      return std::unexpected(SipiValueError{
+        ErrorCode::kMalformedInput, "TIFFGetField of TIFFTAG_IMAGEWIDTH failed: " + filepath });
     }
     img->nx = tiff_width;
 
     if (TIFFGetField(tif, TIFFTAG_IMAGELENGTH, &tiff_height) == 0) {
-      std::string msg = "TIFFGetField of TIFFTAG_IMAGELENGTH failed: " + filepath;
-      throw Sipi::SipiImageError(msg);
+      return std::unexpected(SipiValueError{
+        ErrorCode::kMalformedInput, "TIFFGetField of TIFFTAG_IMAGELENGTH failed: " + filepath });
     }
     img->ny = tiff_height;
 
@@ -1012,8 +1022,8 @@ bool SipiIOTiff::read(SipiImage *img,
     if (img->photo == PhotometricInterpretation::PALETTE) {
       uint16_t *_rcm = nullptr, *_gcm = nullptr, *_bcm = nullptr;
       if (TIFFGetField(tif, TIFFTAG_COLORMAP, &_rcm, &_gcm, &_bcm) == 0) {
-        std::string msg = "TIFFGetField of TIFFTAG_COLORMAP failed: " + filepath;
-        throw Sipi::SipiImageError(msg);
+        return std::unexpected(SipiValueError{
+          ErrorCode::kMalformedInput, "TIFFGetField of TIFFTAG_COLORMAP failed: " + filepath });
       }
       // img->bps was already validated above (validate_decode_dims) to be one
       // of {1, 4, 8, 12, 16}, so 1 << bps cannot overflow size_t.
@@ -1358,28 +1368,26 @@ bool SipiIOTiff::read(SipiImage *img,
       ps = 2;
       break;
     default:
-      throw Sipi::SipiImageError(
-        "Unsupported bits/sample (" + std::to_string(img->bps) + ") in file " + filepath);
+      return std::unexpected(SipiValueError{ ErrorCode::kUnsupportedFormat,
+        "Unsupported bits/sample (" + std::to_string(img->bps) + ") in file " + filepath });
     }
 
     std::vector<uint8_t> inbuf(checked_buf_size_or_throw(roi_w, roi_h, img->nc, static_cast<size_t>(ps)));
 
     if (img->bps <= 8) {
-      std::vector<uint8_t> pixdata;
-      if (is_tiled)
-        pixdata = read_tiled_data<uint8_t>(tif, roi_x, roi_y, roi_w, roi_h);
-      else
-        pixdata = read_standard_data<uint8_t>(tif, roi_x, roi_y, roi_w, roi_h);
+      auto pixdata_result = is_tiled ? read_tiled_data<uint8_t>(tif, roi_x, roi_y, roi_w, roi_h)
+                                      : read_standard_data<uint8_t>(tif, roi_x, roi_y, roi_w, roi_h);
+      if (!pixdata_result) { return std::unexpected(std::move(pixdata_result).error()); }
+      std::vector<uint8_t> pixdata = std::move(*pixdata_result);
 
       img->bps = 8;
 
       memcpy(inbuf.data(), pixdata.data(), pixdata.size() * img->bps / 8);
     } else if (img->bps <= 16) {
-      std::vector<uint16_t> pixdata;
-      if (is_tiled)
-        pixdata = read_tiled_data<uint16_t>(tif, roi_x, roi_y, roi_w, roi_h);
-      else
-        pixdata = read_standard_data<uint16_t>(tif, roi_x, roi_y, roi_w, roi_h);
+      auto pixdata_result = is_tiled ? read_tiled_data<uint16_t>(tif, roi_x, roi_y, roi_w, roi_h)
+                                      : read_standard_data<uint16_t>(tif, roi_x, roi_y, roi_w, roi_h);
+      if (!pixdata_result) { return std::unexpected(std::move(pixdata_result).error()); }
+      std::vector<uint16_t> pixdata = std::move(*pixdata_result);
       img->bps = 16;
       memcpy(inbuf.data(), pixdata.data(), pixdata.size() * img->bps / 8);
     }
@@ -1398,9 +1406,9 @@ bool SipiIOTiff::read(SipiImage *img,
       // rcm/gcm/bcm with it unchecked (DEV-6065).
       for (size_t i = 0; i < img->nx * img->ny; i++) {
         if (static_cast<size_t>(img->pixels[i]) >= colmap_len) {
-          throw Sipi::SipiImageError(
+          return std::unexpected(SipiValueError{ ErrorCode::kMalformedInput,
             "Palette index " + std::to_string(img->pixels[i]) + " out of range for colormap size "
-            + std::to_string(colmap_len) + ": " + filepath);
+              + std::to_string(colmap_len) + ": " + filepath });
         }
       }
 
@@ -1491,13 +1499,15 @@ bool SipiIOTiff::read(SipiImage *img,
           }
           img->icc = std::make_shared<Icc>(icc_LAB);
         } else {
-          throw Sipi::SipiImageError("Unsupported bits per sample (" + std::to_string(img->bps) + ")");
+          return std::unexpected(SipiValueError{
+            ErrorCode::kUnsupportedFormat, "Unsupported bits per sample (" + std::to_string(img->bps) + ")" });
         }
         break;
       }
 
       default: {
-        throw Sipi::SipiImageError("Unsupported photometric interpretation (" + to_string(img->photo) + ")");
+        return std::unexpected(SipiValueError{ ErrorCode::kUnsupportedFormat,
+          "Unsupported photometric interpretation (" + to_string(img->photo) + ")" });
       }
       }
     }
@@ -1563,10 +1573,31 @@ bool SipiIOTiff::read(SipiImage *img,
   }
   return false;
 }
+
+bool SipiIOTiff::read(SipiImage *img,
+  const std::string &filepath,
+  std::shared_ptr<SipiRegion> region,
+  std::shared_ptr<SipiSize> size,
+  bool force_bps_8,
+  ScalingQuality scaling_quality)
+{
+  auto result = read_impl(img, filepath, region, size, force_bps_8, scaling_quality);
+  if (!result) {
+    const auto &err = result.error();
+    throw SipiImageError(err.raw_message(), err.errnum(), err.location());
+  }
+  return *result;
+}
 //============================================================================
 
 
-SipiImgInfo SipiIOTiff::read_shape(const std::string &filepath)
+namespace {
+
+// The shape probe proper: reports a missing width/height tag as a
+// SipiValueError value rather than by throwing. File-local: it touches no
+// SipiImage state, only a local SipiImgInfo, read_resolutions, and the
+// observability counters.
+[[nodiscard]] Result<SipiImgInfo> read_shape_impl(const std::string &filepath)
 {
   SIPI_ZONE_N("SipiIOTiff::read_shape");
   SipiImgInfo info;
@@ -1578,14 +1609,16 @@ SipiImgInfo SipiIOTiff::read_shape(const std::string &filepath)
     unsigned int tmp_width;
 
     if (TIFFGetField(tif.get(), TIFFTAG_IMAGEWIDTH, &tmp_width) == 0) {
-      throw Sipi::SipiImageError("TIFFGetField of TIFFTAG_IMAGEWIDTH failed: " + filepath);
+      return std::unexpected(
+        SipiValueError{ ErrorCode::kShapeProbeFailed, "TIFFGetField of TIFFTAG_IMAGEWIDTH failed: " + filepath });
     }
 
     info.width = static_cast<size_t>(tmp_width);
     unsigned int tmp_height;
 
     if (TIFFGetField(tif.get(), TIFFTAG_IMAGELENGTH, &tmp_height) == 0) {
-      throw Sipi::SipiImageError("TIFFGetField of TIFFTAG_IMAGELENGTH failed: " + filepath);
+      return std::unexpected(
+        SipiValueError{ ErrorCode::kShapeProbeFailed, "TIFFGetField of TIFFTAG_IMAGELENGTH failed: " + filepath });
     }
     info.height = tmp_height;
     info.success = SipiImgInfo::DIMS;
@@ -1687,6 +1720,18 @@ SipiImgInfo SipiIOTiff::read_shape(const std::string &filepath)
   }
   return info;
 }
+
+}// namespace
+
+SipiImgInfo SipiIOTiff::read_shape(const std::string &filepath)
+{
+  auto result = read_shape_impl(filepath);
+  if (!result) {
+    const auto &err = result.error();
+    throw SipiImageError(err.raw_message(), err.errnum(), err.location());
+  }
+  return *result;
+}
 //============================================================================
 
 void SipiIOTiff::write_basic_tags(const SipiImage &img,
@@ -1721,7 +1766,7 @@ void SipiIOTiff::write_basic_tags(const SipiImage &img,
   TIFFSetField(tif, TIFFTAG_PHOTOMETRIC, img.photo);
 }
 
-void SipiIOTiff::write(SipiImage *img, const OutputSink &sink, const SipiCompressionParams *params)
+Result<void> SipiIOTiff::write_impl(SipiImage *img, const OutputSink &sink, const SipiCompressionParams *params)
 {
   SIPI_ZONE_N("SipiIOTiff::write");
   // A streamed sink (callback/tee) and stdout both need an in-memory TIFF
@@ -1747,12 +1792,15 @@ void SipiIOTiff::write(SipiImage *img, const OutputSink &sink, const SipiCompres
       memTiffSizeProc,
       memTiffMapProc,
       memTiffUnmapProc));
-    if (tif_guard == nullptr) { throw Sipi::SipiImageError("TIFFClientOpen for in-memory TIFF failed!"); }
+    if (tif_guard == nullptr) {
+      return std::unexpected(
+        SipiValueError{ ErrorCode::kWriteFailed, "TIFFClientOpen for in-memory TIFF failed!" });
+    }
   } else {
     tif_guard.reset(TIFFOpen(filepath.c_str(), "w"));
     if (tif_guard == nullptr) {
       std::string msg = "TIFFopen of \"" + filepath + "\" failed!";
-      throw Sipi::SipiImageError(msg);
+      return std::unexpected(SipiValueError{ ErrorCode::kWriteFailed, msg });
     }
   }
   TIFF *tif = tif_guard.get();
@@ -1817,7 +1865,8 @@ void SipiIOTiff::write(SipiImage *img, const OutputSink &sink, const SipiCompres
         }
       }
     } else {
-      throw Sipi::SipiImageError("Unsupported bits per sample (" + std::to_string(img->bps) + ")");
+      return std::unexpected(SipiValueError{
+        ErrorCode::kUnsupportedFormat, "Unsupported bits per sample (" + std::to_string(img->bps) + ")" });
     }
 
     // delete img->icc; we don't want to add the ICC profile in this case (doesn't make sense!)
@@ -1937,7 +1986,9 @@ void SipiIOTiff::write(SipiImage *img, const OutputSink &sink, const SipiCompres
   // TIFFCheckpointDirectory(tif);
   if (its_1_bit) {
     unsigned int sll;
-    std::vector<unsigned char> buf = cvrt8BitTo1bit(*img, sll);
+    Result<std::vector<unsigned char>> cvrt_result = cvrt8BitTo1bit(*img, sll);
+    if (!cvrt_result.has_value()) { return std::unexpected(std::move(cvrt_result).error()); }
+    std::vector<unsigned char> buf = std::move(cvrt_result).value();
 
     for (size_t i = 0; i < img->ny; i++) { TIFFWriteScanline(tif, buf.data() + i * sll, (int)i, 0); }
   } else {
@@ -1982,15 +2033,28 @@ void SipiIOTiff::write(SipiImage *img, const OutputSink &sink, const SipiCompres
       fflush(stdout);
     } else if (streaming) {
       // The whole in-memory TIFF is broadcast to the sink in one write. A
-      // non-zero return is a body-write failure (the socket is gone) — the
-      // equivalent of the old OUTPUT_WRITE_FAIL abort signal.
+      // non-zero return means the peer is gone: the body write failed.
       SinkStream stream{ sink };
       if (stream.write(memtif->data, memtif->flen) != 0) {
-        throw Sipi::SipiImageClientAbortError("Client aborted HTTP response during TIFF write");
+        return std::unexpected(
+          SipiValueError{ ErrorCode::kClientAbort, "Client aborted HTTP response during TIFF write" });
       }
     } else {
-      throw Sipi::SipiImageError("Unknown output method: " + filepath + " !");
+      return std::unexpected(SipiValueError{ ErrorCode::kWriteFailed, "Unknown output method: " + filepath + " !" });
     }
+  }
+  return {};
+}
+
+void SipiIOTiff::write(SipiImage *img, const OutputSink &sink, const SipiCompressionParams *params)
+{
+  auto result = write_impl(img, sink, params);
+  if (!result) {
+    const auto &err = result.error();
+    if (err.code() == ErrorCode::kClientAbort) {
+      throw SipiImageClientAbortError(err.raw_message(), err.errnum(), err.location());
+    }
+    throw SipiImageError(err.raw_message(), err.errnum(), err.location());
   }
 }
 //============================================================================
@@ -2462,19 +2526,20 @@ void SipiIOTiff::separateToContig(SipiImage *img, unsigned int sll)
 // code (img->bps was already 8 by the time those call sites executed).
 //============================================================================
 
-std::vector<unsigned char> SipiIOTiff::cvrt8BitTo1bit(const SipiImage &img, unsigned int &sll)
+Result<std::vector<unsigned char>> SipiIOTiff::cvrt8BitTo1bit(const SipiImage &img, unsigned int &sll)
 {
   static unsigned char mask[8] = { 128, 64, 32, 16, 8, 4, 2, 1 };
 
   unsigned int x, y;
 
   if ((img.photo != PhotometricInterpretation::MINISWHITE) && (img.photo != PhotometricInterpretation::MINISBLACK)) {
-    throw Sipi::SipiImageError("Photometric interpretation is not MINISWHITE or  MINISBLACK");
+    return std::unexpected(SipiValueError{ ErrorCode::kUnsupportedFormat,
+      "Photometric interpretation is not MINISWHITE or  MINISBLACK" });
   }
 
   if (img.bps != 8) {
-    std::string msg = "Bits per sample is not 8 but: " + std::to_string(img.bps);
-    throw Sipi::SipiImageError(msg);
+    return std::unexpected(SipiValueError{ ErrorCode::kUnsupportedFormat,
+      "Bits per sample is not 8 but: " + std::to_string(img.bps) });
   }
 
   sll = (img.nx + 7) / 8;
