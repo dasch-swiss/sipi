@@ -19,11 +19,11 @@ Produces three fixtures under test/_test_data/images/jpeg/:
      F3 feature-contract test to prove that log_warn is routed to stderr under
      --json without breaking the single-document contract on stdout.
 
-Also produces four marker-parsing over-read regression fixtures as a
+Also produces five marker-parsing regression fixtures as a
 sibling `../malformed/` directory (relative to the given output dir), see
 `generate_malformed()` and test/_test_data/images/malformed/README.md for
-each fixture's defect (DEV-6066, N1, N4, and the parse_photoshop
-even-padding pointer overshoot).
+each fixture's defect (DEV-6066, N1, N4, the parse_photoshop
+even-padding pointer overshoot, and DEV-7056's fatal-metadata-parse fixture).
 
 Run (from the sipi repo root):
 
@@ -169,11 +169,11 @@ def _insert_app_marker(jpeg_bytes: bytes, marker: int, payload: bytes) -> bytes:
 
 def generate_malformed(malformed_dir: pathlib.Path) -> None:
     """Regression fixtures for the JPEG marker-parsing over-reads fixed
-    alongside DEV-6066 / N1 / N4 (see
-    test/_test_data/images/malformed/README.md for the defect writeup).
-    Each fixture starts from a small well-formed RGB JPEG so libjpeg's
-    header parse (and the image decode itself) still succeeds; only the
-    injected marker segment is malformed.
+    alongside DEV-6066 / N1 / N4, plus the DEV-7056 fatal-metadata-parse
+    fixture (see test/_test_data/images/malformed/README.md for the defect
+    writeup of each). Each fixture starts from a small well-formed RGB JPEG
+    so libjpeg's header parse (and the image decode itself) still succeeds;
+    only the injected marker segment is malformed.
     """
     malformed_dir.mkdir(parents=True, exist_ok=True)
 
@@ -242,6 +242,23 @@ def generate_malformed(malformed_dir: pathlib.Path) -> None:
         f"  wrote {overshoot_path} ({len(app13_overshoot)} bytes, "
         "APP13 8BIM resource with even-padding pointer overshoot)"
     )
+
+    # jpeg_exif_truncated.jpg — an APP1 segment whose payload is the 6-byte
+    # "Exif\0\0" identifier immediately followed by a truncated little-endian
+    # TIFF header ("II*", 3 bytes): no low byte of the magic number, no IFD
+    # offset, and no IFD behind it. read()'s EXIF extraction locates
+    # "Exif\0\0" via memmem() and hands everything after it to Exif::parse()
+    # (exiv2's Exiv2::ExifParser::decode()), which needs a well-formed TIFF
+    # structure (byte order + magic + IFD) to walk. Unlike this file's other
+    # fixtures, which pin a *bounds guard* stopping before any parser runs,
+    # this payload passes every upstream length check and reaches
+    # Exiv2::ExifParser::decode() itself, which throws Exiv2::Error — fatal
+    # under SIPI's no-corrupt-embedded-metadata contract (DEV-7056).
+    exif_payload = b"Exif\x00\x00" + b"II*"
+    exif_truncated = _insert_app_marker(base_jpeg, 0xE1, exif_payload)
+    exif_path = malformed_dir / "jpeg_exif_truncated.jpg"
+    exif_path.write_bytes(exif_truncated)
+    print(f"  wrote {exif_path} ({len(exif_truncated)} bytes, EXIF identifier with truncated TIFF header)")
 
 
 def generate(out_dir: pathlib.Path) -> None:

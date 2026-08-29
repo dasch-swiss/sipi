@@ -207,11 +207,75 @@ bool emitTiffPaletteOneBit(const std::filesystem::path &out_dir)
   return true;
 }
 
+/*!
+ * Well-formed 8x8 grayscale TIFF carrying a TIFFTAG_ICCPROFILE payload that
+ * is not a valid ICC profile: a 128-byte buffer (the fixed ICC header size)
+ * whose first 4 bytes declare that same length, big-endian, so the size the
+ * header advertises matches the buffer lcms2 actually reads, and whose
+ * remaining 124 bytes are zero — in particular, no `acsp` signature at
+ * offset 36. SipiIOTiff::read() reads TIFFTAG_ICCPROFILE with no length or
+ * bounds check of its own and passes the bytes straight to Icc::parse(),
+ * which calls lcms2's cmsOpenProfileFromMem(); that call reads the full
+ * header and rejects it there, on the missing magic signature, not on a
+ * truncated buffer. Regresses SipiIOTiff::read()'s fatal-metadata contract:
+ * a file whose embedded ICC profile fails to parse is refused with
+ * ErrorCode::kMetadataParseFailed, not admitted with the profile silently
+ * dropped (DEV-7056).
+ */
+bool emitTiffIccGarbage(const std::filesystem::path &out_dir)
+{
+  const auto path = out_dir / "tiff_icc_garbage.tif";
+  TIFF *tif = TIFFOpen(path.string().c_str(), "w");
+  if (tif == nullptr) {
+    std::fprintf(stderr, "TIFFOpen failed for %s\n", path.string().c_str());
+    return false;
+  }
+
+  constexpr uint32_t w = 8;
+  constexpr uint32_t h = 8;
+  TIFFSetField(tif, TIFFTAG_IMAGEWIDTH, w);
+  TIFFSetField(tif, TIFFTAG_IMAGELENGTH, h);
+  TIFFSetField(tif, TIFFTAG_BITSPERSAMPLE, static_cast<uint16_t>(8));
+  TIFFSetField(tif, TIFFTAG_SAMPLESPERPIXEL, static_cast<uint16_t>(1));
+  TIFFSetField(tif, TIFFTAG_PHOTOMETRIC, static_cast<uint16_t>(PHOTOMETRIC_MINISBLACK));
+  TIFFSetField(tif, TIFFTAG_PLANARCONFIG, static_cast<uint16_t>(PLANARCONFIG_CONTIG));
+  TIFFSetField(tif, TIFFTAG_COMPRESSION, static_cast<uint16_t>(COMPRESSION_NONE));
+  TIFFSetField(tif, TIFFTAG_ROWSPERSTRIP, h);
+
+  // Fixed 128-byte ICC header size; first 4 bytes declare that length,
+  // big-endian, matching the buffer lcms2 will read. Every other byte is
+  // zero, so the `acsp` signature lcms2 requires at offset 36 is absent.
+  std::vector<uint8_t> icc_profile(128, 0);
+  icc_profile[0] = 0x00;
+  icc_profile[1] = 0x00;
+  icc_profile[2] = 0x00;
+  icc_profile[3] = 0x80;
+  TIFFSetField(tif, TIFFTAG_ICCPROFILE, static_cast<uint32_t>(icc_profile.size()), icc_profile.data());
+
+  std::vector<uint8_t> row(w);
+  for (uint32_t y = 0; y < h; ++y) {
+    for (uint32_t x = 0; x < w; ++x) { row[x] = static_cast<uint8_t>((x + y) * 16); }
+    if (TIFFWriteScanline(tif, row.data(), y, 0) < 0) {
+      std::fprintf(stderr, "TIFFWriteScanline failed for %s at row %u\n", path.string().c_str(), y);
+      TIFFClose(tif);
+      return false;
+    }
+  }
+
+  TIFFClose(tif);
+  std::printf("  wrote %s (%ux%u, grayscale, ICCPROFILE header with no acsp signature)\n",
+    path.filename().string().c_str(),
+    w,
+    h);
+  return true;
+}
+
 const std::vector<Generator> kGenerators{
   { "oversized_dimensions", &emitTiffOversizedDimensions },
   { "colormap_unsupported_bps", &emitTiffColormapUnsupportedBps },
   { "transferfunction_grayscale", &emitTiffTransferFunctionGrayscale },
   { "palette_1bit", &emitTiffPaletteOneBit },
+  { "icc_garbage", &emitTiffIccGarbage },
 };
 
 }// namespace
