@@ -17,6 +17,7 @@
 // #include <unordered_map>
 
 #include "SipiIO.h"
+#include "SipiImageError.h"
 // #include "iiifparser/SipiRegion.h"
 #include "metadata/essentials.h"
 #include "metadata/exif.h"
@@ -234,6 +235,13 @@ public:
    * Indexes the pixel buffer row-major (`nc * (y * nx + x) + c`), matching the
    * codec store written by the format handlers and read by `maxPixelDelta`.
    *
+   * The coordinates are the caller's to get right: `x`, `y`, `c` are not
+   * validated against any decoded file or request input, only against the
+   * dimensions of this already-decoded image. An out-of-range coordinate or
+   * an unsupported `bps` is a programming error, signalled by throwing
+   * `SipiImageError` (not returned as a `Result`, since no input path can
+   * reach it).
+   *
    * \param[in] x X position
    * \param[in] y Y position
    * \param[in] c Color channel
@@ -241,9 +249,12 @@ public:
    */
   [[nodiscard]] int getPixel(size_t x, size_t y, size_t c)
   {
-    if (x >= nx) throw((int)1);
-    if (y >= ny) throw((int)2);
-    if (c >= nc) throw((int)3);
+    if (x >= nx)
+      throw SipiImageError("getPixel: x out of range (x=" + std::to_string(x) + ", nx=" + std::to_string(nx) + ")");
+    if (y >= ny)
+      throw SipiImageError("getPixel: y out of range (y=" + std::to_string(y) + ", ny=" + std::to_string(ny) + ")");
+    if (c >= nc)
+      throw SipiImageError("getPixel: c out of range (c=" + std::to_string(c) + ", nc=" + std::to_string(nc) + ")");
     switch (bps) {
     case 8: {
       const unsigned char *tmp = pixels.data();
@@ -254,13 +265,20 @@ public:
       return static_cast<int>(tmp[nc * (y * nx + x) + c]);
     }
     default: {
-      throw((int)6);
+      throw SipiImageError("getPixel: unsupported bits-per-sample (bps=" + std::to_string(bps) + ", supported: 8, 16)");
     }
     }
   }
 
   /*!
    * Sets a pixel to a given value
+   *
+   * The coordinates and value are the caller's to get right: `x`, `y`, `c`
+   * and `val` are not validated against any decoded file or request input,
+   * only against the dimensions and bit depth of this already-decoded image.
+   * An out-of-range coordinate, an out-of-range value or an unsupported
+   * `bps` is a programming error, signalled by throwing `SipiImageError`
+   * (not returned as a `Result`, since no input path can reach it).
    *
    * \param[in] x X position
    * \param[in] y Y position
@@ -269,25 +287,34 @@ public:
    */
   void setPixel(size_t x, size_t y, size_t c, int val)
   {
-    if (x >= nx) throw((int)1);
-    if (y >= ny) throw((int)2);
-    if (c >= nc) throw((int)3);
+    if (x >= nx)
+      throw SipiImageError("setPixel: x out of range (x=" + std::to_string(x) + ", nx=" + std::to_string(nx) + ")");
+    if (y >= ny)
+      throw SipiImageError("setPixel: y out of range (y=" + std::to_string(y) + ", ny=" + std::to_string(ny) + ")");
+    if (c >= nc)
+      throw SipiImageError("setPixel: c out of range (c=" + std::to_string(c) + ", nc=" + std::to_string(nc) + ")");
 
     switch (bps) {
     case 8: {
-      if (val > 0xff) throw((int)4);
+      if (val > 0xff)
+        throw SipiImageError(
+          "setPixel: val out of range for 8 bps (val=" + std::to_string(val) + ", max=" + std::to_string(0xff) + ")");
       unsigned char *tmp = pixels.data();
       tmp[nc * (y * nx + x) + c] = (unsigned char)val;
       break;
     }
     case 16: {
-      if (val > 0xffff) throw((int)5);
+      if (val > 0xffff)
+        throw SipiImageError("setPixel: val out of range for 16 bps (val=" + std::to_string(val)
+                             + ", max=" + std::to_string(0xffff) + ")");
       unsigned short *tmp = (unsigned short *)pixels.data();
       tmp[nc * (y * nx + x) + c] = (unsigned short)val;
       break;
     }
     default: {
-      if (val > 0xffff) throw((int)6);
+      if (val > 0xffff)
+        throw SipiImageError(
+          "setPixel: unsupported bits-per-sample (bps=" + std::to_string(bps) + ", supported: 8, 16)");
     }
     }
   }

@@ -15,21 +15,23 @@
 namespace Sipi {
 
 /*!
- * Base class for image-format errors. Subclass this (not `final` — intentional)
- * to model distinct failure modes as types. The HTTP handler and other catch
- * sites dispatch by type, so a dedicated subclass is the cheapest way to give
- * an error a different policy (Sentry capture, HTTP status, client message).
+ * Exception type for the unrecoverable / invariant class of image errors:
+ * allocation-size overflow (`checked_buf_size_or_throw`), `memTiffOpen`'s raw
+ * `malloc` failures, geometry invariants a caller violated, and out-of-range
+ * pixel accessors (`SipiImage::getPixel`/`setPixel`). These are programming
+ * errors with no input path that reaches them — never a fallible operation
+ * on file, network, or request-derived data.
  *
- * Pattern for new subclasses:
- *   - Inherit publicly from `SipiImageError`
- *   - `using SipiImageError::SipiImageError;` to forward constructors (leaf types
- *     with no extra state); define explicit constructors if carrying a payload
- *   - Mark the subclass `final` unless it is itself a further base
- *   - Place the new `catch (MyError &)` BEFORE `catch (SipiImageError &)` at
- *     every call site (derived-most first)
+ * A fallible operation (decode, encode, metadata parse, IIIF transform)
+ * returns `Result<T>` (`std::expected<T, SipiValueError>`) instead of
+ * throwing. Policy for a `SipiValueError` (HTTP status, Sentry capture,
+ * client-facing message) is data, not type: see `policy_for(ErrorCode)` in
+ * `src/error/cpp/SipiValueError.h`. Do not subclass `SipiImageError` to model
+ * policy — there is no type-ordered `catch` chain to dispatch on.
  *
- * See `docs/src/development/error-model.md` for the full catalog and policy
- * mapping (HTTP status, Sentry capture, client-facing message).
+ * See `docs/src/development/error-model.md` and
+ * `docs/adr/0024-value-based-image-errors.md` for the full error-handling
+ * contract.
  */
 class SipiImageError : public std::exception
 {
