@@ -1274,18 +1274,23 @@ Result<bool> SipiIOTiff::read(SipiImage *img,
           tfunc_len = static_cast<unsigned int>(table_len);
         }
 
+        // Colour tags that cannot be synthesized into an ICC profile are
+        // fatal: SIPI is a repository and must not admit corrupt embedded
+        // metadata. tif_guard closes the TIFF handle on this early return;
+        // tfunc is a unique_ptr and needs no manual release.
         if (auto icc =
               Icc::createRGB(whitepoint, primaries, has_tfunc ? tfunc.get() : nullptr, has_tfunc ? tfunc_len : 0)) {
           img->set_icc(*icc);
         } else {
-          log_err("%s", icc.error().diagnostic_message().c_str());
+          return std::unexpected(icc.error());
         }
       } else {
-        // bilevel / 4-bit / non-standard — no transfer function
+        // bilevel / 4-bit / non-standard — no transfer function. See the
+        // comment above: a synthesis failure is fatal here too.
         if (auto icc = Icc::createRGB(whitepoint, primaries, nullptr, 0)) {
           img->set_icc(*icc);
         } else {
-          log_err("%s", icc.error().diagnostic_message().c_str());
+          return std::unexpected(icc.error());
         }
       }
     }

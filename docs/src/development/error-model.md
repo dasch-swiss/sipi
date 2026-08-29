@@ -73,13 +73,16 @@ partial-metadata success path. A handler that decoded past a malformed
 blob with the metadata simply dropped was a pre-repository-era shortcut,
 not a supported outcome. `Icc::createRGB` is a different operation — it
 synthesizes an ICC profile from a file's colour tags rather than parsing
-an embedded blob — and is unaffected by this contract. `Xmp` is stored
-verbatim (see `src/metadata/cpp/xmp.h`) and has no parse step to fail.
+an embedded blob — but the same ground applies: colour tags that cannot
+be built into a profile mean the file is corrupt, so synthesis failure
+is fatal too. `Xmp` is stored verbatim (see `src/metadata/cpp/xmp.h`)
+and has no parse step to fail.
 
 There is no reader-level exception to this contract: malformed ICC,
-IPTC, and EXIF are all fatal in every codec handler (JPEG, J2K, PNG,
-TIFF), including PNG's "Raw profile type exif" text chunk
-(`src/format_handlers/cpp/SipiIOPng.cpp`).
+IPTC, and EXIF — whether parsed from an embedded blob or synthesized by
+`Icc::createRGB` from colour tags — are all fatal in every codec handler
+(JPEG, J2K, PNG, TIFF), including PNG's "Raw profile type exif" text
+chunk (`src/format_handlers/cpp/SipiIOPng.cpp`).
 
 ## Legacy mechanisms and their disposition
 
