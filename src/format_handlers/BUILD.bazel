@@ -66,6 +66,7 @@ cc_library(
         "//src/error",
         "//src/image",
         "//src/image_processing",
+        "//src/iiifparser/cpp/value_objects:iiifparser",
         "//src/logging:logging",
         "//src/metadata:metadata",
         "//src/observability:observability",
