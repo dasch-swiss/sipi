@@ -50,7 +50,8 @@ void expect_gray(SipiImage &img, size_t nx, size_t ny, const std::vector<int> &e
 TEST(ScaleResample, DownscaleAreaAverageHorizontalGradient)
 {
   auto img = make_gray(4, 4, 8, { 0, 40, 80, 120, 0, 40, 80, 120, 0, 40, 80, 120, 0, 40, 80, 120 });
-  ASSERT_TRUE(Sipi::processing::scale(img, 2, 2));
+  const auto result = Sipi::processing::scale(img, 2, 2);
+  ASSERT_TRUE(result.has_value());
   expect_gray(img, 2, 2, { 20, 100, 20, 100 });
 }
 
@@ -60,7 +61,8 @@ TEST(ScaleResample, DownscaleAreaAverageHorizontalGradient)
 TEST(ScaleResample, DownscaleAreaAverageVerticalGradient)
 {
   auto img = make_gray(4, 4, 8, { 0, 0, 0, 0, 40, 40, 40, 40, 80, 80, 80, 80, 120, 120, 120, 120 });
-  ASSERT_TRUE(Sipi::processing::scale(img, 2, 2));
+  const auto result = Sipi::processing::scale(img, 2, 2);
+  ASSERT_TRUE(result.has_value());
   expect_gray(img, 2, 2, { 20, 20, 100, 100 });
 }
 
@@ -70,7 +72,8 @@ TEST(ScaleResample, DownscaleAreaAverageVerticalGradient)
 TEST(ScaleResample, EnlargeLinearInterpolation)
 {
   auto img = make_gray(2, 2, 8, { 0, 90, 90, 180 });
-  ASSERT_TRUE(Sipi::processing::scale(img, 4, 4));
+  const auto result = Sipi::processing::scale(img, 4, 4);
+  ASSERT_TRUE(result.has_value());
   expect_gray(img,
     4,
     4,
@@ -88,7 +91,8 @@ TEST(ScaleResample, EnlargeLinearInterpolation)
 TEST(ScaleResample, DownscaleNonIntegerRatio)
 {
   auto img = make_gray(4, 4, 8, { 0, 40, 80, 120, 0, 40, 80, 120, 0, 40, 80, 120, 0, 40, 80, 120 });
-  ASSERT_TRUE(Sipi::processing::scale(img, 3, 3));
+  const auto result = Sipi::processing::scale(img, 3, 3);
+  ASSERT_TRUE(result.has_value());
   expect_gray(img, 3, 3, { 10, 60, 110, 10, 60, 110, 10, 60, 110 });
 }
 
@@ -97,7 +101,8 @@ TEST(ScaleResample, Downscale16Bit)
 {
   auto img = make_gray(4, 4, 16,
     { 0, 4000, 8000, 12000, 0, 4000, 8000, 12000, 0, 4000, 8000, 12000, 0, 4000, 8000, 12000 });
-  ASSERT_TRUE(Sipi::processing::scale(img, 2, 2));
+  const auto result = Sipi::processing::scale(img, 2, 2);
+  ASSERT_TRUE(result.has_value());
   expect_gray(img, 2, 2, { 2000, 10000, 2000, 10000 });
 }
 

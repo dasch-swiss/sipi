@@ -718,7 +718,14 @@ std::expected<ServeResponse, SipiStatus>
     }
     try {
       PhaseTimer phase_timer(SIPI_PHASE_ROTATE);
-      processing::rotate(img, angle, mirror);
+      if (auto r = processing::rotate(img, angle, mirror); !r) {
+        ImageContext sentry_ctx;
+        sentry_ctx.input_file = infile;
+        sentry_ctx.file_size_bytes = get_file_size(infile);
+        populate_from_image(sentry_ctx, img);
+        report_value_error(req.report_error, req.report_ctx, r.error(), "convert", sentry_ctx);
+        return std::unexpected(status_for(r.error()));
+      }
     } catch (const std::bad_alloc &) {
       Metrics::instance().memory_alloc_failures_total.Increment();
       return std::unexpected(SipiStatus::InternalError);
@@ -739,18 +746,27 @@ std::expected<ServeResponse, SipiStatus>
     }
     try {
       PhaseTimer phase_timer(SIPI_PHASE_QUALITY);
+      Result<void> r;
       switch (quality_format.quality()) {
       case SipiQualityFormat::COLOR:
-        processing::convertToIcc(img, Icc(icc_sRGB), 8);
+        r = processing::convertToIcc(img, Icc(icc_sRGB), 8);
         break;
       case SipiQualityFormat::GRAY:
-        processing::convertToIcc(img, Icc(icc_GRAY_D50), 8);
+        r = processing::convertToIcc(img, Icc(icc_GRAY_D50), 8);
         break;
       case SipiQualityFormat::BITONAL:
-        processing::toBitonal(img);
+        r = processing::toBitonal(img);
         break;
       default:
         return std::unexpected(SipiStatus::BadRequest);
+      }
+      if (!r) {
+        ImageContext sentry_ctx;
+        sentry_ctx.input_file = infile;
+        sentry_ctx.file_size_bytes = get_file_size(infile);
+        populate_from_image(sentry_ctx, img);
+        report_value_error(req.report_error, req.report_ctx, r.error(), "convert", sentry_ctx);
+        return std::unexpected(status_for(r.error()));
       }
     } catch (const std::bad_alloc &) {
       Metrics::instance().memory_alloc_failures_total.Increment();
@@ -772,7 +788,14 @@ std::expected<ServeResponse, SipiStatus>
     }
     try {
       PhaseTimer phase_timer(SIPI_PHASE_WATERMARK);
-      processing::add_watermark(img, watermark);
+      if (auto r = processing::add_watermark(img, watermark); !r) {
+        ImageContext sentry_ctx;
+        sentry_ctx.input_file = infile;
+        sentry_ctx.file_size_bytes = get_file_size(infile);
+        populate_from_image(sentry_ctx, img);
+        report_value_error(req.report_error, req.report_ctx, r.error(), "convert", sentry_ctx);
+        return std::unexpected(status_for(r.error()));
+      }
     } catch (Sipi::SipiError &err) {
       ImageContext sentry_ctx;
       sentry_ctx.input_file = infile;

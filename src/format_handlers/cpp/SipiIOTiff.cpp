@@ -1528,17 +1528,19 @@ Result<bool> SipiIOTiff::read(SipiImage *img,
       if (rtype != SipiSize::FULL) {
         switch (scaling_quality.jpeg) {
         case ScalingMethod::HIGH:
-          Sipi::processing::scale(*img, nnx, nny);
+          if (auto r = Sipi::processing::scale(*img, nnx, nny); !r) { return std::unexpected(r.error()); }
           break;
         case ScalingMethod::MEDIUM:
-          Sipi::processing::scaleMedium(*img, nnx, nny);
+          if (auto r = Sipi::processing::scaleMedium(*img, nnx, nny); !r) { return std::unexpected(r.error()); }
           break;
         case ScalingMethod::LOW:
-          Sipi::processing::scaleFast(*img, nnx, nny);
+          if (auto r = Sipi::processing::scaleFast(*img, nnx, nny); !r) { return std::unexpected(r.error()); }
         }
       }
     }
-    if (force_bps_8) { processing::to8bps(*img); }
+    if (force_bps_8) {
+      if (auto r = processing::to8bps(*img); !r) { return std::unexpected(r.error()); }
+    }
     return true;
   }
   return false;

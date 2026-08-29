@@ -14,7 +14,6 @@
 
 #include "processing.h"
 
-#include "image/SipiImageError.h"
 #include "metadata/icc.h"
 #include "metadata/photometric_interpretation.h"
 #include "observability/profiling.h"
@@ -22,24 +21,9 @@
 
 namespace Sipi {
 
-namespace {
-
-  // Every pixel-buffer allocation in this file funnels through here: reject
-  // (throw) the moment `nx * ny * nc * elem` overflows `size_t`, rather than
-  // letting a wrapped size feed a too-small `std::vector` allocation that a
-  // later copy then overruns.
-  size_t checked_buf_size_or_throw(size_t nx_, size_t ny_, size_t nc_, size_t elem_)
-  {
-    if (const auto sz = checked_buf_size(nx_, ny_, nc_, elem_)) { return *sz; }
-    throw SipiImageError("Pixel buffer size overflow (dimensions=" + std::to_string(nx_) + "x" + std::to_string(ny_)
-                         + ", channels=" + std::to_string(nc_) + ", elem=" + std::to_string(elem_) + ")");
-  }
-
-}// namespace
-
 namespace processing {
 
-  void convertYCC2RGB(SipiImage &img)
+  Result<void> convertYCC2RGB(SipiImage &img)
   {
     const size_t nx = img.getNx();
     const size_t ny = img.getNy();
@@ -47,8 +31,14 @@ namespace processing {
     const size_t bps = img.getBps();
 
     if (bps == 8) {
+      const auto buf_size = checked_buf_size(nx, ny, nc, 1);
+      if (!buf_size) {
+        return std::unexpected(SipiValueError{ ErrorCode::kMalformedInput,
+          "Pixel buffer size overflow (dimensions=" + std::to_string(nx) + "x" + std::to_string(ny)
+            + ", channels=" + std::to_string(nc) + ", elem=1)" });
+      }
       const byte *inbuf = img.pixels_view().data();
-      std::vector<byte> outbuf(checked_buf_size_or_throw(nx, ny, nc, 1));
+      std::vector<byte> outbuf(*buf_size);
 
       for (size_t j = 0; j < ny; j++) {
         for (size_t i = 0; i < nx; i++) {
@@ -71,11 +61,17 @@ namespace processing {
 
       img.set_pixels(std::move(outbuf), nx, ny, nc, bps);
     } else if (bps == 16) {
+      const auto buf_size = checked_buf_size(nx, ny, nc, 2);
+      if (!buf_size) {
+        return std::unexpected(SipiValueError{ ErrorCode::kMalformedInput,
+          "Pixel buffer size overflow (dimensions=" + std::to_string(nx) + "x" + std::to_string(ny)
+            + ", channels=" + std::to_string(nc) + ", elem=2)" });
+      }
       const word *inbuf = reinterpret_cast<const word *>(img.pixels_view().data());
       // Sized with nc, matching the 8-bit path above: YCbCr->RGB conversion
       // does not drop a channel, it converts the first three and copies any
       // remaining ones through unchanged (see the k=3.. loop below).
-      std::vector<byte> outbuf_v(checked_buf_size_or_throw(nx, ny, nc, 2));
+      std::vector<byte> outbuf_v(*buf_size);
       word *outbuf = (word *)outbuf_v.data();
 
       for (size_t j = 0; j < ny; j++) {
@@ -99,14 +95,15 @@ namespace processing {
 
       img.set_pixels(std::move(outbuf_v), nx, ny, nc, bps);
     } else {
-      const std::string msg = "Bits per sample is not supported for operation: " + std::to_string(bps);
-      throw SipiImageError(msg);
+      return std::unexpected(SipiValueError{ ErrorCode::kMalformedInput,
+        "Bits per sample is not supported for operation: " + std::to_string(bps) });
     }
+    return {};
   }
 
   //============================================================================
 
-  void convertToIcc(SipiImage &img, const Icc &target_icc_p, int new_bps)
+  Result<void> convertToIcc(SipiImage &img, const Icc &target_icc_p, int new_bps)
   {
     SIPI_ZONE_N("SipiImage::convertToIcc");
     cmsSetLogErrorHandler(icc_error_logger);
@@ -137,17 +134,18 @@ namespace processing {
       }
 
       default: {
-        throw SipiImageError("Cannot assign ICC profile to image: unsupported channel count nc=" + std::to_string(nc)
-                             + " (expected 1, 3, or 4)" + ", dimensions=" + std::to_string(nx) + "x"
-                             + std::to_string(ny) + ", bps=" + std::to_string(bps)
-                             + ", colorspace=" + to_string(photo));
+        return std::unexpected(SipiValueError{ ErrorCode::kMalformedInput,
+          "Cannot assign ICC profile to image: unsupported channel count nc=" + std::to_string(nc)
+            + " (expected 1, 3, or 4)" + ", dimensions=" + std::to_string(nx) + "x" + std::to_string(ny)
+            + ", bps=" + std::to_string(bps) + ", colorspace=" + to_string(photo) });
       }
       }
     }
     unsigned int nnc = cmsChannelsOf(cmsGetColorSpace(target_icc_p.getIccProfile()));
 
     if (!((new_bps == 8) || (new_bps == 16))) {
-      throw SipiImageError("Unsupported bits/sample (" + std::to_string(bps) + ")");
+      return std::unexpected(
+        SipiValueError{ ErrorCode::kMalformedInput, "Unsupported bits/sample (" + std::to_string(bps) + ")" });
     }
 
     in_formatter = icc->iccFormatter(static_cast<int>(bps), static_cast<int>(nc), photo);
@@ -159,14 +157,22 @@ namespace processing {
       &cmsDeleteTransform);
 
     if (hTransform == nullptr) {
-      throw SipiImageError(
+      return std::unexpected(SipiValueError{ ErrorCode::kMetadataParseFailed,
         "Failed to create color transform" + std::string(", dimensions=") + std::to_string(nx) + "x"
-        + std::to_string(ny) + ", channels=" + std::to_string(nc) + ", bps=" + std::to_string(bps) + ", colorspace="
-        + to_string(photo) + ", source_profile_type=" + std::to_string(static_cast<int>(icc->getProfileType()))
-        + ", target_profile_type=" + std::to_string(static_cast<int>(target_icc_p.getProfileType())));
+          + std::to_string(ny) + ", channels=" + std::to_string(nc) + ", bps=" + std::to_string(bps)
+          + ", colorspace=" + to_string(photo)
+          + ", source_profile_type=" + std::to_string(static_cast<int>(icc->getProfileType()))
+          + ", target_profile_type=" + std::to_string(static_cast<int>(target_icc_p.getProfileType())) });
     }
 
-    std::vector<byte> outbuf(checked_buf_size_or_throw(nx, ny, nnc, static_cast<size_t>(new_bps) / 8));
+    const auto buf_size = checked_buf_size(nx, ny, nnc, static_cast<size_t>(new_bps) / 8);
+    if (!buf_size) {
+      return std::unexpected(SipiValueError{ ErrorCode::kMalformedInput,
+        "Pixel buffer size overflow (dimensions=" + std::to_string(nx) + "x" + std::to_string(ny)
+          + ", channels=" + std::to_string(nnc) + ", elem=" + std::to_string(static_cast<size_t>(new_bps) / 8)
+          + ")" });
+    }
+    std::vector<byte> outbuf(*buf_size);
     cmsDoTransform(hTransform.get(), img.pixels_view().data(), outbuf.data(), nx * ny);
 
     PhotometricInterpretation new_photo = photo;
@@ -202,12 +208,13 @@ namespace processing {
     img.set_pixels(std::move(outbuf), nx, ny, nnc, static_cast<size_t>(new_bps));
     img.set_icc(std::make_shared<Icc>(target_icc_p));
     img.setPhoto(new_photo);
+    return {};
   }
 
   /*==========================================================================*/
 
 
-  void removeChannel(SipiImage &img, const unsigned int channel, const bool force_gray_alpha)
+  Result<void> removeChannel(SipiImage &img, const unsigned int channel, const bool force_gray_alpha)
   {
     const size_t nx = img.getNx();
     const size_t ny = img.getNy();
@@ -217,7 +224,7 @@ namespace processing {
 
     if ((nc == 1) || (channel >= nc)) {
       std::string msg = "Cannot remove component: nc=" + std::to_string(nc) + " chan=" + std::to_string(channel);
-      throw SipiImageError(msg);
+      return std::unexpected(SipiValueError{ ErrorCode::kMalformedInput, msg });
     }
 
     std::vector<ExtraSamples> es = img.getEs();
@@ -239,14 +246,14 @@ namespace processing {
       // TODO: figure out when this can happen. Maybe two channels with alpha is not allowed or even possible?
       if (has_three_channels) {
         std::string msg = "Cannot remove component: nc=" + std::to_string(nc) + " chan=" + std::to_string(channel);
-        throw SipiImageError(msg);
+        return std::unexpected(SipiValueError{ ErrorCode::kMalformedInput, msg });
       }
 
       // TODO: figure out when this can happen and if this can/should be caught earlier
       const bool cmyk_image = (nc == 4) && (photo == PhotometricInterpretation::SEPARATED);
       if (cmyk_image) {
         std::string msg = "Cannot remove component: nc=" + std::to_string(nc) + " chan=" + std::to_string(channel);
-        throw SipiImageError(msg);
+        return std::unexpected(SipiValueError{ ErrorCode::kMalformedInput, msg });
       }
     }
 
@@ -325,7 +332,13 @@ namespace processing {
     const size_t new_nc = nc - 1;
     if (bps == _8bps) {
       const byte *original_pixels = img.pixels_view().data();
-      std::vector<byte> changed_v(checked_buf_size_or_throw(nx, ny, new_nc, 1));
+      const auto changed_buf_size = checked_buf_size(nx, ny, new_nc, 1);
+      if (!changed_buf_size) {
+        return std::unexpected(SipiValueError{ ErrorCode::kMalformedInput,
+          "Pixel buffer size overflow (dimensions=" + std::to_string(nx) + "x" + std::to_string(ny)
+            + ", channels=" + std::to_string(new_nc) + ", elem=1)" });
+      }
+      std::vector<byte> changed_v(*changed_buf_size);
       byte *changed_pixels = changed_v.data();
 
       // only force gray values if the image is RGB and the alpha channel is the channel to be removed
@@ -339,38 +352,46 @@ namespace processing {
       img.set_pixels(std::move(changed_v), nx, ny, new_nc, bps);
     } else if (bps == _16bps) {
       const auto *original_pixels = reinterpret_cast<const unsigned short *>(img.pixels_view().data());
-      std::vector<byte> changed_v(checked_buf_size_or_throw(nx, ny, new_nc, 2));
+      const auto changed_buf_size = checked_buf_size(nx, ny, new_nc, 2);
+      if (!changed_buf_size) {
+        return std::unexpected(SipiValueError{ ErrorCode::kMalformedInput,
+          "Pixel buffer size overflow (dimensions=" + std::to_string(nx) + "x" + std::to_string(ny)
+            + ", channels=" + std::to_string(new_nc) + ", elem=2)" });
+      }
+      std::vector<byte> changed_v(*changed_buf_size);
       auto *changed_pixels = reinterpret_cast<unsigned short *>(changed_v.data());
 
       purge_channel_pixels(original_pixels, changed_pixels, nx, ny, nc, channel, new_nc);
 
       img.set_pixels(std::move(changed_v), nx, ny, new_nc, bps);
     } else {
-      const std::string msg = "Bits per sample is not supported for operation: " + std::to_string(bps);
-      throw SipiImageError(msg);
+      return std::unexpected(SipiValueError{ ErrorCode::kMalformedInput,
+        "Bits per sample is not supported for operation: " + std::to_string(bps) });
     }
 
     // remove the extra sample that we removed from the image
     es.erase(es.begin() + extra_sample_to_remove);
     img.setEs(std::move(es));
+    return {};
   }
 
   //============================================================================
 
 
-  void removeExtraSamples(SipiImage &img, const bool force_gray_alpha)
+  Result<void> removeExtraSamples(SipiImage &img, const bool force_gray_alpha)
   {
     const size_t content_channels = (img.getPhoto() == PhotometricInterpretation::SEPARATED ? 4 : 3);
     const size_t extra_channels = img.getEs().size();
     for (size_t i = content_channels; i < (extra_channels + content_channels); i++) {
-      removeChannel(img, i, force_gray_alpha);
+      if (auto r = removeChannel(img, i, force_gray_alpha); !r) { return std::unexpected(r.error()); }
     }
+    return {};
   }
 
   //============================================================================
 
 
-  void to8bps(SipiImage &img)
+  Result<void> to8bps(SipiImage &img)
   {
     // little-endian architecture assumed
     //
@@ -382,8 +403,15 @@ namespace processing {
       const size_t ny = img.getNy();
       const size_t nc = img.getNc();
 
+      const auto buf_size = checked_buf_size(nx, ny, nc, 1);
+      if (!buf_size) {
+        return std::unexpected(SipiValueError{ ErrorCode::kMalformedInput,
+          "Pixel buffer size overflow (dimensions=" + std::to_string(nx) + "x" + std::to_string(ny)
+            + ", channels=" + std::to_string(nc) + ", elem=1)" });
+      }
+
       const word *inbuf = reinterpret_cast<const word *>(img.pixels_view().data());
-      std::vector<byte> outbuf(checked_buf_size_or_throw(nx, ny, nc, 1));
+      std::vector<byte> outbuf(*buf_size);
       for (size_t j = 0; j < ny; j++) {
         for (size_t i = 0; i < nx; i++) {
           for (size_t k = 0; k < nc; k++) {
@@ -395,17 +423,18 @@ namespace processing {
 
       img.set_pixels(std::move(outbuf), nx, ny, nc, 8);
     }
+    return {};
   }
 
   //============================================================================
 
 
-  void toBitonal(SipiImage &img)
+  Result<void> toBitonal(SipiImage &img)
   {
     SIPI_ZONE_N("SipiImage::toBitonal");
     if ((img.getPhoto() != PhotometricInterpretation::MINISBLACK)
         && (img.getPhoto() != PhotometricInterpretation::MINISWHITE)) {
-      convertToIcc(img, Icc(icc_GRAY_D50), 8);
+      if (auto r = convertToIcc(img, Icc(icc_GRAY_D50), 8); !r) { return std::unexpected(r.error()); }
     }
 
     const size_t nx = img.getNx();
@@ -419,11 +448,16 @@ namespace processing {
       if (!doit && (pixels[i] != 0) && (pixels[i] != 255)) doit = true;
     }
 
-    if (!doit) return;// we have to do nothing, it's already bitonal
+    if (!doit) return {};// we have to do nothing, it's already bitonal
 
     // must be signed!! Error propagation my result in values < 0 or > 255
-    const size_t outbuf_bytes = checked_buf_size_or_throw(nx, ny, 1, sizeof(short));
-    std::vector<short> outbuf(outbuf_bytes / sizeof(short));
+    const auto outbuf_bytes = checked_buf_size(nx, ny, 1, sizeof(short));
+    if (!outbuf_bytes) {
+      return std::unexpected(SipiValueError{ ErrorCode::kMalformedInput,
+        "Pixel buffer size overflow (dimensions=" + std::to_string(nx) + "x" + std::to_string(ny)
+          + ", channels=1, elem=" + std::to_string(sizeof(short)) + ")" });
+    }
+    std::vector<short> outbuf(*outbuf_bytes / sizeof(short));
 
     for (size_t i = 0; i < nx * ny; i++) {
       outbuf[i] = pixels[i];// copy buffer
@@ -442,6 +476,7 @@ namespace processing {
     }
 
     for (size_t i = 0; i < nx * ny; i++) pixels[i] = static_cast<byte>(outbuf[i]);
+    return {};
   }
 
 }// namespace processing

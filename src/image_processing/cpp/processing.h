@@ -64,8 +64,12 @@ namespace processing {
  * \param[in] img Image to resize, mutated in place
  * \param[in] nnx New horizontal dimension (width)
  * \param[in] nny New vertical dimension (height)
+ * \returns an error if the image's bits/sample is not 8 or 16, or if the
+ *          resized pixel buffer's size overflows; success otherwise
+ *          (including when the source or destination has a width or height
+ *          <= 1, in which case the image is left at its current size)
  */
-bool scaleFast(SipiImage &img, size_t nnx, size_t nny);
+[[nodiscard]] Result<void> scaleFast(SipiImage &img, size_t nnx, size_t nny);
 
 /*!
  * Resize an image using some balance between speed and quality
@@ -73,8 +77,12 @@ bool scaleFast(SipiImage &img, size_t nnx, size_t nny);
  * \param[in] img Image to resize, mutated in place
  * \param[in] nnx New horizontal dimension (width)
  * \param[in] nny New vertical dimension (height)
+ * \returns an error if the image's bits/sample is not 8 or 16, or if the
+ *          resized pixel buffer's size overflows; success otherwise
+ *          (including when the source or destination has a width or height
+ *          <= 1, in which case the image is left at its current size)
  */
-bool scaleMedium(SipiImage &img, size_t nnx, size_t nny);
+[[nodiscard]] Result<void> scaleMedium(SipiImage &img, size_t nnx, size_t nny);
 
 /*!
  * Resize an image using the best (but slow) algorithm
@@ -82,8 +90,12 @@ bool scaleMedium(SipiImage &img, size_t nnx, size_t nny);
  * \param[in] img Image to resize, mutated in place
  * \param[in] nnx New horizontal dimension (width)
  * \param[in] nny New vertical dimension (height)
+ * \returns an error if the image's bits/sample is not 8 or 16, or if the
+ *          resized pixel buffer's size overflows; success otherwise
+ *          (including when the source or destination has a width or height
+ *          <= 1, in which case the image is left at its current size)
  */
-bool scale(SipiImage &img, size_t nnx = 0, size_t nny = 0);
+[[nodiscard]] Result<void> scale(SipiImage &img, size_t nnx = 0, size_t nny = 0);
 
 /*!
  * Rotate an image
@@ -93,23 +105,30 @@ bool scale(SipiImage &img, size_t nnx = 0, size_t nny = 0);
  * \param[in] img Image to rotate, mutated in place
  * \param[in] angle Rotation angle
  * \param[in] mirror If true, mirror the image before rotation
+ * \returns an error if the image's bits/sample is not 8 or 16, or if the
+ *          rotated pixel buffer's size overflows; success otherwise
+ *          (including when the angle normalizes to 0, in which case the
+ *          image is left at its current size)
  */
-bool rotate(SipiImage &img, float angle, bool mirror = false);
+[[nodiscard]] Result<void> rotate(SipiImage &img, float angle, bool mirror = false);
 
 /*!
  * Rotate the image if necessary so that it has TOPLEFT orientation
  *
  * \param[in] img Image to reorient, mutated in place
- * @return Returns true on success, false on error
+ * \returns an error if the required rotation fails; success otherwise
+ *          (including when the image is already TOPLEFT)
  */
-bool set_topleft(SipiImage &img);
+[[nodiscard]] Result<void> set_topleft(SipiImage &img);
 
 /*!
  * Convert full range YCbCr (YCC) to RGB colors
  *
  * \param[in] img Image to convert, mutated in place
+ * \returns an error if the image's bits/sample is not 8 or 16, or if the
+ *          converted pixel buffer's size overflows, success otherwise
  */
-void convertYCC2RGB(SipiImage &img);
+[[nodiscard]] Result<void> convertYCC2RGB(SipiImage &img);
 
 /*!
  * Converts the image representation
@@ -117,8 +136,12 @@ void convertYCC2RGB(SipiImage &img);
  * \param[in] img Image to convert, mutated in place
  * \param[in] target_icc_p ICC profile which determines the new image representation
  * \param[in] bps Bits/sample of the new image representation
+ * \returns an error if the image's channel count is unsupported (not 1, 3, or
+ *          4) when no ICC profile is already assigned, if bps is not 8 or 16,
+ *          if the color transform cannot be created, or if the converted
+ *          pixel buffer's size overflows; success otherwise
  */
-void convertToIcc(SipiImage &img, const Icc &target_icc_p, int bps);
+[[nodiscard]] Result<void> convertToIcc(SipiImage &img, const Icc &target_icc_p, int bps);
 
 /*!
  * Removes a channel from a multi component image
@@ -128,8 +151,12 @@ void convertToIcc(SipiImage &img, const Icc &target_icc_p, int bps);
  * \param[in] force_gray_alpha If true,  based on the alpha channel that is removed, a gray value is applied
  * to the remaining channels. This is useful for image formats that don't support alpha channel and where the
  * main content is black, so it is better separated from the background (as the default would be black).
+ * \returns an error if the channel/component count is malformed for the requested
+ *          removal (e.g. channel index out of range for the image's declared
+ *          extra samples), if the converted pixel buffer's size overflows, or
+ *          if the image's bits/sample is not 8 or 16, success otherwise
  */
-void removeChannel(SipiImage &img, unsigned int channel, bool force_gray_alpha = false);
+[[nodiscard]] Result<void> removeChannel(SipiImage &img, unsigned int channel, bool force_gray_alpha = false);
 
 /*!
  * Remove extra samples from the image. Some output formats support only 3 channels (e.g., JPEG)
@@ -137,16 +164,21 @@ void removeChannel(SipiImage &img, unsigned int channel, bool force_gray_alpha =
  * this into account as well.
  *
  * \param[in] img Image to modify, mutated in place
+ * \returns an error if removing any extra sample fails, including when the image's
+ *          declared channel/extra-sample counts are inconsistent, success otherwise
  */
-void removeExtraSamples(SipiImage &img, bool force_gray_alpha = false);
+[[nodiscard]] Result<void> removeExtraSamples(SipiImage &img, bool force_gray_alpha = false);
 
 /*!
  * Convert an image from 16 to 8 bit. The algorithm just divides all pixel values
  * by 256 using the ">> 8" operator (fast & efficient)
  *
  * \param[in] img Image to convert, mutated in place
+ * \returns an error if the converted pixel buffer's size overflows; success
+ *          otherwise (including when the image is not 16 bits/sample, in which
+ *          case there is nothing to do)
  */
-void to8bps(SipiImage &img);
+[[nodiscard]] Result<void> to8bps(SipiImage &img);
 
 /*!
  * Convert an image to a bitonal representation using Steinberg-Floyd dithering.
@@ -155,16 +187,20 @@ void to8bps(SipiImage &img);
  * into a gray value image if necessary and then a FLoyd-Steinberg dithering is applied.
  *
  * \param[in] img Image to convert, mutated in place
+ * \returns an error if converting to gray value fails, or if the dithered
+ *          pixel buffer's size overflows; success otherwise (including when
+ *          the image is already bitonal, in which case there is nothing to do)
  */
-void toBitonal(SipiImage &img);
+[[nodiscard]] Result<void> toBitonal(SipiImage &img);
 
 /*!
  * Add a watermark to an image.
  *
  * \param[in] img Image to watermark, mutated in place
  * \param[in] wmfilename Path to watermarkfile (which must be a TIFF file at the moment)
+ * \returns an error if the watermark file cannot be read, success otherwise
  */
-void add_watermark(SipiImage &img, const std::string &wmfilename);
+[[nodiscard]] Result<void> add_watermark(SipiImage &img, const std::string &wmfilename);
 
 /*!
  * Conclude similarity of two SipiImages, used in tests. Only tested with small differences.

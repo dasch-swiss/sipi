@@ -214,17 +214,21 @@ extern "C" int sipi_image_scale(SipiImageHandle *img, const char *iiif_size, Sip
       emit_str(err, err_ctx, e.message());
       return 1;
     }
-    Sipi::processing::scale(img->image, nx, ny);
+    if (const auto scaled = Sipi::processing::scale(img->image, nx, ny); !scaled) {
+      emit_str(err, err_ctx, scaled.error().client_message());
+      return 1;
+    }
     return static_cast<int>(Sipi::ffi::SipiStatus::Ok);
   });
 }
 
 extern "C" int sipi_image_rotate(SipiImageHandle *img, float angle, int mirror, SipiStrFn err, void *err_ctx)
 {
-  (void)err;
-  (void)err_ctx;
   return Sipi::ffi::sipi_guard([&] {
-    Sipi::processing::rotate(img->image, angle, mirror != 0);
+    if (const auto rotated = Sipi::processing::rotate(img->image, angle, mirror != 0); !rotated) {
+      emit_str(err, err_ctx, rotated.error().client_message());
+      return 1;
+    }
     return static_cast<int>(Sipi::ffi::SipiStatus::Ok);
   });
 }
@@ -232,7 +236,11 @@ extern "C" int sipi_image_rotate(SipiImageHandle *img, float angle, int mirror, 
 extern "C" int sipi_image_topleft(SipiImageHandle *img)
 {
   return Sipi::ffi::sipi_guard([&] {
-    Sipi::processing::set_topleft(img->image);
+    // No error callback in this entry point's contract; a failure reports
+    // as a generic non-zero status the same way an uncaught exception did.
+    if (const auto reoriented = Sipi::processing::set_topleft(img->image); !reoriented) {
+      return static_cast<int>(Sipi::ffi::SipiStatus::InternalError);
+    }
     img->image.setOrientation(Sipi::TOPLEFT);
     return static_cast<int>(Sipi::ffi::SipiStatus::Ok);
   });
@@ -241,10 +249,8 @@ extern "C" int sipi_image_topleft(SipiImageHandle *img)
 extern "C" int sipi_image_watermark(SipiImageHandle *img, const char *wmfile, SipiStrFn err, void *err_ctx)
 {
   return Sipi::ffi::sipi_guard([&] {
-    try {
-      Sipi::processing::add_watermark(img->image, nz(wmfile));
-    } catch (const Sipi::SipiImageError &e) {
-      emit_str(err, err_ctx, e.message());
+    if (const auto watermarked = Sipi::processing::add_watermark(img->image, nz(wmfile)); !watermarked) {
+      emit_str(err, err_ctx, watermarked.error().client_message());
       return 1;
     }
     return static_cast<int>(Sipi::ffi::SipiStatus::Ok);

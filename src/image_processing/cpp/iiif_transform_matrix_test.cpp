@@ -139,7 +139,8 @@ TEST(IIIFTransformMatrix, RotateBy90TransposesDims)
   ASSERT_EQ(img.getNx(), 200u);
   ASSERT_EQ(img.getNy(), 100u);
 
-  ASSERT_TRUE(Sipi::processing::rotate(img, 90.0F, false));
+  const auto result = Sipi::processing::rotate(img, 90.0F, false);
+  ASSERT_TRUE(result.has_value());
   EXPECT_EQ(img.getNx(), 100u);
   EXPECT_EQ(img.getNy(), 200u);
 }
@@ -148,13 +149,15 @@ TEST(IIIFTransformMatrix, RotateBy180AndMirrorPreserveDims)
 {
   Sipi::SipiImage r180;
   if (!readJp2(r180, region("0,0,200,100"), nullptr)) { GTEST_SKIP() << "JP2 decode unavailable (Kakadu?)"; }
-  ASSERT_TRUE(Sipi::processing::rotate(r180, 180.0F, false));
+  const auto r180_result = Sipi::processing::rotate(r180, 180.0F, false);
+  ASSERT_TRUE(r180_result.has_value());
   EXPECT_EQ(r180.getNx(), 200u);
   EXPECT_EQ(r180.getNy(), 100u);
 
   Sipi::SipiImage mir;
   ASSERT_TRUE(readJp2(mir, region("0,0,200,100"), nullptr));
-  ASSERT_TRUE(Sipi::processing::rotate(mir, 0.0F, /*mirror=*/true));
+  const auto mir_result = Sipi::processing::rotate(mir, 0.0F, /*mirror=*/true);
+  ASSERT_TRUE(mir_result.has_value());
   EXPECT_EQ(mir.getNx(), 200u);
   EXPECT_EQ(mir.getNy(), 100u);
 }
@@ -163,7 +166,8 @@ TEST(IIIFTransformMatrix, RotateArbitraryAngleGrowsCanvasAndEncodes)
 {
   Sipi::SipiImage img;
   if (!readJp2(img, region("0,0,200,100"), nullptr)) { GTEST_SKIP() << "JP2 decode unavailable (Kakadu?)"; }
-  ASSERT_TRUE(Sipi::processing::rotate(img, 45.0F, false));
+  const auto result = Sipi::processing::rotate(img, 45.0F, false);
+  ASSERT_TRUE(result.has_value());
   // A 45-degree rotation expands to the bounding box of the rotated raster.
   EXPECT_GE(img.getNx(), 200u);
   EXPECT_GE(img.getNy(), 100u);
@@ -184,7 +188,7 @@ TEST(IIIFTransformMatrix, BitonalQualityReducesToSingleChannel)
   ASSERT_NO_THROW(img.read(kRgbTiff));
   ASSERT_EQ(img.getNc(), 3u);
 
-  ASSERT_NO_THROW(Sipi::processing::toBitonal(img));
+  ASSERT_TRUE(Sipi::processing::toBitonal(img).has_value());
   EXPECT_EQ(img.getNc(), 1u);
 
   const std::string out = tmp_dir + "matrix_bitonal.jpg";
@@ -199,7 +203,7 @@ TEST(IIIFTransformMatrix, GrayQualityConvertsToSingleChannel8Bit)
   ASSERT_NO_THROW(img.read(kRgbTiff));
   ASSERT_EQ(img.getNc(), 3u);
 
-  ASSERT_NO_THROW(Sipi::processing::convertToIcc(img, Sipi::Icc(Sipi::icc_GRAY_D50), 8));
+  ASSERT_TRUE(Sipi::processing::convertToIcc(img, Sipi::Icc(Sipi::icc_GRAY_D50), 8).has_value());
   EXPECT_EQ(img.getNc(), 1u);
   EXPECT_EQ(img.getBps(), 8u);
 }
@@ -211,7 +215,8 @@ TEST(IIIFTransformMatrix, SixteenBitPngTo8Bit)
   ASSERT_NO_THROW(img.read(kPng16Bit));
   ASSERT_EQ(img.getBps(), 16u);
 
-  Sipi::processing::to8bps(img);
+  const auto result = Sipi::processing::to8bps(img);
+  ASSERT_TRUE(result.has_value());
   EXPECT_EQ(img.getBps(), 8u);
 }
 
