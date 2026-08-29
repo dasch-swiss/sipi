@@ -76,12 +76,10 @@ synthesizes an ICC profile from a file's colour tags rather than parsing
 an embedded blob — and is unaffected by this contract. `Xmp` is stored
 verbatim (see `src/metadata/cpp/xmp.h`) and has no parse step to fail.
 
-The one stated exception: the PNG reader's "Raw profile type exif" text
-chunk is ignored, not fatal, when it fails to parse — the image still
-decodes. Malformed ICC and IPTC are fatal in all four codec handlers
-(JPEG, J2K, PNG, TIFF), and malformed EXIF is fatal in JPEG, J2K, and
-TIFF; PNG's EXIF arm is the sole reader that tolerates an unparseable
-blob (`src/format_handlers/cpp/SipiIOPng.cpp`).
+There is no reader-level exception to this contract: malformed ICC,
+IPTC, and EXIF are all fatal in every codec handler (JPEG, J2K, PNG,
+TIFF), including PNG's "Raw profile type exif" text chunk
+(`src/format_handlers/cpp/SipiIOPng.cpp`).
 
 ## Legacy mechanisms and their disposition
 
