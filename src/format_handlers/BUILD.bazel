@@ -127,15 +127,17 @@ cc_binary(
 
 # Colocated unit tests (ADR-0003). Covers TIFF pyramid-level selection plus
 # the per-format `read`/`read_shape`/`write` regression suites (bilevel TIFF,
-# JPEG marker parsing + write, J2K palette + oversized-dimension decode, the
-# shared `SipiImgInfo`/`read_shape` surface across all four handlers, and the
-# error paths each codec throws on truncated/malformed input).
+# JPEG marker parsing + write, J2K palette + oversized-dimension + embedded-
+# metadata decode, the shared `SipiImgInfo`/`read_shape` surface across all
+# four handlers, and the error paths each codec throws on truncated/malformed
+# input).
 cc_test(
     name = "formats_test",
     srcs = [
         "cpp/format_error_path_test.cpp",
         "cpp/imginfo_test.cpp",
         "cpp/j2k_dimension_regression_test.cpp",
+        "cpp/j2k_metadata_regression_test.cpp",
         "cpp/j2k_palette_regression_test.cpp",
         "cpp/jpeg_format_regression_test.cpp",
         "cpp/jpeg_marker_regression_test.cpp",

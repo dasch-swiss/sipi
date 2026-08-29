@@ -32,6 +32,7 @@ filegroup(
     name = "fuzz_seeds_tiff",
     srcs = [
         "images/malformed/tiff_colormap_unsupported_bps.tif",
+        "images/malformed/tiff_icc_garbage.tif",
         "images/malformed/tiff_oversized_dimensions.tif",
         "images/malformed/tiff_palette_1bit.tif",
         "images/malformed/tiff_transferfunction_grayscale.tif",
@@ -42,6 +43,7 @@ filegroup(
 filegroup(
     name = "fuzz_seeds_jpeg",
     srcs = [
+        "images/malformed/jpeg_exif_truncated.jpg",
         "images/malformed/jpeg_icc_short_app2.jpg",
         "images/malformed/jpeg_photoshop_overshoot_app13.jpg",
         "images/malformed/jpeg_photoshop_short_app13.jpg",
@@ -60,6 +62,7 @@ filegroup(
 filegroup(
     name = "fuzz_seeds_j2k",
     srcs = [
+        "images/malformed/j2k_exif_truncated.jp2",
         "images/malformed/j2k_oversized_dimensions.jp2",
         "images/malformed/palette_undersized_lut.jp2",
         "images/unit/gray_with_icc.jp2",

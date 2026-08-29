@@ -83,3 +83,22 @@ TEST(MalformedTiff, PaletteOneBitDoesNotCrash)
   // without SIGSEGV/SIGABRT is the assertion.
   [[maybe_unused]] auto r = img.read(malformed_path("tiff_palette_1bit.tif"));
 }
+
+// A well-formed grayscale TIFF carrying a TIFFTAG_ICCPROFILE payload that is
+// not a valid ICC profile: a 128-byte buffer (the fixed ICC header size)
+// whose declared size matches the buffer but has no `acsp` signature at
+// offset 36. SipiIOTiff::read() reads TIFFTAG_ICCPROFILE with no length or
+// bounds check of its own and passes the bytes straight to Icc::parse(),
+// so this is lcms2's cmsOpenProfileFromMem() itself rejecting the profile,
+// not an upstream bounds guard. Regresses SipiIOTiff::read()'s
+// fatal-metadata contract (DEV-7056): a file whose embedded ICC profile
+// fails to parse is refused with kMetadataParseFailed, surfaced from
+// read() (SipiImage::read() calls SipiIOTiff::read() directly; there is no
+// separate read_shape() rejection path for this defect).
+TEST(MalformedTiff, IccGarbageFailsMetadataParse)
+{
+  Sipi::SipiImage img;
+  const auto r = img.read(malformed_path("tiff_icc_garbage.tif"));
+  ASSERT_FALSE(r.has_value());
+  EXPECT_EQ(r.error().code(), Sipi::ErrorCode::kMetadataParseFailed);
+}
