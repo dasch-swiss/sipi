@@ -6,9 +6,13 @@
 #include <gtest/gtest.h>
 
 #include <cstdio>
+#include <cstring>
 #include <fcntl.h>
 #include <sys/stat.h>
 #include <unistd.h>
+#include <vector>
+
+#include <png.h>
 
 #include "image/SipiImage.h"
 #include "image/SipiImageError.h"
@@ -91,6 +95,79 @@ TEST(PngErrorPath, NonPngFileReadShapeReturnsFailure)
   auto result = io.read_shape(test_images + "unit/lena512.tif");  // not a PNG
   ASSERT_TRUE(result.has_value());
   EXPECT_EQ(result->success, Sipi::SipiImgInfo::FAILURE);
+}
+
+/// Writes a 1x1 RGB PNG carrying a "Raw profile type iptc" tEXt chunk with
+/// the given (attacker-controlled) raw-profile payload.
+static bool write_png_with_raw_profile_text(const std::string &path, const std::string &raw_profile_text)
+{
+  FILE *fp = fopen(path.c_str(), "wb");
+  if (fp == nullptr) return false;
+
+  png_structp png_ptr = png_create_write_struct(PNG_LIBPNG_VER_STRING, nullptr, nullptr, nullptr);
+  if (png_ptr == nullptr) {
+    fclose(fp);
+    return false;
+  }
+  png_infop info_ptr = png_create_info_struct(png_ptr);
+  if (info_ptr == nullptr) {
+    png_destroy_write_struct(&png_ptr, nullptr);
+    fclose(fp);
+    return false;
+  }
+  if (setjmp(png_jmpbuf(png_ptr))) {
+    png_destroy_write_struct(&png_ptr, &info_ptr);
+    fclose(fp);
+    return false;
+  }
+
+  png_init_io(png_ptr, fp);
+  png_set_IHDR(png_ptr,
+    info_ptr,
+    1,
+    1,
+    8,
+    PNG_COLOR_TYPE_RGB,
+    PNG_INTERLACE_NONE,
+    PNG_COMPRESSION_TYPE_BASE,
+    PNG_FILTER_TYPE_BASE);
+
+  png_text text;
+  std::memset(&text, 0, sizeof(text));
+  text.compression = PNG_TEXT_COMPRESSION_NONE;
+  text.key = const_cast<char *>("Raw profile type iptc");
+  text.text = const_cast<char *>(raw_profile_text.c_str());
+  text.text_length = raw_profile_text.size();
+  png_set_text(png_ptr, info_ptr, &text, 1);
+
+  png_write_info(png_ptr, info_ptr);
+  std::vector<unsigned char> row(3, 0);
+  png_write_row(png_ptr, row.data());
+  png_write_end(png_ptr, nullptr);
+  png_destroy_write_struct(&png_ptr, &info_ptr);
+  fclose(fp);
+  return true;
+}
+
+// Regression test for an unbounded `reserve()` in decode_raw_profile(): a
+// "Raw profile type iptc" chunk can declare a huge decimal length while the
+// chunk itself carries only a handful of hex bytes.
+TEST(PngErrorPath, RawProfileHugeDeclaredLengthDoesNotOverAllocate)
+{
+  const std::string path = tmp_dir + "_raw_profile_huge_length.png";
+  const std::string raw_profile = std::string("\n") + "iptc" + "\n" + "999999999999" + "\n" + "ab" + "\n";
+  ASSERT_TRUE(write_png_with_raw_profile_text(path, raw_profile));
+
+  Sipi::SipiIOPng io;
+  Sipi::SipiImage img;
+  // A bounded error Result or a small/empty success are both acceptable —
+  // the point is that decoding returns promptly without an unbounded
+  // reservation attempt (std::bad_alloc / std::length_error / crash).
+  EXPECT_NO_THROW({
+    [[maybe_unused]] auto r = io.Sipi::SipiIO::read(&img, path);
+  });
+
+  std::remove(path.c_str());
 }
 
 // ============================================================

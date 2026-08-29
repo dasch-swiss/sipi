@@ -21,6 +21,7 @@
  * -c opt binary (ADR-0003; docs/src/development/benchmarking.md).
  */
 
+#include <algorithm>
 #include <arpa/inet.h>
 #include <cassert>
 #include <csetjmp>
@@ -129,7 +130,7 @@ static Result<std::vector<unsigned char>> decode_raw_profile(const char *text, s
   ++p;// skip newline after length
 
   std::vector<unsigned char> result;
-  result.reserve(length);
+  result.reserve(std::min(length, static_cast<size_t>((end - p) / 2 + 1)));
   int hi_nibble = -1;
   while (p < end && result.size() < length) {
     const char c = *p++;
