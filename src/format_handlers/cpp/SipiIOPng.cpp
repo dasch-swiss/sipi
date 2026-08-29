@@ -465,6 +465,32 @@ static void conn_flush_data(png_structp /*png_ptr*/)
 
 /*==========================================================================*/
 
+namespace {
+// Owns the libpng write-struct pair for the duration of SipiIOPng::write.
+// Declared before the setjmp so that a longjmp out of a libpng error callback
+// still runs this destructor, releasing png_ptr/info_ptr exactly once on
+// every exit path (success, every error return, and the setjmp landing
+// block). Armed as soon as png_ptr exists, before png_create_info_struct
+// runs — png_destroy_write_struct tolerates info_ptr still being null.
+class PngWriteStructGuard
+{
+public:
+  PngWriteStructGuard(png_structp &png_ptr, png_infop &info_ptr) : png_ptr_(png_ptr), info_ptr_(info_ptr) {}
+
+  ~PngWriteStructGuard()
+  {
+    if (png_ptr_ != nullptr) { png_destroy_write_struct(&png_ptr_, &info_ptr_); }
+  }
+
+  PngWriteStructGuard(const PngWriteStructGuard &) = delete;
+  PngWriteStructGuard &operator=(const PngWriteStructGuard &) = delete;
+
+private:
+  png_structp &png_ptr_;
+  png_infop &info_ptr_;
+};
+}// namespace
+
 Result<void> SipiIOPng::write(SipiImage *img, const OutputSink &sink, const SipiCompressionParams *params)
 {
   SIPI_ZONE_N("SipiIOPng::write");
@@ -475,6 +501,7 @@ Result<void> SipiIOPng::write(SipiImage *img, const OutputSink &sink, const Sipi
 
   FILE *outfile = nullptr;
   png_structp png_ptr;
+  png_infop info_ptr = nullptr;
 
   // Owns the output FILE for the file branch (stdout is never owned).
   // Resource-owning objects are declared before the setjmp so their
@@ -487,6 +514,7 @@ Result<void> SipiIOPng::write(SipiImage *img, const OutputSink &sink, const Sipi
     return std::unexpected(SipiValueError{ ErrorCode::kWriteFailed,
       "Error writing PNG file \"" + filepath + "\": png_create_write_struct failed !" });
   }
+  PngWriteStructGuard png_guard(png_ptr, info_ptr);
 
   // Streamed-write context: SinkStream and http_ctx are kept alive for the
   // whole of SipiIOPng::write so their addresses stay valid across longjmp.
@@ -502,23 +530,19 @@ Result<void> SipiIOPng::write(SipiImage *img, const OutputSink &sink, const Sipi
     outfile = stdout;
   } else {
     if (!(outfile = fopen(filepath.c_str(), "wb"))) {
-      png_free_data(png_ptr, nullptr, PNG_FREE_ALL, -1);
       return std::unexpected(SipiValueError{ ErrorCode::kWriteFailed,
         "Error writing PNG file \"" + filepath + "\": Could not open output file!" });
     }
     outfile_guard.reset(outfile);
   }
 
-  png_infop info_ptr;
   if (!(info_ptr = png_create_info_struct(png_ptr))) {
-    png_free_data(png_ptr, nullptr, PNG_FREE_ALL, -1);
     return std::unexpected(SipiValueError{ ErrorCode::kWriteFailed,
       "Error writing PNG file \"" + filepath + "\": png_create_info_struct !" });
   }
 
   // setjmp error recovery for write — sipi_error_fn calls longjmp
   if (setjmp(png_jmpbuf(png_ptr))) {
-    png_destroy_write_struct(&png_ptr, &info_ptr);
     if (http_ctx.client_aborted) {
       return std::unexpected(
         SipiValueError{ ErrorCode::kClientAbort, "Client aborted HTTP response during PNG write" });
@@ -536,10 +560,7 @@ Result<void> SipiIOPng::write(SipiImage *img, const OutputSink &sink, const Sipi
 
   // PNG does not support alpha channels, so we have to remove them if they are present
   if ((img->getNc() > 3) && (img->getNalpha() > 0)) {// we have an alpha channel and possibly a CMYK image
-    if (auto r = processing::removeExtraSamples(*img); !r) {
-      png_free_data(png_ptr, info_ptr, PNG_FREE_ALL, -1);
-      return std::unexpected(r.error());
-    }
+    if (auto r = processing::removeExtraSamples(*img); !r) { return std::unexpected(r.error()); }
   }
 
   int color_type;
@@ -553,13 +574,11 @@ Result<void> SipiIOPng::write(SipiImage *img, const OutputSink &sink, const Sipi
     color_type = PNG_COLOR_TYPE_RGB_ALPHA;
   } else if (img->getNc() == 4) {
     if (auto r = processing::convertToIcc(*img, Icc(Sipi::PredefinedProfiles::icc_sRGB), 8); !r) {
-      png_free_data(png_ptr, info_ptr, PNG_FREE_ALL, -1);
       return std::unexpected(r.error());
     }
     color_type = PNG_COLOR_TYPE_RGB;
     img->set_geometry(img->getNx(), img->getNy(), 3, 8);
   } else {
-    png_free_data(png_ptr, info_ptr, PNG_FREE_ALL, -1);
     return std::unexpected(SipiValueError{ ErrorCode::kUnsupportedFormat,
       "Error writing PNG file \"" + filepath + "\": unsupported number of channels (" + std::to_string(img->getNc())
         + "), expected 1, 2, 3, or 4" });
@@ -583,7 +602,6 @@ Result<void> SipiIOPng::write(SipiImage *img, const OutputSink &sink, const Sipi
   if ((icc != nullptr) || es.fields().use_icc) {
     if ((icc != nullptr) && (icc->getProfileType() == icc_LAB)) {
       if (auto r = processing::convertToIcc(*img, Icc(Sipi::PredefinedProfiles::icc_sRGB), img->getBps()); !r) {
-        png_free_data(png_ptr, info_ptr, PNG_FREE_ALL, -1);
         return std::unexpected(r.error());
       }
       icc = img->getIcc();
@@ -655,11 +673,6 @@ Result<void> SipiIOPng::write(SipiImage *img, const OutputSink &sink, const Sipi
   png_free(png_ptr, row_pointers);
   row_pointers = nullptr;
 
-  png_free_data(png_ptr, info_ptr, PNG_FREE_ALL, -1);
-  png_destroy_write_struct(&png_ptr, &info_ptr);
-
-  png_ptr = nullptr;
-  info_ptr = nullptr;
   return {};
 }
 
