@@ -220,10 +220,7 @@ cc_library(
     includes = [
         "libtiff",
     ],
-    visibility = ["//visibility:public"],
-)
-
-alias(
-    name = "libtiff",
-    actual = ":tiff",
+    # Consumers: the src/ image-engine graph, and test/ fixtures + tiff_codecs
+    # targets that decode TIFF directly.
+    visibility = ["@@//src:__subpackages__", "@@//test:__subpackages__"],
 )

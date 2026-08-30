@@ -8,6 +8,11 @@ with no generated config header and no external deps. The T.85-only
 Licensing: JBIG-KIT's library is GPL; SIPI is AGPL-3.0 (GPL-compatible) and
 already links it. Not referenced by first-party SIPI code — it is wired into
 the native libtiff (`JBIG_SUPPORT`) to enable JBIG-in-TIFF decode.
+
+Sole intended consumer is `@tiff//:tiff_impl` (bazel/tiff.BUILD.bazel). Kept
+`//visibility:public` rather than a narrowed grant: both this repo and `@tiff`
+are `http_archive` overlays, and there is no stable bzlmod spelling for a
+visibility grant scoped to another external repository.
 """
 
 load("@rules_cc//cc:cc_library.bzl", "cc_library")
