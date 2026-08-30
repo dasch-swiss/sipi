@@ -127,8 +127,8 @@ bazel query 'rdeps(//..., //src/util:util)' --output=label
 # Which BUILD files declare cc_test targets?
 bazel query 'kind("cc_test", //test/unit/...)' --output=label
 
-# What sources does //test/unit/cache:cache_test compile?
-bazel query 'attr("srcs", "", //test/unit/cache:cache_test)' --output=build
+# What sources does //src/cache:cache_test compile?
+bazel query 'attr("srcs", "", //src/cache:cache_test)' --output=build
 ```
 
 `bazel cquery` is the configured-graph variant: it accounts for

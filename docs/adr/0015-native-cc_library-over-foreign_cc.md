@@ -100,6 +100,6 @@ symbols visible on Linux that strict `-std=c++23` hides (e.g. `strerror_r`,
   goldens under a tolerance gate (decode drift ≤6 LSB; lossy re-encode avg ≤3.4;
   see `test/approval/CHANGELOG.approval.md`). png/webp/lcms2/kakadu/tiff
   round-trips are byte-identical (verified).
-- New regression gates: `//test/unit/tiff_codecs` (all enabled codecs configured
+- New regression gates: `//src/format_handlers:tiff_codecs_test` (all enabled codecs configured
   + lossless round-trips) and `//test/unit/sentry_smoke` (inproc backend +
   libbacktrace unwinder deliver a captured event).

@@ -157,11 +157,10 @@ Every module's source now follows **module-co-located**
 foo_test.cpp}` with flat-style includes (`#include "metadata/Foo.h"`
 cross-module, `#include "Foo.h"` intra-module). The `include/<mod>/` shadow
 directories are gone; `include/` retains only the generated headers
-(`SipiVersion.h.in`, `ICC-Profiles/`). A residual handful of tests still link
-the **historical** layout — `test/unit/{cache,tiff_codecs,filenamehash}`
-against `//src:sipi_lib` rather than a narrow per-module target — the last
-holdout the ADR-0003 migration has yet to close (see ARCH-MAP's Support
-areas note).
+(`SipiVersion.h.in`, `ICC-Profiles/`). `test/unit/` retains only shared
+fixture generators (`test/unit/fixtures/`); every per-module unit-test
+suite is co-located under its own package (see ARCH-MAP's Support areas
+note).
 
 A module-co-located package additionally splits its sources by language
 into `cpp/`/`rust/` subfolders whenever it holds (or will hold) more

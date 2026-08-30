@@ -60,16 +60,17 @@ cc_library(
     ],
 )
 
-# Co-located unit tests (ADR-0003): Hash, Parsing, PathRedact, and
-# urldecode. Each depends only on the util library, so a forbidden
-# cross-module include shows up as a build error rather than slipping
-# through a `:sipi_lib`-wide dep.
+# Co-located unit tests (ADR-0003): Hash, Parsing, PathRedact,
+# SipiFilenameHash, and urldecode. Each depends only on the util library, so
+# a forbidden cross-module include shows up as a build error rather than
+# slipping through a `:sipi_lib`-wide dep.
 cc_test(
     name = "util_test",
     srcs = [
         "cpp/hash_test.cpp",
         "cpp/parsing_test.cpp",
         "cpp/path_redact_test.cpp",
+        "cpp/sipifilenamehash_test.cpp",
         "cpp/urldecode_test.cpp",
     ],
     deps = [
