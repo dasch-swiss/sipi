@@ -58,6 +58,7 @@ cc_library(
         "//src/image",
         "//src/logging:logging",
         "//src/metadata:metadata",
+        "//src/metadata/cpp/internal:icc_lcms2",
         "//src/observability:observability",
         "//src/util",
         "@highway//:hwy",

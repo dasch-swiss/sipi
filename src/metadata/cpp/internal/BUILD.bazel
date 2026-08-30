@@ -8,6 +8,8 @@ module" as a build-graph invariant instead of comment-as-policy.
 Visibility is restricted to //src/metadata:__pkg__ — every production
 TU outside `src/metadata/` that tries to `#include
 "metadata/internal/icc_normalization.h"` fails the Bazel analysis phase.
+`:icc_lcms2` is the one target in this package with an additional
+per-target grant beyond that default.
 The co-located icc_normalize_test in `//src/metadata` is on the
 visibility list by virtue of living in `//src/metadata:__pkg__`.
 
@@ -34,6 +36,25 @@ cc_library(
     # path. The internal package stays self-sufficient.
     include_prefix = "metadata/internal",
     strip_include_prefix = "/src/metadata/cpp/internal",
+)
+
+# Typed lcms2 access to Icc's opaque profile handle (ADR-0002). `icc.h` itself
+# is lcms2-free so the chokepoint in `Icc::iccBytes()` cannot be bypassed by
+# reaching a `cmsHPROFILE` through the public header. `color.cpp` is the one
+# production consumer: it needs a typed handle to build `cmsCreateTransform`.
+cc_library(
+    name = "icc_lcms2",
+    hdrs = ["icc_lcms2.h"],
+    include_prefix = "metadata/internal",
+    strip_include_prefix = "/src/metadata/cpp/internal",
+    visibility = [
+        "//src/image_processing:__pkg__",
+        "//src/metadata:__pkg__",
+    ],
+    deps = [
+        "//src/metadata",
+        "@lcms2//:lcms2",
+    ],
 )
 
 # Protobuf adapter for the Essentials packet (ADR-0005 / DEV-6410). The .cpp is

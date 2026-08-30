@@ -4,15 +4,14 @@
  */
 
 /*!
- * This file implements the Handling of ICC color profiles. It makes heavy use of the functions
- * provided by the littleCMS2 library (see http://www.littlecms.com )
+ * This file implements the Handling of ICC color profiles. This header is deliberately
+ * lcms2-free; typed lcms2 access lives behind `metadata/internal/icc_lcms2.h`.
  */
 #ifndef SIPI_METADATA_ICC_H
 #define SIPI_METADATA_ICC_H
 
 #include <memory>
 #include <string>
-#include <type_traits>
 #include <vector>
 
 #include <limits.h>
@@ -20,15 +19,11 @@
 #include <stdio.h>
 #include <time.h>
 
-#include <lcms2.h>
-
 #include "error/SipiValueError.h"
 #include "photometric_interpretation.h"
 
 
 namespace Sipi {
-
-extern void icc_error_logger(cmsContext ContextID, cmsUInt32Number ErrorCode, const char *Text);
 
 /*! Defines predefined profiles which are used by Icc */
 typedef enum {
@@ -52,9 +47,9 @@ class Icc
 private:
   struct ProfileCloser
   {
-    void operator()(cmsHPROFILE p) const { cmsCloseProfile(p); }
+    void operator()(void *p) const;
   };
-  using ProfilePtr = std::unique_ptr<std::remove_pointer_t<cmsHPROFILE>, ProfileCloser>;
+  using ProfilePtr = std::unique_ptr<void, ProfileCloser>;
 
   ProfilePtr icc_profile{};//!< Owning handle of the littleCMS profile data
   PredefinedProfiles profile_type{ icc_undefined };//!< Profile type that is represented
@@ -86,13 +81,6 @@ public:
    * \param[in] icc_p Profile that acts as template for the new profile.
    */
   Icc(const Icc &icc_p);
-
-  /*!
-   * Builds an Icc from an existing littleCMS profile handle by re-serializing it.
-   * \param[in] icc_profile_p LittleCMS profile
-   * \return The built Icc instance, or a SipiValueError if the profile does not re-serialize.
-   */
-  [[nodiscard]] static Result<std::shared_ptr<Icc>> createFromProfile(cmsHPROFILE &icc_profile_p);
 
   /**
    * Constructor to create a predefined profile
@@ -133,8 +121,9 @@ public:
    * set (parsed once on first call, cached thread-safely), bytes 24-35
    * of the returned buffer (ICC creation date) are overwritten with the
    * supplied epoch and bytes 84-99 (Profile ID) are zeroed. When unset
-   * (the production default), the buffer is returned exactly as lcms2
-   * serialized it, including lcms2's wall-clock-stamped creation date.
+   * (the production default), the buffer is returned exactly as the
+   * underlying colour management library serialized it, including its
+   * wall-clock-stamped creation date.
    * See test/approval/CHANGELOG.approval.md and docs/adr/0002-icc-
    * profile-determinism-test-only.md for the rationale.
    *
@@ -143,10 +132,10 @@ public:
   [[nodiscard]] std::vector<unsigned char> iccBytes();
 
   /*!
-   * Retireve the littleCMS profile
-   * \returns Handle to littleCMS profile
+   * Retrieve the opaque handle to the underlying littleCMS profile.
+   * \returns Opaque profile handle
    */
-  cmsHPROFILE getIccProfile() const;
+  [[nodiscard]] void *profileHandle() const;
 
   /*!
    * Get the profile type
@@ -157,7 +146,7 @@ public:
   /*!
    * returns a littleCMS formatter with the given bits/sample
    * \param[in] bps Desired bits/sample
-   * \returns Formatter as used by cmsTransfrom
+   * \returns Formatter value consumed by the colour transform
    */
   unsigned int iccFormatter(int bps) const;
 
@@ -165,8 +154,8 @@ public:
    * returns a littleCMS formatter for an image with the given pixel shape
    * \param[in] bps Bits per sample (8 or 16)
    * \param[in] nc Number of channels (samples per pixel)
-   * \param[in] photo Photometric interpretation (selects the lcms2 colour space)
-   * \returns Formatter as used by cmsTransform
+   * \param[in] photo Photometric interpretation (selects the underlying colour space)
+   * \returns Formatter value consumed by the colour transform
    */
   unsigned int iccFormatter(int bps, int nc, PhotometricInterpretation photo) const;
 

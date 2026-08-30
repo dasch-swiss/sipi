@@ -207,7 +207,6 @@ cc_library(
         "//src/logging:logging",
         "//src/metadata:metadata",
         "//src/observability:observability",
-        "@lcms2//:lcms2",
         "@exiv2//:exiv2",
         "@libexpat",
         "@tiff//:tiff",

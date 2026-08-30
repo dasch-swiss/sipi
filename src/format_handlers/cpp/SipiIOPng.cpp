@@ -236,14 +236,14 @@ Result<bool> SipiIOPng::read(SipiImage *img,
   // landing block below.
   //
   auto infile = std::unique_ptr<FILE, decltype(&fclose)>(fopen(filepath.c_str(), "rb"), fclose);
-  if (infile == nullptr) { return FALSE; }
+  if (infile == nullptr) { return false; }
 
   //
   // check header if we really have a PNG file...
   //
   fread(header, 1, PNG_BYTES_TO_CHECK, infile.get());
   if (png_sig_cmp(header, 0, PNG_BYTES_TO_CHECK) != 0) {
-    return FALSE;// it's not a PNG file
+    return false;// it's not a PNG file
   }
 
   if ((png_ptr = png_create_read_struct(PNG_LIBPNG_VER_STRING, (png_voidp) nullptr, sipi_error_fn, sipi_warning_fn))
