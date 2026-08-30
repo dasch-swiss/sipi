@@ -8,7 +8,7 @@ TIFF plus the crafted-malformed fixtures already used by the codec's unit
 tests. Those seed fixtures are Git LFS.
 """
 
-package(default_visibility = ["//visibility:public"])
+package(default_visibility = ["//src/format_handlers:__subpackages__"])
 
 # `BUILD.bazel` is excluded so the filegroup is exactly the seed inputs: libFuzzer
 # would otherwise load this file as a seed.

@@ -28,14 +28,13 @@ distroless libc++ static-link bracket.
 
 load("@rules_cc//cc:defs.bzl", "cc_binary", "cc_library")
 
-package(default_visibility = ["//visibility:public"])
-
 cc_library(
     name = "sipi_report",
     srcs = ["cpp/SipiReport.cpp"],
     hdrs = ["cpp/SipiReport.h"],
     include_prefix = "cli",
     strip_include_prefix = "/src/cli/cpp",
+    visibility = ["//src/cli:__subpackages__"],
     deps = [
         # populate_from_image.h's observability::ImageContext, the struct
         # the report mirrors.
@@ -50,6 +49,7 @@ cc_library(
     # -fexceptions: sipi_cli_main is an FFI entry; CLI dispatch + the engine
     # throw, and those must not unwind across the extern "C" boundary.
     copts = ["-fexceptions"],
+    visibility = ["//src/cli/rust:__pkg__"],
     deps = [
         "//src:sipi_lib",
         "//src/cli/cpp/commands:commands",
@@ -95,6 +95,7 @@ cc_binary(
         ],
         "//conditions:default": [],
     }),
+    visibility = ["//test/e2e:__pkg__"],
     deps = [
         # The CLI app behind the FFI seam (also pulls //src/ffi:sipi_ffi for
         # the sipi_cli_main declaration and the system/framework linkopts via
@@ -102,3 +103,5 @@ cc_binary(
         ":cli_app",
     ],
 )
+
+package(default_visibility = ["//visibility:private"])

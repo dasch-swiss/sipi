@@ -1,5 +1,10 @@
-# Files exposed to Bazel-loaded extensions (kakadu_extension consumes
-# `kakadu.BUILD.bazel` as the `build_file` argument to `gh_release_archive`).
+# `kakadu_extension.bzl`'s `gh_release_archive` call takes `kakadu.BUILD.bazel`
+# as its `build_file` argument via a `//bazel:kakadu.BUILD.bazel` label, so it
+# needs an explicit `exports_files` entry to be loadable from outside this
+# package. The other native-`cc_library` overlays (exiv2, jansson, mimalloc,
+# jbigkit, lcms2, tiff, tracy) need no such entry: their `build_file` labels
+# are wired up directly in `MODULE.bazel`, which — being the module root —
+# can reference package-internal files without an `exports_files` grant.
 exports_files(["kakadu.BUILD.bazel"])
 
 # Per-tool binutils from the prebuilt LLVM bundle, version-matched to the
@@ -18,7 +23,7 @@ alias(
         "//platforms:is_linux_aarch64": "@llvm-toolchain-minimal-linux-arm64//:bin/llvm-objcopy",
         "//conditions:default": "@llvm-toolchain-minimal-darwin-arm64//:bin/llvm-objcopy",
     }),
-    visibility = ["//visibility:public"],
+    visibility = ["//src:__pkg__"],
 )
 
 alias(
@@ -28,9 +33,13 @@ alias(
         "//platforms:is_linux_aarch64": "@llvm-toolchain-minimal-linux-arm64//:bin/llvm-readelf",
         "//conditions:default": "@llvm-toolchain-minimal-darwin-arm64//:bin/llvm-readelf",
     }),
-    visibility = ["//visibility:public"],
+    visibility = ["//src:__pkg__"],
 )
 
+# Public: the coverage recipe `bazel build`s this and then locates the
+# binary via `bazel cquery --output=files` (justfile lines ~99-102) rather
+# than depending on it from a BUILD file, so there is no label edge for
+# visibility to narrow against — this is a command-line-only consumer.
 alias(
     name = "llvm-cov",
     actual = select({
@@ -41,6 +50,9 @@ alias(
     visibility = ["//visibility:public"],
 )
 
+# Public for the same reason as `:llvm-cov` above: the coverage recipe
+# resolves its path via `bazel cquery --output=files`, a command-line-only
+# consumer with no BUILD-file label edge to narrow against.
 alias(
     name = "llvm-profdata",
     actual = select({
@@ -64,7 +76,7 @@ alias(
         "//platforms:is_linux_aarch64": "@llvm-toolchain-minimal-linux-arm64//:bin/llvm-symbolizer",
         "//conditions:default": "@llvm-toolchain-minimal-darwin-arm64//:bin/llvm-symbolizer",
     }),
-    visibility = ["//visibility:public"],
+    visibility = ["//test/e2e:__pkg__"],
 )
 
 # True whenever `--config=asan` (i.e. `--@llvm//config:asan=true`) is in effect.
@@ -73,18 +85,18 @@ alias(
 config_setting(
     name = "asan_enabled",
     flag_values = {"@llvm//config:asan": "true"},
-    visibility = ["//visibility:public"],
+    visibility = ["//test/e2e:__pkg__"],
 )
 
 # glibc 2.42 → 2.31 ABI compatibility shims. See glibc23_compat.c for
-# the full rationale. Linked into //src/cli:sipi on Linux only (see
-# `linkopts` selector there).
+# the full rationale. Linked into //src, //src/format_handlers, and
+# //src/image on Linux only (see the `linkopts` selectors there).
 load("@rules_cc//cc:defs.bzl", "cc_library")
 
 cc_library(
     name = "glibc23_compat",
     srcs = ["glibc23_compat.c"],
-    visibility = ["//visibility:public"],
+    visibility = ["//src:__subpackages__"],
     target_compatible_with = ["@platforms//os:linux"],
     # `_GNU_SOURCE` is also #defined inside the .c file, but spelling it
     # out here ensures the macro is visible to any tooling that

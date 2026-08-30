@@ -111,9 +111,10 @@ bazel-coverage *FLAGS='':
         --test_tag_filters=-requires-docker \
         //src/... //test/unit/... //test/approval/... //test/e2e/... {{FLAGS}}
 
-# Run every GoogleTest unit-test target — both the legacy
-# `//test/unit/<x>/` directories AND any per-module ADR-0003 co-located
-# `*_test.cpp` under `//src/<mod>/`. Useful for inner-loop development;
+# Run every GoogleTest unit-test target — the per-module ADR-0003
+# co-located `*_test.cpp` under `//src/<mod>/`; `//test/unit/...` is
+# kept in the target list because it still matches the manual fixture
+# generator package. Useful for inner-loop development;
 # CI runs unit tests via `bazel-coverage`. Accepts `*FLAGS` (e.g.
 # `--config=asan --config=ubsan` for the sanitizer gate).
 bazel-test-unit *FLAGS='':

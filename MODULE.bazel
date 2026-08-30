@@ -290,19 +290,10 @@ http_archive = use_repo_rule("@bazel_tools//tools/build_defs/repo:http.bzl", "ht
 http_archive(
     name = "ffmpeg_static_linux_amd64",
     build_file_content = """\
-filegroup(
-    name = "binaries",
-    srcs = [
-        "bin/ffmpeg",
-        "bin/ffprobe",
-    ],
-    visibility = ["//visibility:public"],
+exports_files(
+    ["bin/ffmpeg", "bin/ffprobe"],
+    visibility = ["@@//src:__pkg__"],
 )
-
-exports_files([
-    "bin/ffmpeg",
-    "bin/ffprobe",
-])
 """,
     sha256 = "9da613468e319c6444ff93d23f4a3fd16b67e44d4c9da62dc46f1822f2851ccb",
     strip_prefix = "ffmpeg-n8.1.1-9-g58d4114d36-linux64-lgpl-8.1",
@@ -312,19 +303,10 @@ exports_files([
 http_archive(
     name = "ffmpeg_static_linux_arm64",
     build_file_content = """\
-filegroup(
-    name = "binaries",
-    srcs = [
-        "bin/ffmpeg",
-        "bin/ffprobe",
-    ],
-    visibility = ["//visibility:public"],
+exports_files(
+    ["bin/ffmpeg", "bin/ffprobe"],
+    visibility = ["@@//src:__pkg__"],
 )
-
-exports_files([
-    "bin/ffmpeg",
-    "bin/ffprobe",
-])
 """,
     sha256 = "cbc347fb037a45c2d8417d226567c961274c7f43bbd7765ad5a00d4f18aea63c",
     strip_prefix = "ffmpeg-n8.1.1-9-g58d4114d36-linuxarm64-lgpl-8.1",

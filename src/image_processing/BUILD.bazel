@@ -22,13 +22,18 @@ operators — would cycle).
 "image_processing/processing.h"` for cross-package consumers; the sibling
 `resample.cc` includes `resample.h` with the bare quote form.
 
-Default visibility is public: `processing.h` is included directly from
-`test/approval/` sources, which sit outside `//src/...`.
+Default visibility is `//src:__subpackages__`: this package is internal to
+the `src` tree. The `:image_processing` library additionally grants
+`//test/approval:__pkg__` because `processing.h` is included directly from
+`test/approval/` sources, which sit outside `//src/...`. Visibility narrows
+who may depend on this package; it cannot express the one-way rule against
+`//src/image` described above (both packages sit inside `//src:__subpackages__`),
+so that constraint stays enforced by dep-set review, not by this file.
 """
 
 load("@rules_cc//cc:defs.bzl", "cc_binary", "cc_library", "cc_test")
 
-package(default_visibility = ["//visibility:public"])
+package(default_visibility = ["//src:__subpackages__"])
 
 cc_library(
     name = "image_processing",
@@ -45,6 +50,9 @@ cc_library(
     include_prefix = "image_processing",
     strip_include_prefix = "/src/image_processing/cpp",
     copts = ["-fexceptions"],
+    # //test/approval:approvaltests includes processing.h directly; the
+    # colocated targets below reach it in-package.
+    visibility = ["//src:__subpackages__", "//test/approval:__pkg__"],
     deps = [
         "//src/error",
         "//src/image",
@@ -75,6 +83,7 @@ cc_binary(
     },
     tags = ["manual"],
     testonly = True,
+    visibility = ["//visibility:private"],
     deps = [
         ":image_processing",
         "//src:sipi_lib",
@@ -101,6 +110,7 @@ cc_test(
     ],
     data = ["//test/_test_data:images"],
     env = {"SIPI_WORKSPACE_ROOT": "."},
+    visibility = ["//visibility:private"],
     deps = [
         ":image_processing",
         "//src/error",

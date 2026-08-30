@@ -21,8 +21,6 @@ which keeps the production socket until the cutover renames this to the stock
 load("@rules_cc//cc:cc_library.bzl", "cc_library")
 load("@rules_rust//rust:defs.bzl", "rust_binary", "rust_test")
 
-package(default_visibility = ["//visibility:public"])
-
 # The final binary link pulls in the C++ engine archives (via
 # //src/server/rust:lib → //src/ffi:sipi_ffi) and the C++ CLI app, but rustc
 # drives the link with the C linker driver, which does NOT auto-link the C++
@@ -102,6 +100,7 @@ config_setting(
     name = "linux_sans_asan",
     constraint_values = ["@platforms//os:linux"],
     flag_values = {"@llvm//config:asan": "false"},
+    visibility = ["//visibility:private"],
 )
 
 # The mimalloc stats read (`sipi.malloc.*` gauges) goes through this
@@ -118,6 +117,7 @@ cc_library(
     srcs = ["mi_stats_shim.c"],
     linkstatic = True,
     target_compatible_with = ["@platforms//os:linux"],
+    visibility = ["//visibility:private"],
     deps = ["@mimalloc//:mimalloc"],
 )
 
@@ -145,6 +145,10 @@ rust_binary(
     # the transitive C++ dep (protobuf) includes <sanitizer/asan_interface.h>
     # under --config=asan, which the hermetic LLVM toolchain does not ship.
     tags = ["no-sanitizer"],
+    visibility = [
+        "//src:__pkg__",
+        "//test/e2e:__pkg__",
+    ],
     deps = [
         "@crates//:clap",
         "@crates//:libc",
@@ -166,4 +170,7 @@ rust_test(
     edition = "2021",
     rustc_flags = _CPP_STDLIB_LINK,
     tags = ["no-sanitizer"],
+    visibility = ["//visibility:private"],
 )
+
+package(default_visibility = ["//visibility:private"])

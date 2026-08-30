@@ -24,7 +24,7 @@ the production socket until the cutover.
 
 load("@rules_rust//rust:defs.bzl", "rust_library", "rust_test")
 
-package(default_visibility = ["//visibility:public"])
+package(default_visibility = ["//src/cli/rust:__pkg__"])
 
 rust_library(
     name = "lib",

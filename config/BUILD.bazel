@@ -2,13 +2,13 @@
 tests can declare them as `data` deps.
 
 Consumers:
-  - `//test/unit/configuration:configuration_tests` parses
-    `sipi.config.lua` to verify the Lua-driven config loader.
+  - `//src/scripting/rust:config_parse_test` parses `sipi.config.lua` to
+    verify the Lua-driven config loader.
   - `//:test_fixtures` aggregates `:all_configs` into the Rust e2e
     runfiles tree (`SIPI_REPO_ROOT/config/`).
 """
 
-package(default_visibility = ["//visibility:public"])
+package(default_visibility = ["//:__pkg__", "//src:__subpackages__"])
 
 # Every Lua config file at the top level of `config/`. Sub-trees like
 # `config/scripts/` are not included by default; add a separate filegroup

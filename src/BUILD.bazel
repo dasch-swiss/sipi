@@ -24,7 +24,7 @@ load("@rules_distroless//distroless:defs.bzl", "group", "passwd")
 load("@rules_oci//oci:defs.bzl", "oci_image", "oci_load", "oci_push")
 load("@tar.bzl", "tar")
 
-package(default_visibility = ["//visibility:public"])
+package(default_visibility = ["//visibility:private"])
 
 # ── generated/SipiVersion.h ────────────────────────────────────────────────
 # Bazel re-evaluates `STABLE_*` keys on every build, but downstream actions
@@ -234,6 +234,13 @@ cc_library(
         "@platforms//os:linux": ["//bazel:glibc23_compat"],
         "//conditions:default": [],
     }),
+    # Consumers live under //src (cli, cli/cpp/commands, format_handlers,
+    # image_processing); //test/approval also links against the full engine
+    # for its snapshot-regression binary.
+    visibility = [
+        "//src:__subpackages__",
+        "//test/approval:__pkg__",
+    ],
 )
 
 # ── Microbenchmarks (Google Benchmark; `just bench`) ───────────────────────
@@ -776,4 +783,6 @@ oci_load(
     image = ":sipi_image",
     repo_tags = ["daschswiss/sipi:latest"],
     target_compatible_with = ["@platforms//os:linux"],
+    # Docker-loaded by the smoke test's :docker_smoke rust_test.
+    visibility = ["//test/e2e:__pkg__"],
 )

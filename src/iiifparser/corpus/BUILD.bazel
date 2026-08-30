@@ -16,7 +16,7 @@ workspace-relative path (cwd = workspace root), the `rust_test` via the
 `@rules_rust//rust/runfiles` library.
 """
 
-package(default_visibility = ["//visibility:public"])
+package(default_visibility = ["//src/iiifparser:__subpackages__"])
 
 # `BUILD.bazel` is excluded so the filegroup is exactly the seed inputs: libFuzzer
 # would otherwise load this file as a seed.

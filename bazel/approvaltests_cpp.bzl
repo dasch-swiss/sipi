@@ -22,7 +22,8 @@ cc_library(
     name = "approval_tests",
     hdrs = ["ApprovalTests.hpp"],
     includes = ["."],
-    visibility = ["//visibility:public"],
+    # Sole consumer is `//test/approval:approvaltests` (test/approval/BUILD.bazel).
+    visibility = ["@@//test/approval:__pkg__"],
 )
 """)
 
