@@ -106,23 +106,16 @@ approval + e2e under instrumentation, lcov for Codecov).
 
 ### Unit tests
 
-Unit tests live in `test/unit/` and use GoogleTest with
-ApprovalTests. Tests are organized by component:
-
-These still live under `test/unit/` (they test code that stays behind
-`//src:sipi_lib`, not its own package):
-
-- `test/unit/cache/` — LRU cache tests
-- `test/unit/configuration/` — Configuration parsing tests
-- `test/unit/filenamehash/` — Filename hashing tests
-- `test/unit/tiff_codecs/` — libtiff ingest-codec coverage proof
+Unit tests use GoogleTest with ApprovalTests. `test/unit/fixtures/` holds
+shared fixture generators (test images, EXIF payloads) consumed by tests
+across packages, not a test suite itself.
 
 Per-module Bazel packages co-locate their unit tests alongside the sources
 (per ADR-0003). Co-located tests today:
 
 - `//src/observability:metrics_registry_test` — metrics-registry seam tripwire: pins every metric field against how it reaches production OTLP via the `SipiMetricsSnapshot` bridge
 - `//src/metadata:icc_normalize_test`, `//src/metadata:essentials_test`, `//src/metadata:exif_rational_test` — ICC normalization, the Essentials packet, and EXIF rational-array decode
-- `//src/util:util_test` — util: Hash, Parsing, urldecode
+- `//src/util:util_test` — util: Hash, Parsing, PathRedact, filename hashing, urldecode
 - `//src/iiifparser/cpp/value_objects:iiifparser_test` — IIIF value-object parsers + seam round-trip + decode dims
 - `//src/iiifparser/cpp/classifier:iiif_handler_test` — the `parse_iiif_uri` classifier + its regression corpus
 - `//src/iiifparser/rust:iiif_parser_test` — the production Rust IIIF URL parser (domain, parse, request modules)
@@ -130,6 +123,8 @@ Per-module Bazel packages co-locate their unit tests alongside the sources
 - `//src/image:image_test` — `SipiImage` construction, mutation, pixel accessors, and the Essentials-packet service-file prefix invariant
 - `//src/image_processing:image_processing_test` — scale/rotate/crop, channel-count and equality/pixel-delta regressions, and the engine-direct IIIF transform matrix
 - `//src/format_handlers:formats_test`, `//src/format_handlers:output_sink_test` — per-format read/write/read_shape regression suites (TIFF, JPEG, PNG, J2K) + the write sink
+- `//src/format_handlers:tiff_codecs_test` — libtiff ingest-codec coverage proof (JPEG/LZMA/ZSTD/WebP/JBIG compiled in)
+- `//src/cache:cache_test` — LRU cache: indexing, crash recovery, persistence, add/check/remove, dual-limit eviction, blocked-file handling
 - `//src/logging:logger_test` — logger
 - `//src/throttling/cpp:memory_budget_test` — decode memory budget: CAS accounting, RAII guard, peak-memory estimator
 

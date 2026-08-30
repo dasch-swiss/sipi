@@ -220,7 +220,7 @@ cc_library(
     includes = [
         "libtiff",
     ],
-    # Consumers: the src/ image-engine graph, and test/ fixtures + tiff_codecs
-    # targets that decode TIFF directly.
-    visibility = ["@@//src:__subpackages__", "@@//test:__subpackages__"],
+    # Consumers: the src/ image-engine graph, and the fixture generator that
+    # decodes TIFF directly to craft malformed test images.
+    visibility = ["@@//src:__subpackages__", "@@//test/unit/fixtures:__pkg__"],
 )

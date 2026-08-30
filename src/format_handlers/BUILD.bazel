@@ -130,8 +130,8 @@ cc_binary(
 # the per-format `read`/`read_shape`/`write` regression suites (bilevel TIFF,
 # JPEG marker parsing + write, J2K palette + oversized-dimension + embedded-
 # metadata decode, the shared `SipiImgInfo`/`read_shape` surface across all
-# four handlers, and the error paths each codec throws on truncated/malformed
-# input).
+# four handlers, the error paths each codec throws on truncated/malformed
+# input, and the crafted-malformed-TIFF decode-path regressions).
 cc_test(
     name = "formats_test",
     srcs = [
@@ -143,6 +143,7 @@ cc_test(
         "cpp/jpeg_format_regression_test.cpp",
         "cpp/jpeg_marker_regression_test.cpp",
         "cpp/jpeg_write_test.cpp",
+        "cpp/malformed_tiff_test.cpp",
         "cpp/png_metadata_roundtrip_test.cpp",
         "cpp/select_pyramid_level_test.cpp",
         "cpp/tiff_bilevel_regression_test.cpp",
@@ -153,6 +154,19 @@ cc_test(
         ":format_handlers",
         "//test:test_paths",
         "@googletest//:gtest_main",
+    ],
+)
+
+# Native libtiff codec-coverage proof (DEV-6563): verifies the re-enabled
+# ingest codecs (JPEG/LZMA/ZSTD/WebP/JBIG) are compiled into the vendored
+# libtiff. Exercises libtiff directly, not SipiImage, so it depends only on
+# `@tiff//:tiff` — no SIPI target.
+cc_test(
+    name = "tiff_codecs_test",
+    srcs = ["cpp/tiff_codecs_test.cpp"],
+    deps = [
+        "@googletest//:gtest_main",
+        "@tiff//:tiff",
     ],
 )
 

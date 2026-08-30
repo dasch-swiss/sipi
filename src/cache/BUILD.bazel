@@ -13,7 +13,7 @@ consumers; the sibling inside this package uses the bare quote form
 (`#include "SipiCache.h"`).
 """
 
-load("@rules_cc//cc:defs.bzl", "cc_library")
+load("@rules_cc//cc:defs.bzl", "cc_library", "cc_test")
 
 package(default_visibility = ["//src:__subpackages__"])
 
@@ -29,5 +29,18 @@ cc_library(
         "//src/logging:logging",
         "//src/observability:observability",
         "//src/util",
+    ],
+)
+
+# Co-located unit tests (ADR-0003): constructor/startup indexing, crash
+# recovery, persistence, add/check/remove, dual-limit eviction, and
+# blocked-file handling.
+cc_test(
+    name = "cache_test",
+    srcs = ["cpp/sipicache_test.cpp"],
+    deps = [
+        ":cache",
+        "//src/error",
+        "@googletest//:gtest_main",
     ],
 )
