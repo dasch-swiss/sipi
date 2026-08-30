@@ -101,5 +101,6 @@ symbols visible on Linux that strict `-std=c++23` hides (e.g. `strerror_r`,
   see `test/approval/CHANGELOG.approval.md`). png/webp/lcms2/kakadu/tiff
   round-trips are byte-identical (verified).
 - New regression gates: `//src/format_handlers:tiff_codecs_test` (all enabled codecs configured
-  + lossless round-trips) and `//test/unit/sentry_smoke` (inproc backend +
-  libbacktrace unwinder deliver a captured event).
+  + lossless round-trips) and a sentry-native smoke test (inproc backend +
+  libbacktrace unwinder deliver a captured event; since retired with the
+  crash-reporting move to the Rust `sentry` crate, ADR-0018).
