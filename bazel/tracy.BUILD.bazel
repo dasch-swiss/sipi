@@ -17,7 +17,7 @@ unconditional dependency of the production graph. See
 
 load("@rules_cc//cc:cc_library.bzl", "cc_library")
 
-package(default_visibility = ["//visibility:public"])
+package(default_visibility = ["@@//src/observability:__pkg__"])
 
 cc_library(
     name = "tracy",

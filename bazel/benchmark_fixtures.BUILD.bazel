@@ -4,13 +4,16 @@ The archive layout is produced by tools/benchmark/generate_fixtures.sh:
 big_building/{flat.tif, baseline.jpg, pyr-none.tif, pyr-zstd.tif,
 pyr-webp.tif, pyr.jp2} plus README.md and the upstream redistribution
 notice. Consumed as `data` by the manual-tagged decode/encode benchmark
-cc_binary targets in //src — nothing in the production or CI test graph
-references this repo, so the archive is only ever fetched by `just bench`.
+cc_binary targets in //src/format_handlers — nothing in the production or CI
+test graph references this repo, so the archive is only ever fetched by
+`just bench`. MODULE.bazel declares this repo `dev_dependency = True`, so
+narrowing its visibility carries no root-module compatibility cost.
 """
 
-package(default_visibility = ["//visibility:public"])
+package(default_visibility = ["//visibility:private"])
 
 filegroup(
     name = "images",
     srcs = glob(["big_building/**"]),
+    visibility = ["@@//src/format_handlers:__pkg__"],
 )

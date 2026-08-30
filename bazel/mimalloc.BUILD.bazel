@@ -14,14 +14,14 @@ The target mirrors the BCR 2.x overlay's `:mimalloc-lib` shape: one
 `alwayslink` (whole-archive) library compiled as C with `MI_MALLOC_OVERRIDE`,
 so the `malloc`/`free`/`operator new` override objects — `src/alloc-override.c`
 is textually included by `src/alloc.c` — are unconditionally in any link that
-depends on this target. Consumed only by `//src/cli/rust:sipi` (Linux); nothing
-else may depend on it (the C++ engine binary stays on glibc as the
-allocator-isolated oracle baseline).
+depends on this target. Visibility restricts consumption to
+`//src/cli/rust:sipi` (Linux); the C++ engine binary stays on glibc as the
+allocator-isolated oracle baseline.
 """
 
 load("@rules_cc//cc:cc_library.bzl", "cc_library")
 
-package(default_visibility = ["//visibility:public"])
+package(default_visibility = ["@@//src/cli/rust:__pkg__"])
 
 cc_library(
     name = "mimalloc",

@@ -30,7 +30,7 @@ linker-only `-z noexecstack` are dropped — the hermetic toolchain manages them
 load("@rules_cc//cc:cc_import.bzl", "cc_import")
 load("@rules_cc//cc:cc_library.bzl", "cc_library")
 
-package(default_visibility = ["//visibility:public"])
+package(default_visibility = ["@@//src:__subpackages__"])
 
 _DARWIN_AARCH64 = "@@//platforms:is_darwin_aarch64"
 _LINUX_X86_64 = "@@//platforms:is_linux_x86_64"
@@ -167,6 +167,7 @@ cc_import(
         _LINUX_X86_64: "srclib_ht/Linux-x86-64-gcc/libkdu_ht.a",
         _LINUX_AARCH64: "srclib_ht/Linux-arm-64-gcc/libkdu_ht.a",
     }),
+    visibility = ["//visibility:private"],
 )
 
 # x86-only per-ISA SIMD sub-libraries (coresys/make/Targets.mk SIMD_*_OBJS).
@@ -181,6 +182,7 @@ cc_library(
     includes = _CORESYS_INCLUDES,
     textual_hdrs = _KDU_HDRS,
     alwayslink = True,
+    visibility = ["//visibility:private"],
 )
 
 cc_library(
@@ -190,6 +192,7 @@ cc_library(
     includes = _CORESYS_INCLUDES,
     textual_hdrs = _KDU_HDRS,
     alwayslink = True,
+    visibility = ["//visibility:private"],
 )
 
 cc_library(
@@ -202,6 +205,7 @@ cc_library(
     includes = _CORESYS_INCLUDES,
     textual_hdrs = _KDU_HDRS,
     alwayslink = True,
+    visibility = ["//visibility:private"],
 )
 
 cc_library(
@@ -219,6 +223,7 @@ cc_library(
     includes = _CORESYS_INCLUDES,
     textual_hdrs = _KDU_HDRS,
     alwayslink = True,
+    visibility = ["//visibility:private"],
 )
 
 cc_library(
@@ -240,6 +245,7 @@ cc_library(
         ],
         "//conditions:default": [],
     }),
+    visibility = ["//visibility:private"],
 )
 
 # ----------------------------------------------------------------------------
@@ -305,6 +311,7 @@ cc_library(
     includes = _AUX_INCLUDES,
     textual_hdrs = _KDU_HDRS,
     alwayslink = True,
+    visibility = ["//visibility:private"],
 )
 
 cc_library(
@@ -314,6 +321,7 @@ cc_library(
     includes = _AUX_INCLUDES,
     textual_hdrs = _KDU_HDRS,
     alwayslink = True,
+    visibility = ["//visibility:private"],
 )
 
 cc_library(
@@ -328,6 +336,7 @@ cc_library(
     includes = _AUX_INCLUDES,
     textual_hdrs = _KDU_HDRS,
     alwayslink = True,
+    visibility = ["//visibility:private"],
 )
 
 cc_library(
@@ -348,6 +357,7 @@ cc_library(
         ],
         "//conditions:default": [],
     }),
+    visibility = ["//visibility:private"],
 )
 
 # The single target Sipi consumes (`@kakadu//:kdu`): both static libs plus the

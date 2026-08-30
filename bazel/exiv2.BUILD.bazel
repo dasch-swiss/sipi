@@ -30,12 +30,13 @@ no `<png.h>`/`png_*` references; EXIV2_ENABLE_PNG links `ZLIB::ZLIB`).
 load("@cmake_configure_file//:cmake_configure_file.bzl", "cmake_configure_file")
 load("@rules_cc//cc:cc_library.bzl", "cc_library")
 
-package(default_visibility = ["//visibility:public"])
+package(default_visibility = ["//visibility:private"])
 
 cmake_configure_file(
     name = "exv_conf_h",
     src = "cmake/config.h.cmake",
     out = "include/exiv2/exv_conf.h",
+    visibility = ["//visibility:private"],
     defines = [
         "EXV_ENABLE_FILESYSTEM=1",
         "EXV_ENABLE_VIDEO=1",
@@ -70,6 +71,7 @@ cmake_configure_file(
 genrule(
     name = "exiv2lib_export_h",
     outs = ["include/exiv2/exiv2lib_export.h"],
+    visibility = ["//visibility:private"],
     cmd = """cat > $@ << 'EXIV2_EXPORT_HDR'
 #ifndef EXIV2API_H
 #define EXIV2API_H
@@ -140,5 +142,5 @@ cc_library(
         "include/exiv2",
     ],
     implementation_deps = [":exiv2_impl"],
-    visibility = ["//visibility:public"],
+    visibility = ["@@//src:__subpackages__"],
 )
