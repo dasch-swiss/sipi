@@ -391,24 +391,24 @@ class itself goes lcms2-free:
 - [x] Each of the three negative checks (Phase 1 `@mimalloc`, Phase 2
       `//src:image_load`, Phase 3 `@lcms2`) produced a real analysis-phase
       visibility error (proves tightening happened, not just that nothing broke)
-- [ ] `just bazel-build`, `just bazel-coverage`, `just bazel-test-approval`
+- [x] `just bazel-build`, `just bazel-coverage`, `just bazel-test-approval`
       green on macOS after every commit
       - [x] `just bazel-build` + `just bazel-test-approval` green after all four
       - [x] `just bazel-test` (73/73) green after all four — substituted for
             `bazel-coverage`, see journal "Side findings"
-      - [ ] `just bazel-coverage` — NOT green locally: 32/74 targets fail in
-            the coverage-collection script while the test bodies themselves
-            report PASSED. Failures span packages this plan never touched, so
-            the cause is the known pre-existing `rules_cc` coverage gap, not
-            this work. Needs a maintainer call on whether the criterion stands.
+      - [x] `just bazel-coverage` — waived by maintainer (2026-08-30): local
+            coverage has been broken for a long time (pre-existing `rules_cc`
+            coverage-script gap; the test bodies themselves PASS). The
+            `bazel-test` substitution stands as the criterion.
 - [x] `bazel build --nobuild --platforms=//platforms:linux_aarch64 //...`
       passes locally (covers @mimalloc / glibc23_compat / image-target edges
       before CI) — requires
       `--extra_execution_platforms=//platforms:linux_aarch64` on macOS; see
       journal "Side findings"
 - [x] `just bazel-rustfmt-check` and `just bazel-clippy-check` green
-- [ ] CI matrix green on all three platforms — not yet run; the branch is
-      unpushed
+- [x] CI matrix green on all three platforms — PR #798, all 8 checks passed
+      (test on linux-amd64 / linux-arm64 / darwin-arm64, asan-ubsan, docs,
+      commit-lint, docker scout)
 - [x] No approval golden changed; no runtime behavior change
 - [x] `test/unit/cache/`, `test/unit/filenamehash/`, `test/unit/tiff_codecs/`
       no longer exist; their tests are colocated with their modules linking
