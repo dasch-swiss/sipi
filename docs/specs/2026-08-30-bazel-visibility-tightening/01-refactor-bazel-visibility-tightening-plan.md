@@ -201,27 +201,27 @@ touching Rust-adjacent BUILD files.
 
 All in `bazel/*.BUILD.bazel`, using `@@//` labels:
 
-- [ ] `@kakadu`: package default → `["@@//src:__subpackages__"]`; make the
+- [x] `@kakadu`: package default → `["@@//src:__subpackages__"]`; make the
       internal `coresys*`, `kdu_aux*`, `kdu_ht` sub-targets private so only
       `:kdu` is exported (the file says so itself at kakadu.BUILD.bazel:353)
-- [ ] `@exiv2`: `:exiv2` → `["@@//src:__subpackages__"]`; generated-header
+- [x] `@exiv2`: `:exiv2` → `["@@//src:__subpackages__"]`; generated-header
       rules `:exv_conf_h`, `:exiv2lib_export_h` → private
-- [ ] `@tiff`: `:tiff` → `["@@//src:__subpackages__", "@@//test:__subpackages__"]`
+- [x] `@tiff`: `:tiff` → `["@@//src:__subpackages__", "@@//test:__subpackages__"]`
       (interim — Phase 2 narrows the test side to `//test/unit/fixtures` once
       the tiff_codecs migration lands)
-- [ ] `@tiff`: delete the dead `:libtiff` alias (no consumers)
-- [ ] `@jansson`: package default → `["@@//src:__subpackages__"]`; generated
+- [x] `@tiff`: delete the dead `:libtiff` alias (no consumers)
+- [x] `@jansson`: package default → `["@@//src:__subpackages__"]`; generated
       config-header rules → private
-- [ ] `@tracy`: → `["@@//src/observability:__pkg__"]`
-- [ ] `@mimalloc`: → `["@@//src/cli/rust:__pkg__"]` (turns the
+- [x] `@tracy`: → `["@@//src/observability:__pkg__"]`
+- [x] `@mimalloc`: → `["@@//src/cli/rust:__pkg__"]` (turns the
       mimalloc.BUILD.bazel:17-20 comment into an invariant)
-- [ ] `@sipi_bench_fixtures`: `:images` → `["@@//src/format_handlers:__pkg__"]`;
+- [x] `@sipi_bench_fixtures`: `:images` → `["@@//src/format_handlers:__pkg__"]`;
       fix the stale docstring at benchmark_fixtures.BUILD.bazel:7 ("in `//src`"
       → the benchmarks live in `//src/format_handlers` per ADR-0003); note in
       the same comment that the repo is `dev_dependency = True` (F4)
-- [ ] `@jbigkit`: stays public; add a comment that its sole intended consumer
+- [x] `@jbigkit`: stays public; add a comment that its sole intended consumer
       is `@tiff//:tiff_impl` and why no visibility grant can express that (F1)
-- [ ] Negative check: add a scratch dep on `@mimalloc//:mimalloc` from an
+- [x] Negative check: add a scratch dep on `@mimalloc//:mimalloc` from an
       engine target, confirm the analysis-phase visibility error, revert
 
 #### Phase 2: Main-repo packages and test tree (highest blast radius)
@@ -231,100 +231,100 @@ flip on `//src` is done after all grants exist.
 
 Test co-location prerequisites (ADR-0003; each unlocks a grant reduction):
 
-- [ ] Move `test/unit/cache/cache.cpp` to a colocated `cc_test` in
+- [x] Move `test/unit/cache/cache.cpp` to a colocated `cc_test` in
       `//src/cache` linking `//src/cache:cache` (+ `//src/error`), gtest_main
       instead of `main.cpp`; delete `test/unit/cache/` (mirrors `util_test`,
       ARCH-MAP.md:177)
-- [ ] Move `test/unit/filenamehash/sipifilenamehash.cpp` into `//src/util`'s
+- [x] Move `test/unit/filenamehash/sipifilenamehash.cpp` into `//src/util`'s
       colocated test (links `:util`; `SipiFilenameHash` is a util citizen —
       src/util/BUILD.bazel:3); delete `test/unit/filenamehash/`
-- [ ] Move `test/unit/tiff_codecs/malformed_tiff_test.cpp` into
+- [x] Move `test/unit/tiff_codecs/malformed_tiff_test.cpp` into
       `//src/format_handlers:formats_test` `srcs` (its docstring already
       claims the malformed-input error-path territory; data/env plumbing
       already present)
-- [ ] Move `test/unit/tiff_codecs/tiff_codecs_test.cpp` (raw libtiff
+- [x] Move `test/unit/tiff_codecs/tiff_codecs_test.cpp` (raw libtiff
       codec-availability proof, DEV-6563) to a colocated `cc_test` in
       `//src/format_handlers` linking only `@tiff//:tiff` + gtest_main;
       delete `test/unit/tiff_codecs/`
 
 `//src` (src/BUILD.bazel):
 
-- [ ] `:sipi_lib` → `["//src:__subpackages__", "//test/approval:__pkg__"]`
-- [ ] Narrow `@tiff` further (from the Phase 1 interim value) to
+- [x] `:sipi_lib` → `["//src:__subpackages__", "//test/approval:__pkg__"]`
+- [x] Narrow `@tiff` further (from the Phase 1 interim value) to
       `["@@//src:__subpackages__", "@@//test/unit/fixtures:__pkg__"]` — after
       the tiff_codecs migration, the fixture generator is the only test-tree
       consumer left
-- [ ] `:image_load` → `["//test/e2e:__pkg__"]`
-- [ ] Flip `package(default_visibility)` from public to
+- [x] `:image_load` → `["//test/e2e:__pkg__"]`
+- [x] Flip `package(default_visibility)` from public to
       `["//visibility:private"]` — final step; everything else in the package
       (version/config/ICC-header genrules, image layers, push/load plumbing,
       debug-split) is consumed in-package or from the command line only
-- [ ] `//src/cli`: `:sipi_report` → `["//src/cli:__subpackages__"]`, `:cli_app`
+- [x] `//src/cli`: `:sipi_report` → `["//src/cli:__subpackages__"]`, `:cli_app`
       → `["//src/cli/rust:__pkg__"]`, `:sipi` (cc_binary) →
       `["//test/e2e:__pkg__"]`; package default → private
-- [ ] `//src/cli/rust`: `:sipi` (rust_binary) → `["//src:__pkg__",
+- [x] `//src/cli/rust`: `:sipi` (rust_binary) → `["//src:__pkg__",
       "//test/e2e:__pkg__"]`; `:mi_stats_shim`, `:linux_sans_asan`, unit test →
       private (package default → private)
-- [ ] `//src/server/rust`: package default → `["//src/cli/rust:__pkg__"]`
-- [ ] `//src/image_processing`: package default → `["//src:__subpackages__"]`
+- [x] `//src/server/rust`: package default → `["//src/cli/rust:__pkg__"]`
+- [x] `//src/image_processing`: package default → `["//src:__subpackages__"]`
       with per-target `//test/approval:__pkg__` grant on the library (mirrors
       classifier precedent); `:process_benchmark`, `:image_processing_test` →
       private; rewrite the docstring at image_processing/BUILD.bazel:25-31
-- [ ] `//src/format_handlers/corpus/{j2k,jpeg,png,tiff}`: →
+- [x] `//src/format_handlers/corpus/{j2k,jpeg,png,tiff}`: →
       `["//src/format_handlers:__subpackages__"]`
-- [ ] `//src/iiifparser/corpus`: → `["//src/iiifparser:__subpackages__"]`
+- [x] `//src/iiifparser/corpus`: → `["//src/iiifparser:__subpackages__"]`
 
 Root, `bazel/`, and support packages:
 
-- [ ] Root `:lsan_suppressions` → `["//test:__subpackages__"]` (keeps the
+- [x] Root `:lsan_suppressions` → `["//test:__subpackages__"]` (keeps the
       documented headroom, BUILD.bazel:11-12)
-- [ ] Root `:test_fixtures` → `["//test/e2e:__pkg__"]`
-- [ ] `//bazel`: `:llvm-objcopy`, `:llvm-readelf` → `["//src:__pkg__"]`;
+- [x] Root `:test_fixtures` → `["//test/e2e:__pkg__"]`
+- [x] `//bazel`: `:llvm-objcopy`, `:llvm-readelf` → `["//src:__pkg__"]`;
       `:llvm-symbolizer`, `:asan_enabled` → `["//test/e2e:__pkg__"]`;
       `:glibc23_compat` → `["//src:__subpackages__"]`; fix its stale consumer
       comment (bazel/BUILD.bazel:79 — also linked by format_handlers and image)
-- [ ] `//bazel`: `:llvm-cov`, `:llvm-profdata` stay public with a
+- [x] `//bazel`: `:llvm-cov`, `:llvm-profdata` stay public with a
       command-line-only comment (the coverage recipes `bazel build` them and
       locate the binaries via `bazel cquery --output=files`, justfile:99-102 —
       no BUILD-file label deps)
-- [ ] `//bazel`: keep `exports_files(["kakadu.BUILD.bazel"])` (live consumer:
+- [x] `//bazel`: keep `exports_files(["kakadu.BUILD.bazel"])` (live consumer:
       `kakadu_extension.bzl:23`, F2); update its comment to name the consumer
       and why only kakadu needs the export (the other overlays' `build_file`
       labels sit at MODULE.bazel level)
-- [ ] `//tools`: `:bin2c` → `["//src:__pkg__", "//src/util:__pkg__"]` (its
+- [x] `//tools`: `:bin2c` → `["//src:__pkg__", "//src/util:__pkg__"]` (its
       consumers: `src/BUILD.bazel:98` and the `magic_database.bzl` macro
       expanding into `//src/util`); `exports_files(["workspace_status.sh"])`
       stays public-by-default with its existing future-intent comment — a
       documented exception
-- [ ] `//config`: → `["//:__pkg__", "//src:__subpackages__"]`; fix stale
+- [x] `//config`: → `["//:__pkg__", "//src:__subpackages__"]`; fix stale
       docstring naming nonexistent `//test/unit/configuration` (config/BUILD.bazel:5)
-- [ ] `//include`: `exports_files` visibility → `["//src:__pkg__"]`
-- [ ] `//server`: → `["//:__pkg__", "//src:__pkg__"]`
-- [ ] `//scripts`: → `["//:__pkg__", "//src:__subpackages__"]`
-- [ ] `//platforms`: `platform()` targets → private (command-line only);
+- [x] `//include`: `exports_files` visibility → `["//src:__pkg__"]`
+- [x] `//server`: → `["//:__pkg__", "//src:__pkg__"]`
+- [x] `//scripts`: → `["//:__pkg__", "//src:__subpackages__"]`
+- [x] `//platforms`: `platform()` targets → private (command-line only);
       `config_setting()`s stay public with a comment naming both consumers
       that force it: the `@kakadu` reverse reference and the `select()` keys
       in the five `//bazel:llvm-*` aliases (F3)
-- [ ] `//test`: `:test_paths` → `["//src:__subpackages__", "//test:__subpackages__"]`
-- [ ] `//test/_test_data`: → `["//:__pkg__", "//src:__subpackages__",
+- [x] `//test`: `:test_paths` → `["//src:__subpackages__", "//test:__subpackages__"]`
+- [x] `//test/_test_data`: → `["//:__pkg__", "//src:__subpackages__",
       "//test:__subpackages__"]`
-- [ ] `//test/approval`: `:approved_goldens` → private
-- [ ] `//test/e2e`: drop all four `//visibility:public` exceptions
+- [x] `//test/approval`: `:approved_goldens` → private
+- [x] `//test/e2e`: drop all four `//visibility:public` exceptions
       (`:snapshots`, `:sipi_e2e`, `:sipi_image_tar`, `:all_e2e`) — all
       in-package or command-line only
 Docs sync (same commit as the change it documents):
 
-- [ ] ARCH-MAP.md:55 — replace the image_processing public-visibility claim
-- [ ] ARCH-MAP.md:266 — full rewrite, the line is stale beyond this change:
+- [x] ARCH-MAP.md:55 — replace the image_processing public-visibility claim
+- [x] ARCH-MAP.md:266 — full rewrite, the line is stale beyond this change:
       `memory_budget` and `logger` are already colocated narrow tests,
       `configuration` was ported to `//src/scripting/rust:config_parse_test`,
       and `filenamehash` is missing; after the co-locations the `sipi_lib`
       bucket is `//test/approval` only
-- [ ] CONVENTIONS.md — add the repo-wide visibility policy: default is
+- [x] CONVENTIONS.md — add the repo-wide visibility policy: default is
       `//src:__subpackages__` for engine modules, private for everything else;
       grants are explicit; overlay files use `@@//` labels; command-line
       references need no visibility
-- [ ] Negative check: scratch dep on `//src:image_load` from a `//src`
+- [x] Negative check: scratch dep on `//src:image_load` from a `//src`
       subpackage BUILD file, confirm visibility error, revert
 
 #### Phase 3: ICC chokepoint enforcement (independent of Phases 1–2)
@@ -334,16 +334,16 @@ The lcms2 surface of `icc.h` is three public declarations plus the private
 deleter (Technical Consideration #10); private members cannot move, so the
 class itself goes lcms2-free:
 
-- [ ] Make `icc.h` lcms2-free: drop the `<lcms2.h>` include; `ProfileCloser`
+- [x] Make `icc.h` lcms2-free: drop the `<lcms2.h>` include; `ProfileCloser`
       keeps only a declared `void operator()(void *) const` (definition moves
       out-of-line to icc.cpp, which includes `<lcms2.h>` directly);
       `ProfilePtr` becomes `std::unique_ptr<void, ProfileCloser>`; replace
       `cmsHPROFILE getIccProfile() const` with an opaque
       `void *profileHandle() const`; move the `icc_error_logger` extern
       declaration out (next item)
-- [ ] Delete `Icc::createFromProfile(cmsHPROFILE&)` — dead API, zero call
+- [x] Delete `Icc::createFromProfile(cmsHPROFILE&)` — dead API, zero call
       sites repo-wide
-- [ ] New header `src/metadata/cpp/internal/icc_lcms2.h`: the
+- [x] New header `src/metadata/cpp/internal/icc_lcms2.h`: the
       `icc_error_logger` extern declaration plus an inline
       `cmsHPROFILE`-typed wrapper over `profileHandle()`; new header-only
       `cc_library(name = "icc_lcms2")` in
@@ -351,60 +351,71 @@ class itself goes lcms2-free:
       `deps = ["//src/metadata", "@lcms2//:lcms2"]` (no cycle: metadata does
       not dep back on it; icc.cpp declares/defines its own symbols and does
       not include this header)
-- [ ] Per-target visibility on `:icc_lcms2` =
+- [x] Per-target visibility on `:icc_lcms2` =
       `["//src/metadata:__pkg__", "//src/image_processing:__pkg__"]` — the
       package default stays `//src/metadata:__pkg__` so the internal
       package's Test-seam charter is unchanged; the target docstring states
       the one production grant (color.cpp needs typed handles for
       `cmsCreateTransform`)
-- [ ] Update `src/image_processing/cpp/color.cpp` to include
+- [x] Update `src/image_processing/cpp/color.cpp` to include
       `metadata/internal/icc_lcms2.h` and use the typed wrapper at :144/:156;
       add `//src/metadata/cpp/internal:icc_lcms2` to
       `//src/image_processing`'s deps
-- [ ] Drop `@lcms2` from `//src:sipi_lib` (src/BUILD.bazel:210) and
+- [x] Drop `@lcms2` from `//src:sipi_lib` (src/BUILD.bazel:210) and
       `//src/image` (src/image/BUILD.bazel:72) — header-transitive only today,
       and the split removes `//src/image`'s transitive need
-- [ ] Narrow `@lcms2` (bazel/lcms2.BUILD.bazel) to
+- [x] Narrow `@lcms2` (bazel/lcms2.BUILD.bazel) to
       `["@@//src/metadata:__pkg__", "@@//src/metadata/cpp/internal:__pkg__",
       "@@//src/image_processing:__pkg__"]` (the internal package is its own
       package — a `//src/metadata:__pkg__` grant does not cover it)
-- [ ] Negative check: add a scratch `@lcms2//:lcms2` dep to
+- [x] Negative check: add a scratch `@lcms2//:lcms2` dep to
       `//src/format_handlers`, confirm the analysis-phase visibility error,
       revert
-- [ ] Update the CLAUDE.md ICC-invariant paragraph: the chokepoint is now
+- [x] Update the CLAUDE.md ICC-invariant paragraph: the chokepoint is now
       structurally enforced (state how, including the layering_check residue
       and the `icc_parse_test.cpp` carve-out for `cmsSaveProfileToMem`), keep
       the SOURCE_DATE_EPOCH half
-- [ ] Verify `//src/metadata:icc_parse_test` still compiles and passes (it
+- [x] Verify `//src/metadata:icc_parse_test` still compiles and passes (it
       calls `cmsSaveProfileToMem` with its own `@lcms2` dep — covered by the
       grant)
-- [ ] Verify approval tests byte-identical (`just bazel-test-approval`) — the
+- [x] Verify approval tests byte-identical (`just bazel-test-approval`) — the
       refactor must not move a single golden
 
 ## Acceptance Criteria
 
-- [ ] No `//visibility:public` remains in the repo except the documented
+- [x] No `//visibility:public` remains in the repo except the documented
       exceptions: `//platforms` config_settings (F3), `@jbigkit` (F1),
       `//bazel:llvm-cov`/`:llvm-profdata` (command-line only), and
       `//tools`'s `exports_files(["workspace_status.sh"])` (public-by-default,
       future-intent comment), each carrying a comment naming its reason
-- [ ] Each of the three negative checks (Phase 1 `@mimalloc`, Phase 2
+- [x] Each of the three negative checks (Phase 1 `@mimalloc`, Phase 2
       `//src:image_load`, Phase 3 `@lcms2`) produced a real analysis-phase
       visibility error (proves tightening happened, not just that nothing broke)
 - [ ] `just bazel-build`, `just bazel-coverage`, `just bazel-test-approval`
       green on macOS after every commit
-- [ ] `bazel build --nobuild --platforms=//platforms:linux_aarch64 //...`
+      - [x] `just bazel-build` + `just bazel-test-approval` green after all four
+      - [x] `just bazel-test` (73/73) green after all four — substituted for
+            `bazel-coverage`, see journal "Side findings"
+      - [ ] `just bazel-coverage` — NOT green locally: 32/74 targets fail in
+            the coverage-collection script while the test bodies themselves
+            report PASSED. Failures span packages this plan never touched, so
+            the cause is the known pre-existing `rules_cc` coverage gap, not
+            this work. Needs a maintainer call on whether the criterion stands.
+- [x] `bazel build --nobuild --platforms=//platforms:linux_aarch64 //...`
       passes locally (covers @mimalloc / glibc23_compat / image-target edges
-      before CI)
-- [ ] `just bazel-rustfmt-check` and `just bazel-clippy-check` green
-- [ ] CI matrix green on all three platforms
-- [ ] No approval golden changed; no runtime behavior change
-- [ ] `test/unit/cache/`, `test/unit/filenamehash/`, `test/unit/tiff_codecs/`
+      before CI) — requires
+      `--extra_execution_platforms=//platforms:linux_aarch64` on macOS; see
+      journal "Side findings"
+- [x] `just bazel-rustfmt-check` and `just bazel-clippy-check` green
+- [ ] CI matrix green on all three platforms — not yet run; the branch is
+      unpushed
+- [x] No approval golden changed; no runtime behavior change
+- [x] `test/unit/cache/`, `test/unit/filenamehash/`, `test/unit/tiff_codecs/`
       no longer exist; their tests are colocated with their modules linking
       narrow targets (`//src/cache:cache`, `//src/util:util`,
       `//src/format_handlers` / `@tiff`)
-- [ ] `//src:sipi_lib`'s only out-of-`//src` consumer is `//test/approval`
-- [ ] ARCH-MAP.md, CONVENTIONS.md, CLAUDE.md, and all stale BUILD comments
+- [x] `//src:sipi_lib`'s only out-of-`//src` consumer is `//test/approval`
+- [x] ARCH-MAP.md, CONVENTIONS.md, CLAUDE.md, and all stale BUILD comments
       updated in the same commits as their code changes
 
 ## Dependencies & Risks
