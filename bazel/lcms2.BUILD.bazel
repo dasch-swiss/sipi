@@ -14,7 +14,11 @@ ICC bytes — those funnel through `Icc::iccBytes()` and the date is fixed under
 
 load("@rules_cc//cc:cc_library.bzl", "cc_library")
 
-package(default_visibility = ["//visibility:public"])
+package(default_visibility = [
+    "@@//src/image_processing:__pkg__",
+    "@@//src/metadata:__pkg__",
+    "@@//src/metadata/cpp/internal:__pkg__",
+])
 
 cc_library(
     name = "lcms2",

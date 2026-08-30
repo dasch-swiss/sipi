@@ -69,7 +69,6 @@ cc_library(
         "//src/observability:observability",
         "//src/throttling/cpp:memory_budget",
         "//src/util",
-        "@lcms2//:lcms2",
         "@exiv2//:exiv2",
         "@libexpat",
         "@tiff//:tiff",

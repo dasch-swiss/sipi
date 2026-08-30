@@ -11,6 +11,8 @@
 #include <ctime>
 #include <optional>
 
+#include <lcms2.h>
+
 #include "logging/logger.h"
 
 #include "error/SipiError.h"
@@ -70,6 +72,8 @@ void icc_error_logger(cmsContext ContextID, cmsUInt32Number ErrorCode, const cha
   log_err("ICC-CMS error: %s", Text);
 }
 
+void Icc::ProfileCloser::operator()(void *p) const { cmsCloseProfile(p); }
+
 Icc::Icc(ProfilePtr profile, PredefinedProfiles type) : icc_profile(std::move(profile)), profile_type(type) {}
 
 Result<std::shared_ptr<Icc>> Icc::parse(const unsigned char *icc_buf, int icc_len)
@@ -112,23 +116,6 @@ Icc::Icc(const Icc &icc_p)
   } else {
     profile_type = icc_undefined;
   }
-}
-
-Result<std::shared_ptr<Icc>> Icc::createFromProfile(cmsHPROFILE &icc_profile_p)
-{
-  cmsSetLogErrorHandler(icc_error_logger);
-  Icc::ProfilePtr profile;
-  if (icc_profile_p != nullptr) {
-    cmsUInt32Number len = 0;
-    cmsSaveProfileToMem(icc_profile_p, nullptr, &len);
-    auto buf = std::make_unique<char[]>(len);
-    cmsSaveProfileToMem(icc_profile_p, buf.get(), &len);
-    profile.reset(cmsOpenProfileFromMem(buf.get(), len));
-    if (profile == nullptr) {
-      return std::unexpected(SipiValueError{ ErrorCode::kMetadataParseFailed, "cmsOpenProfileFromMem failed" });
-    }
-  }
-  return std::shared_ptr<Icc>(new Icc(std::move(profile), icc_unknown));
 }
 
 Icc::Icc(PredefinedProfiles predef)
@@ -264,7 +251,7 @@ std::vector<unsigned char> Icc::iccBytes()
   return data;
 }
 
-cmsHPROFILE Icc::getIccProfile() const { return icc_profile.get(); }
+void *Icc::profileHandle() const { return icc_profile.get(); }
 
 unsigned int Icc::iccFormatter(int bps) const
 {

@@ -15,6 +15,7 @@
 #include "processing.h"
 
 #include "metadata/icc.h"
+#include "metadata/internal/icc_lcms2.h"
 #include "metadata/photometric_interpretation.h"
 #include "observability/profiling.h"
 #include "util/checked_arith.h"
@@ -141,7 +142,7 @@ namespace processing {
       }
       }
     }
-    unsigned int nnc = cmsChannelsOf(cmsGetColorSpace(target_icc_p.getIccProfile()));
+    unsigned int nnc = cmsChannelsOf(cmsGetColorSpace(iccProfileHandle(target_icc_p)));
 
     if (!((new_bps == 8) || (new_bps == 16))) {
       return std::unexpected(
@@ -153,7 +154,7 @@ namespace processing {
 
     std::unique_ptr<std::remove_pointer_t<cmsHTRANSFORM>, decltype(&cmsDeleteTransform)> hTransform(
       cmsCreateTransform(
-        icc->getIccProfile(), in_formatter, target_icc_p.getIccProfile(), out_formatter, INTENT_PERCEPTUAL, 0),
+        iccProfileHandle(*icc), in_formatter, iccProfileHandle(target_icc_p), out_formatter, INTENT_PERCEPTUAL, 0),
       &cmsDeleteTransform);
 
     if (hTransform == nullptr) {
