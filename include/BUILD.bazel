@@ -7,7 +7,7 @@ genrules. Each is exported individually below; there is no bundled
 `cc_library` here.
 """
 
-package(default_visibility = ["//visibility:public"])
+package(default_visibility = ["//src:__pkg__"])
 
 # Individual file labels — e.g. expand_template's `template` argument
 # accepts a single Label, not a target that bundles multiple files.

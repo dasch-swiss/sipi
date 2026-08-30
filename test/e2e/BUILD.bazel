@@ -76,7 +76,6 @@ filegroup(
         ["tests/snapshots/*.snap"],
         allow_empty = True,
     ),
-    visibility = ["//visibility:public"],
 )
 
 # Shared library — `src/lib.rs` exposes `SipiServer`, `repo_root`,
@@ -90,7 +89,6 @@ rust_library(
         "src/lib.rs",
     ],
     edition = "2021",
-    visibility = ["//visibility:public"],
     deps = _E2E_LIB_DEPS,
 )
 
@@ -209,7 +207,6 @@ filegroup(
     srcs = ["//src:image_load"],
     output_group = "tarball",
     target_compatible_with = ["@platforms//os:linux"],
-    visibility = ["//visibility:public"],
 )
 
 rust_test(
@@ -308,5 +305,4 @@ test_suite(
         ":tracing",
         ":upload",
     ],
-    visibility = ["//visibility:public"],
 )

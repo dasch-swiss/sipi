@@ -18,5 +18,5 @@ rust_binary(
     name = "bin2c",
     srcs = ["bin2c.rs"],
     edition = "2021",
-    visibility = ["//visibility:public"],
+    visibility = ["//src:__pkg__", "//src/util:__pkg__"],
 )

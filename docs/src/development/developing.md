@@ -134,11 +134,14 @@ Run one component:
 bazel test //src/iiifparser/cpp/value_objects:iiifparser_test --test_output=streamed
 ```
 
-When adding a new unit test, declare a matching `cc_test` target in
-`test/unit/<mod>/BUILD.bazel`. CI runs `just bazel-coverage` —
-which exercises every `cc_test` under `//test/unit/...` plus
-`//test/approval/...` and `//test/e2e/...` in a single pass —
-so a missing `cc_test` target = no CI coverage.
+When adding a new unit test, declare a `cc_test` target in the module's own
+`BUILD.bazel`, co-located with the sources it exercises (per ADR-0003) —
+follow the pattern of the co-located tests listed above rather than adding a
+`test/unit/<mod>/` directory. CI runs `just bazel-coverage` — which exercises
+every `cc_test` under `//src/...` (co-located unit tests) plus
+`//test/unit/...`, `//test/approval/...`, and `//test/e2e/...` in a single
+pass — so a missing `cc_test` target, or one not reachable from `//src/...`,
+means no CI coverage.
 
 ### Rust end-to-end tests
 

@@ -13,7 +13,7 @@ load("@aspect_bazel_lib//lib:copy_to_directory.bzl", "copy_to_directory")
 filegroup(
     name = "lsan_suppressions",
     srcs = [".lsan_suppressions.txt"],
-    visibility = ["//visibility:public"],
+    visibility = ["//test:__subpackages__"],
 )
 
 # Runtime fixtures bundle for Rust e2e tests. `sipi_e2e::repo_root()`
@@ -50,5 +50,5 @@ copy_to_directory(
     # `server/...`. The default would flatten everything by stripping
     # the leading directory.
     root_paths = ["."],
-    visibility = ["//visibility:public"],
+    visibility = ["//test/e2e:__pkg__"],
 )

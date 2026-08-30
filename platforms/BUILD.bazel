@@ -5,7 +5,7 @@
 # constraints into the three (os, cpu) pairs Sipi supports per CLAUDE.md's
 # build-completeness invariant: darwin-aarch64, linux-x86_64, linux-aarch64.
 
-package(default_visibility = ["//visibility:public"])
+package(default_visibility = ["//visibility:private"])
 
 platform(
     name = "linux_x86_64",
@@ -42,12 +42,21 @@ platform(
 # Config settings for per-platform `select()` branches in BUILD files
 # (e.g. the native cc_library deps' per-arch SIMD copts/defines).
 # `platform()` cannot be used in `select()`; `config_setting` can.
+#
+# Public: these are referenced as `select()` keys from outside this package's
+# subtree — the `@kakadu` overlay (`bazel/kakadu.BUILD.bazel` lines ~35-37,
+# spelled `@@//platforms:is_*` there) and all five `//bazel:llvm-*` aliases in
+# `bazel/BUILD.bazel`. Bazel 9.1.0 enforces `config_setting` visibility by
+# default (`--incompatible_enforce_config_setting_visibility`), so — unlike
+# the `platform()` targets above, which are command-line-only and can go
+# private — these edges are real and require public visibility.
 config_setting(
     name = "is_linux_x86_64",
     constraint_values = [
         "@platforms//os:linux",
         "@platforms//cpu:x86_64",
     ],
+    visibility = ["//visibility:public"],
 )
 
 config_setting(
@@ -56,6 +65,7 @@ config_setting(
         "@platforms//os:linux",
         "@platforms//cpu:aarch64",
     ],
+    visibility = ["//visibility:public"],
 )
 
 config_setting(
@@ -64,4 +74,5 @@ config_setting(
         "@platforms//os:macos",
         "@platforms//cpu:aarch64",
     ],
+    visibility = ["//visibility:public"],
 )

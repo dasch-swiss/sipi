@@ -7,7 +7,7 @@ volume-mounted host path in production. `:all_server` aggregates the
 entire directory for the Rust e2e tests' fixture tree.
 """
 
-package(default_visibility = ["//visibility:public"])
+package(default_visibility = ["//:__pkg__", "//src:__pkg__"])
 
 exports_files([
     "test.html",

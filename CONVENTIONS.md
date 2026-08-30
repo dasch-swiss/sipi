@@ -186,9 +186,39 @@ extra physical depth to correct for and needs only the plain
 `strip_include_prefix = "/src"` form, self-sufficient without any
 `include_prefix` twinning.
 
-For the residual historical-layout test targets above, keep the existing
-placement rather than migrating opportunistically; ADR-0003 is the source of
-truth for closing them out.
+### Visibility
+
+A new package's Bazel visibility follows two defaults: engine modules under
+`src/**` default to `//src:__subpackages__` (visible to any other package
+under `src/`, private to everything outside it); every other package
+(`test/**`, `bazel/**`, `tools/**`, `platforms/**`, `config/**`, root) defaults
+to private (`//visibility:private`). Beyond the default, a grant is explicit
+and narrow — name the consuming package (`//test/approval:__pkg__`,
+`//test/e2e:__pkg__`), never a wildcard grant and never
+`//visibility:public`. A vendored overlay (`bazel/*.BUILD.bazel`) grants
+using the canonical `@@//pkg:__pkg__` form (the main repo's canonical
+repository name is empty) because the overlay applies inside an external
+repo, where a bare `//pkg:__pkg__` label would resolve relative to that
+repo instead of this one.
+
+A target that must stay public carries a comment on the `visibility`
+attribute naming why it cannot be narrowed (e.g. a `config_setting()`
+reverse-referenced from another `http_archive`'s overlay, or a target with
+no BUILD-file consumer that is only ever named on the command line).
+Command-line references — `bazel build/run/test <label>`, `--platforms=`,
+`bazel cquery`, justfile recipes, CI steps — are never gated by visibility;
+only a dependency edge declared in a `BUILD.bazel` file is.
+
+Visibility restricts *who may depend on a target from outside its grant*; it
+cannot express a one-way rule between two packages that both sit inside the
+same grant (e.g. `//src/image_processing` depending one-way on `//src/image`
+while `//src/image` never depends back — both live under
+`//src:__subpackages__`). Rules like that stay enforced by dep-set review,
+not by a BUILD file.
+
+Bazel's own analysis is the enforcement for the defaults and grants above,
+backed by this documented convention — deliberately no grep-based CI gate
+re-checks visibility declarations.
 
 ## Route Registration
 
