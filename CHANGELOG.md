@@ -1,5 +1,141 @@
 # Changelog
 
+## [8.0.0](https://github.com/dasch-swiss/sipi/compare/v7.0.0...v8.0.0) (2026-08-31)
+
+
+### ⚠ BREAKING CHANGES
+
+* **format_handlers:** a file carrying unparseable embedded metadata that previously decoded (with the bad metadata silently discarded) is now rejected.
+
+### Features
+
+* **image_processing:** Apply watermarks to 16-bit images ([0b283bb](https://github.com/dasch-swiss/sipi/commit/0b283bbda1d80a166b2ce98e6976ac7cf3e181b8))
+* **util:** Add checked-multiply and dimension-validation helpers ([b206307](https://github.com/dasch-swiss/sipi/commit/b2063075361f3bade8ea81395c10db636cd8b613))
+
+
+### Bug Fixes
+
+* **e2e:** Accept both abort orderings in the post-commit abort tests ([c22017d](https://github.com/dasch-swiss/sipi/commit/c22017d7c071d0b757886585aa517ffc779f8609))
+* **error:** Answer a request for an impossible size with 400, not 500 ([a592b0b](https://github.com/dasch-swiss/sipi/commit/a592b0b14bd0f79d890f7b45b19c0a90476946b7))
+* **error:** Keep the opening quote when redacting paths from error text ([4e54436](https://github.com/dasch-swiss/sipi/commit/4e5443649ba2bec2116a7898d0b02d3d2d466bec))
+* **format_handlers:** Bound the raw-profile reservation to the available data ([f693e5d](https://github.com/dasch-swiss/sipi/commit/f693e5d1befb84567d66cd450d787e56a5238f6f))
+* **format_handlers:** Decode JPEG-compressed TIFFs ([aada66e](https://github.com/dasch-swiss/sipi/commit/aada66e981712c5ad1a32bd8210e35ffef73eca4))
+* **format_handlers:** Make the JPEG setjmp landing blocks read defined values ([beb1357](https://github.com/dasch-swiss/sipi/commit/beb13576ae93dc3be5434f9887de714aee437350))
+* **format_handlers:** Refuse a file whose embedded metadata does not parse ([e6f1788](https://github.com/dasch-swiss/sipi/commit/e6f17885a650db14db249ddec0a66f0430dcc6f4))
+* **format_handlers:** Refuse a PNG whose EXIF chunk does not parse ([4f0972f](https://github.com/dasch-swiss/sipi/commit/4f0972f6bd4c0e1daa67076ba6bca9fd9c9ded39))
+* **format_handlers:** Refuse a TIFF whose colour tags cannot form an ICC profile ([c6674ac](https://github.com/dasch-swiss/sipi/commit/c6674ac2b9d30826ade9ce843be97cf0abbc3aa2))
+* **format_handlers:** Release the codec library structs on the JPEG and PNG error paths ([69b8183](https://github.com/dasch-swiss/sipi/commit/69b818342850154b1f6d67b5227f4b62f98d9ec5))
+* **format_handlers:** Release the PNG read structs on the metadata-failure arms ([3f4edff](https://github.com/dasch-swiss/sipi/commit/3f4edff6c727db27d6ab038b9f5aeb15aa7038fc))
+* **format_handlers:** Release the PNG write structs on every exit path ([23db0e9](https://github.com/dasch-swiss/sipi/commit/23db0e9068700dbc5d963f6f9218e28b3acb842e))
+* **format_handlers:** Report a J2K stripe-decode failure as a decode error ([5e14b5e](https://github.com/dasch-swiss/sipi/commit/5e14b5e05064c04ffd918af32402f8315852a4fa))
+* **format_handlers:** Report libtiff's errors and warnings instead of dropping them ([ee12d37](https://github.com/dasch-swiss/sipi/commit/ee12d37281b1a929187d0b96263b986afb9b356d))
+* **format_handlers:** Stop truncating embedded PNG metadata ([dc12a6d](https://github.com/dasch-swiss/sipi/commit/dc12a6d186b96d741e001520999ff5aea3221b19))
+* **formats:** Bound JPEG marker-parsing over-reads ([176064e](https://github.com/dasch-swiss/sipi/commit/176064e965a90876a04ca90e4f4bf5951cbeb194))
+* **formats:** Bound parse_photoshop pointer advances past marker end ([ade2535](https://github.com/dasch-swiss/sipi/commit/ade2535dade32a7f3f179509d3a89ac8882dd8c9))
+* **formats:** Guard J2K palette expansion against overflow and OOB reads ([dd1197d](https://github.com/dasch-swiss/sipi/commit/dd1197dd8ba6c8e8d3539377b8c57bb69b4dac23))
+* **formats:** TIFF buffer and libtiff-field bugs ([262b788](https://github.com/dasch-swiss/sipi/commit/262b788831167aadbe14e830dd3851ca6e9e8553))
+* **formats:** Widen PNG 16-bit byte-swap loop counter to size_t ([a406034](https://github.com/dasch-swiss/sipi/commit/a40603435e23c17e7795cc342ed5decf02e724b5))
+* **image_processing:** Reject a crop the image's bit depth cannot support ([7d07189](https://github.com/dasch-swiss/sipi/commit/7d071897ca0d2a898cac457684177cb4d0bc982e))
+* **image_processing:** Reject a scale to a one-pixel axis instead of serving the source ([5c8140a](https://github.com/dasch-swiss/sipi/commit/5c8140a43f062c072a1c4403a5f3a0aea47dc18e))
+* **image_processing:** Stop serving uncropped images when the crop fails ([1d5ab65](https://github.com/dasch-swiss/sipi/commit/1d5ab65a87dcff94d3d95c8e11d592d7be41b194))
+* **image:** Correct channel-count buffer sizing and indexing ([7cc208e](https://github.com/dasch-swiss/sipi/commit/7cc208ec292500a1479ef917110db5354379d285))
+* **image:** Guard pixel-buffer allocations against integer overflow ([5631934](https://github.com/dasch-swiss/sipi/commit/5631934e6cbd5c2c19afa5c8fa9b7549430e582b))
+* **logging:** Declare log_vformat with the signature it is defined with ([18d074e](https://github.com/dasch-swiss/sipi/commit/18d074e0e9286f0e21160c916243c877889d07f8))
+* **metadata:** Classify a description-less ICC profile without reading past its buffer ([f8ebd78](https://github.com/dasch-swiss/sipi/commit/f8ebd788715346fb0289170f2ed4c8c7054b47e3))
+* **metadata:** Read a profile's optional info tags without running off the buffer ([32032aa](https://github.com/dasch-swiss/sipi/commit/32032aadcbbdfed5bb3ba867c2e4843b0e443d45))
+* **observability:** Stop leaking source paths in client error messages ([1b022c6](https://github.com/dasch-swiss/sipi/commit/1b022c6a4d57eea37786f9c0a584a14dda963a04))
+* **server-rs:** Restrict CORS to a configured origin allowlist ([411a03b](https://github.com/dasch-swiss/sipi/commit/411a03b5ecf64adf3dfdd185feeb732f4328642b))
+
+
+### Code Refactoring
+
+* **bazel:** Organize sources into cpp/ and rust/ subfolders and colocate the tests ([3aaae3d](https://github.com/dasch-swiss/sipi/commit/3aaae3dfe0dcbc7acbe7fbbe66680427c6a37b1d))
+* **error:** Add the value-error foundation and seam conversion ([47bf70d](https://github.com/dasch-swiss/sipi/commit/47bf70d6cd2e8773f664510a983ef8b27d91f26c))
+* **error:** Expose the value error's message, errno and source location ([b928219](https://github.com/dasch-swiss/sipi/commit/b928219e54b078d06e8e0644afc28b258d9d764f))
+* **ffi:** Drop the shape guard the probe can no longer trip ([7efc17c](https://github.com/dasch-swiss/sipi/commit/7efc17c7a1f2d27f86d002e9c8612f02cc8650f5))
+* **format_handlers:** Carry libtiff's diagnostics in the TIFF reader's errors ([58a35ed](https://github.com/dasch-swiss/sipi/commit/58a35edb5ffad5e42d4779f871c240d7dc68789c))
+* **format_handlers:** Convert the J2K handler internals to value errors ([48e02c8](https://github.com/dasch-swiss/sipi/commit/48e02c89fd5b334e174245731f43d09d6ae1f986))
+* **format_handlers:** Convert the JPEG handler internals to value errors ([8ae85c6](https://github.com/dasch-swiss/sipi/commit/8ae85c6260b985381fb47457ac9efbb734dfabcb))
+* **format_handlers:** Convert the PNG handler internals to value errors ([b240d6d](https://github.com/dasch-swiss/sipi/commit/b240d6dd67973c375cc35f7152876a99606001b7))
+* **format_handlers:** Convert the TIFF handler internals to value errors ([18e4519](https://github.com/dasch-swiss/sipi/commit/18e4519c9c8508b11549acc5c4b75e8a61214103))
+* **format_handlers:** Delete the dead separate-to-contig member ([7bbf86d](https://github.com/dasch-swiss/sipi/commit/7bbf86ddc184e503a7b211d2ef14b6784ffb5511))
+* **format_handlers:** Drop the catch around an XMP construction that cannot throw ([7fef718](https://github.com/dasch-swiss/sipi/commit/7fef718c3a8f3183ba91386450008859b7930507))
+* **format_handlers:** Drop the redundant geometry write on the CMYK-to-PNG path ([0d94c0c](https://github.com/dasch-swiss/sipi/commit/0d94c0c79f8cdb4c8fca2d95ded517042976c1e5))
+* **format_handlers:** Remove the Image friendships and make the APP14 transform decode-local ([7cf4b51](https://github.com/dasch-swiss/sipi/commit/7cf4b5136fbd3faf51672178b2df79514e9f0407))
+* **format_handlers:** Rename the formats package and split its sources ([421de2b](https://github.com/dasch-swiss/sipi/commit/421de2b1b0bde4a2acd2bba254b0d54ac982ef94))
+* **format_handlers:** Retire the JPEG metadata catch blocks ([8aaf3f1](https://github.com/dasch-swiss/sipi/commit/8aaf3f1b1b77956fbfadef50b992ed4e8b4cef0c))
+* **format_handlers:** Return the decode-dimension guard's failures as values ([1ce443c](https://github.com/dasch-swiss/sipi/commit/1ce443c69ccecfea9270d970f01038acb7c16935))
+* **format_handlers:** Return the watermark reader's failures as values ([686e742](https://github.com/dasch-swiss/sipi/commit/686e7420f4a429a4430143dadc17b5bf2e108930))
+* **image_processing:** Convert the processing functions to Result returns ([1f6953e](https://github.com/dasch-swiss/sipi/commit/1f6953e00d5f4d28550365ebfc2eb58610a0efbd))
+* **image_processing:** Drop the unused arithmetic operators and value-error the difference ([8c9d213](https://github.com/dasch-swiss/sipi/commit/8c9d213431a1e46b4720b3989ecf990fab0b71ff))
+* **image:** Add the public mutator surface and extract the image_processing free functions ([486705e](https://github.com/dasch-swiss/sipi/commit/486705e6b8abf3b2e68d9cab3a5812c244bf9dec))
+* **image:** Dissolve //src:engine into the //src/image package ([7b931bc](https://github.com/dasch-swiss/sipi/commit/7b931bcb23c1bc59467710dd4d812f57c0cf5540))
+* **image:** Dissolve the SipiImage hub into image_processing, cache, and error and rehome the strays ([5d14c9b](https://github.com/dasch-swiss/sipi/commit/5d14c9bfa85d0eb8c104c2a9d03671f7efbdbe4a))
+* **image:** Return image I/O failures as values across the SipiIO vtable ([f6370f7](https://github.com/dasch-swiss/sipi/commit/f6370f78329600571912a8a716e95f8f120aebfa))
+* **image:** Return the image read and write failures as values ([06c4507](https://github.com/dasch-swiss/sipi/commit/06c4507ce404c406c3f239c11476a5098b472b46))
+* **image:** Return the shape probe's failures as values ([6752d86](https://github.com/dasch-swiss/sipi/commit/6752d86dcdd7cc1e6e62b6e48cb90a992c51ce2c))
+* **image:** State the image layer's exception contract in the two places it lied ([e326431](https://github.com/dasch-swiss/sipi/commit/e32643198c20d27c5a049b09c5dd0a6183f5a56a))
+* **image:** Stop retrying the dispatched handler and say what was tried ([d548659](https://github.com/dasch-swiss/sipi/commit/d54865960b832b6ec2562960156dbf37aeb08066))
+* **metadata:** Convert the parsers to Result factories ([a663f8f](https://github.com/dasch-swiss/sipi/commit/a663f8fda491d17f3f6f9ee16d4a74cb7aaaefec))
+* **metadata:** Make the ICC chokepoint structurally enforced ([6045492](https://github.com/dasch-swiss/sipi/commit/6045492a1054214a900495151d3c24880d7398ad))
+
+
+### Documentation
+
+* **adr:** Accept ADR-0007 and bring it to current fact ([a991c55](https://github.com/dasch-swiss/sipi/commit/a991c552102dfc72ab241aad703499adcea99576))
+* **adr:** Retire the stale sentry_smoke gate reference in ADR-0015 ([ea64d8d](https://github.com/dasch-swiss/sipi/commit/ea64d8d7e3a63058382e9c064e8e9d8cfc56aa99))
+* **docs:** Add IIIF-parser fuzz-harness plan (DEV-6970) ([e6d3818](https://github.com/dasch-swiss/sipi/commit/e6d381800611231599f46cad403fff2aa41d83ee))
+* **docs:** Adopt SIPI specs in docs/specs ([abf8edd](https://github.com/dasch-swiss/sipi/commit/abf8edd716104672db1a4a426489262fe7c3d5af))
+* **docs:** Adopt value-based errors and record the dissolved-hub topology ([7cd10a8](https://github.com/dasch-swiss/sipi/commit/7cd10a82445c08cd14c6e5d03658da6639066a5b))
+* **docs:** Align fuzzing docs with the shipped Rust harness ([ce7342c](https://github.com/dasch-swiss/sipi/commit/ce7342c1da94a07b0adf7662feaa25b9849b0a1f))
+* **docs:** Correct the format-handler topology in the architecture docs ([c8a15a2](https://github.com/dasch-swiss/sipi/commit/c8a15a2c9cd595c7e015798164c468b3a8cf30c1))
+* **docs:** Describe the image layer's error contract as it now stands ([de6cde9](https://github.com/dasch-swiss/sipi/commit/de6cde9a0dfcef1f8ed592133ee718beca71a81c))
+* **docs:** Record the language-subfolder package layout convention ([4c0f8ac](https://github.com/dasch-swiss/sipi/commit/4c0f8ac59c4817c4fb86aa0200ed61957321d575))
+* **docs:** Record the value-error types on the error module row ([13febca](https://github.com/dasch-swiss/sipi/commit/13febca5657eac1cd438445746adc755e9a92eb9))
+* **docs:** Trim derivable sections from CLAUDE.md ([bd5e891](https://github.com/dasch-swiss/sipi/commit/bd5e891967697d1bc11c512e3f542ee6c8e8c951))
+* **format_handlers:** Record the decode-size budget and how to classify a finding ([43a89ff](https://github.com/dasch-swiss/sipi/commit/43a89ff185e18d38c48d8420272c44970cd03eda))
+* **formats:** Document the codec fuzz harnesses ([20442b7](https://github.com/dasch-swiss/sipi/commit/20442b750ed9bca95b83a26ccce4ccc335cb7d86))
+* **image_processing:** Correct the scale docstrings to match the one-pixel guard ([006d41b](https://github.com/dasch-swiss/sipi/commit/006d41bbda57b3a5ec818695d90ff3fbdc369fd1))
+* **image:** Audit raw pixel-buffer and private-member access ([d2edd3c](https://github.com/dasch-swiss/sipi/commit/d2edd3c311cfa25f9c056be15de385c498fc28f9))
+* **image:** Record the value-error rule and the exception contract ([264b761](https://github.com/dasch-swiss/sipi/commit/264b7613d354d9fe4d1df8884558c67a632b1adf))
+* **specs:** Add codec fuzzing and value-error migration roadmap plan ([f871d20](https://github.com/dasch-swiss/sipi/commit/f871d2023b37bf6452f7f24c5cb7be6b39ad2994))
+* **specs:** Add codec memory-safety remediation plan and journal ([fdd45fe](https://github.com/dasch-swiss/sipi/commit/fdd45fe58580905781205280939bfc3da6a9255e))
+* **specs:** Add the bazel visibility tightening plan ([463248d](https://github.com/dasch-swiss/sipi/commit/463248d251ea6991d9dec3a6909f952798968f4a))
+* **specs:** Close out the coverage and CI acceptance criteria ([4807884](https://github.com/dasch-swiss/sipi/commit/4807884c2a6c3d2d040bff451f9974e940f8974e))
+* **specs:** Record the bazel visibility execution in the plan and journal ([3454617](https://github.com/dasch-swiss/sipi/commit/3454617f3bb6a481eb7fda242e442cb2f95b81a9))
+* **specs:** Track codec-fuzzing and value-error execution in the plan and journal ([39f5f7e](https://github.com/dasch-swiss/sipi/commit/39f5f7e03335245e4ae79ba3857bdcab6d683c71))
+
+
+### Tests
+
+* **cache,util,format_handlers:** Co-locate the legacy unit tests with their modules ([6f98f9b](https://github.com/dasch-swiss/sipi/commit/6f98f9bf999d38cc10cae4c44f44bfa230f65cc7))
+* **e2e:** Strip ASan log_path for CLI convert/verify subprocesses ([63cca36](https://github.com/dasch-swiss/sipi/commit/63cca36bbd37b60b0e14447d9675cec7a96563ee))
+* **format_handlers:** Give the codec fuzz harness a decode-size budget ([e770470](https://github.com/dasch-swiss/sipi/commit/e7704703946ba68b1c6557d27eb35078b4844145))
+* **format_handlers:** Pin the fatal-metadata paths with crafted fixtures ([a2ceb0b](https://github.com/dasch-swiss/sipi/commit/a2ceb0b55226e71fde698655f1e3145696638d68))
+* **format_handlers:** Register the codec fuzz harnesses with coverage and the strategy doc ([e93c3a9](https://github.com/dasch-swiss/sipi/commit/e93c3a9c09d782ffe5e1b25040ddd28625e6228e))
+* **format_handlers:** State what the codec fuzz harness can still catch ([5661f84](https://github.com/dasch-swiss/sipi/commit/5661f848b879f300fa491cf18b2538577cf3f631))
+* **formats:** Add libFuzzer harnesses over the codec decode entry points ([05ca1c7](https://github.com/dasch-swiss/sipi/commit/05ca1c7e95c080ee3185764cda28d8b1e183435b))
+* **formats:** Add parse_photoshop pointer-overshoot regression fixture ([783210d](https://github.com/dasch-swiss/sipi/commit/783210d10ee4ec2e63cf0b65d27b52d80a23e1f8))
+* **formats:** Pin the J2K oversized-dimension rejection with a fixture ([1d284f9](https://github.com/dasch-swiss/sipi/commit/1d284f92d6392c1c122c1427a7044ca8363c672c))
+* **iiifparser:** Add Bazel-native libFuzzer harness for parse_request ([a5efb12](https://github.com/dasch-swiss/sipi/commit/a5efb125904214fc31e8be2541d23f6d125bc077))
+* **image,formats:** Add deferred JP2 regression fixtures for YCbCr and palette decode ([0ae5f99](https://github.com/dasch-swiss/sipi/commit/0ae5f9925e5c972eaaa86e6548b42c5b98949f6a))
+
+
+### Build System
+
+* **bazel:** Bump hermetic-llvm to 0.8.18 to unlock macOS libFuzzer ([6518a5e](https://github.com/dasch-swiss/sipi/commit/6518a5e98bffe484e0ebf64a93de3e9b0d91c43f))
+* **bazel:** Narrow main-repo visibility to the documented consumer sets ([ffd4c01](https://github.com/dasch-swiss/sipi/commit/ffd4c015d1b2c931060e933fd95ff07956544b13))
+* **bazel:** Narrow vendored-dep overlay visibility to actual consumers ([33e53f2](https://github.com/dasch-swiss/sipi/commit/33e53f281c6ef747b5f3e3459a7421da27809b56))
+* **deps:** Exclude Kakadu's palette-entry arithmetic from UBSan ([ab6c378](https://github.com/dasch-swiss/sipi/commit/ab6c378dd3ccc45854d9adb95f37ee0b3902633b))
+* **format_handlers:** Declare the direct value-objects dependency ([b9d7bc2](https://github.com/dasch-swiss/sipi/commit/b9d7bc287961a9eb7c322ab13526389258ef3578))
+* **formats:** Wire the codec fuzz harnesses into the fuzzing loop ([3c6a834](https://github.com/dasch-swiss/sipi/commit/3c6a834d01d3a3456c56b4f7bbf3b6d9b8745c26))
+
+
+### Miscellaneous Chores
+
+* **ci:** Add nightly libFuzzer workflow for the IIIF parser ([5d9227d](https://github.com/dasch-swiss/sipi/commit/5d9227d6db7e05734a7fbc533343197145770e65))
+* **claude:** Drop sentry plugin from enabled plugins ([37363ef](https://github.com/dasch-swiss/sipi/commit/37363eff706db5660c24482dab41d3ee70a4bd1d))
+
 ## [7.0.0](https://github.com/dasch-swiss/sipi/compare/v6.4.1...v7.0.0) (2026-08-21)
 
 
