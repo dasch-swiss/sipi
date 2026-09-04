@@ -15,4 +15,5 @@ mod parse;
 mod request;
 
 pub use domain::{FormatKind, IiifParams, ParseError, QualityKind, RegionKind, SizeKind};
+pub use parse::clamp_dims_to_size;
 pub use request::{parse_request, ParsedRequest, RequestKind};

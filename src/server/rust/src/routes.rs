@@ -433,15 +433,22 @@ fn dispatch_engine(
     };
 
     // The IIIF image serve enforces auth itself (401 for any non-allow/restrict);
-    // info.json renders the auth-service block at 401; knora.json does not gate
-    // (it relies on the file being accessible) — matching the C++ handlers.
-    if parsed.kind == RequestKind::Iiif
+    // info.json renders the auth-service block at 401 instead of gating here;
+    // knora.json is a DSP-internal metadata surface with no auth-challenge
+    // shape of its own, so an unauthorized caller gets a bare 404 rather than a
+    // signal that the resource exists.
+    if matches!(parsed.kind, RequestKind::Iiif | RequestKind::KnoraJson)
         && !matches!(
             access.permission,
             SipiPermType::Allow | SipiPermType::Restrict
         )
     {
-        return complete(outcome_tx, sink::error_response(StatusCode::UNAUTHORIZED));
+        let status = if parsed.kind == RequestKind::Iiif {
+            StatusCode::UNAUTHORIZED
+        } else {
+            StatusCode::NOT_FOUND
+        };
+        return complete(outcome_tx, sink::error_response(status));
     }
 
     let resolved = match resolve(&access.infile, &state.resolved_imgroot) {
@@ -467,11 +474,18 @@ fn dispatch_engine(
         }
         RequestKind::InfoJson => complete(
             outcome_tx,
-            serve_info_json(&resolved, parsed, headers, &access),
+            serve_info_json(&resolved, parsed, headers, &access, state.has_preflight),
         ),
         RequestKind::KnoraJson => complete(
             outcome_tx,
-            serve_knora_json(&resolved, parsed, headers, &state.allowed_origins),
+            serve_knora_json(
+                &resolved,
+                parsed,
+                headers,
+                &access,
+                &state.allowed_origins,
+                state.has_preflight,
+            ),
         ),
         RequestKind::Redirect | RequestKind::FileDownload => {
             unreachable!("redirect handled by caller, file above")
@@ -1828,6 +1842,7 @@ fn serve_info_json(
     parsed: &ParsedRequest,
     headers: &HeaderMap,
     access: &Access,
+    hook_configured: bool,
 ) -> Response {
     let (scheme, host) = forwarded(headers);
     let id = canonical_id(&scheme, &host, &parsed.prefix, &parsed.identifier);
@@ -1839,6 +1854,10 @@ fn serve_info_json(
 
     let (mut value, link_context) = if IMAGE_MIMES.contains(&mime.as_str()) {
         let dims = match ffi::image_dims(resolved) {
+            Ok(d) => d,
+            Err(_) => return sink::error_response(StatusCode::INTERNAL_SERVER_ERROR),
+        };
+        let dims = match restricted_dims(&dims, access) {
             Ok(d) => d,
             Err(_) => return sink::error_response(StatusCode::INTERNAL_SERVER_ERROR),
         };
@@ -1872,14 +1891,23 @@ fn serve_info_json(
 
     // info.json always sends ACAO: *, even with an Origin — unaffected by the
     // allowlist (DEV-6061 restricts credentialed CORS, not this public,
-    // credential-less response), so it bypasses `cors_allow` entirely.
+    // credential-less response), so it bypasses `cors_allow` entirely. When a
+    // preflight hook is configured, the permission (and thus the body) is
+    // credential-dependent, so the response must not be shared across
+    // credentials by an intermediary cache.
+    let vary: &[&str] = if hook_configured {
+        &["Cookie", "Authorization"]
+    } else {
+        &[]
+    };
     json_response(
         status,
         &value,
         headers,
         Some(link_context),
         Some("*"),
-        false,
+        vary,
+        hook_configured,
     )
 }
 
@@ -1887,7 +1915,9 @@ fn serve_knora_json(
     resolved: &str,
     parsed: &ParsedRequest,
     headers: &HeaderMap,
+    access: &Access,
     allowed_origins: &[String],
+    hook_configured: bool,
 ) -> Response {
     let (scheme, host) = forwarded(headers);
     let id = canonical_id(&scheme, &host, &parsed.prefix, &parsed.identifier);
@@ -1901,6 +1931,10 @@ fn serve_knora_json(
     let value = if IMAGE_MIMES.contains(&mime.as_str()) {
         let (dims, essentials) = match ffi::image_dims_and_essentials(resolved) {
             Ok(result) => result,
+            Err(_) => return sink::error_response(StatusCode::INTERNAL_SERVER_ERROR),
+        };
+        let dims = match restricted_dims(&dims, access) {
+            Ok(d) => d,
             Err(_) => return sink::error_response(StatusCode::INTERNAL_SERVER_ERROR),
         };
         info::image_knora_json(&id, &mime, &dims, &sidecar, essentials.as_ref())
@@ -1919,14 +1953,33 @@ fn serve_knora_json(
     // knora.json echoes the Origin when present (gated by `cors_allow` against
     // the configured allowlist — empty = today's unconditional echo), else *.
     let origin = header_str(headers, "origin");
-    let (acao, vary) = match origin {
+    let (acao, origin_vary) = match origin {
         None => (Some("*".to_owned()), false),
         Some(o) => match cors_allow(Some(&o), allowed_origins) {
             CorsDecision::Allow { vary } => (Some(o), vary),
             CorsDecision::Deny { vary } => (None, vary),
         },
     };
-    json_response(StatusCode::OK, &value, headers, None, acao.as_deref(), vary)
+    // The permission (and thus the body — dims may be clamped) is
+    // credential-dependent whenever a preflight hook is configured, so an
+    // intermediary cache must not share this response across credentials.
+    let mut vary: Vec<&str> = Vec::new();
+    if origin_vary {
+        vary.push("Origin");
+    }
+    if hook_configured {
+        vary.push("Cookie");
+        vary.push("Authorization");
+    }
+    json_response(
+        StatusCode::OK,
+        &value,
+        headers,
+        None,
+        acao.as_deref(),
+        &vary,
+        hook_configured,
+    )
 }
 
 /// 303 redirect from a bare identifier to its canonical info.json
@@ -2027,6 +2080,40 @@ fn access_kv_cstring(access: &Access, key: &str) -> Option<CString> {
         .and_then(|(_, v)| CString::new(v.as_str()).ok())
 }
 
+fn access_kv_str<'a>(access: &'a Access, key: &str) -> Option<&'a str> {
+    access
+        .kv
+        .iter()
+        .find(|(k, _)| k == key)
+        .map(|(_, v)| v.as_str())
+}
+
+/// Clamp an image's dims for a non-`Allow` permission so info.json / knora.json
+/// never discloses the native tiling pyramid. A `Restrict` decision that caps
+/// the view to an IIIF size string also has its width/height clamped to that
+/// size (rather than the native resolution); every other non-`Allow`
+/// permission keeps the native width/height (the caller renders an auth
+/// challenge, not the image) but still loses the tile grid.
+fn restricted_dims(
+    dims: &ffi::SipiImageDims,
+    access: &Access,
+) -> Result<ffi::SipiImageDims, iiif_parser::ParseError> {
+    if access.permission == SipiPermType::Allow {
+        return Ok(*dims);
+    }
+    let mut restricted = *dims;
+    if access.permission == SipiPermType::Restrict {
+        if let Some(size) = access_kv_str(access, "size") {
+            let (width, height) = iiif_parser::clamp_dims_to_size(size, dims.width, dims.height)?;
+            restricted.width = width;
+            restricted.height = height;
+        }
+    }
+    restricted.tile_width = 0;
+    restricted.tile_height = 0;
+    Ok(restricted)
+}
+
 /// Serialise a JSON value with the standard IIIF headers: a CORS
 /// `Access-Control-Allow-Origin` (`acao`: `Some("*")` for info.json,
 /// Origin-echo-`Some`-else-`Some("*")` for knora.json, gated by [`cors_allow`]
@@ -2035,15 +2122,20 @@ fn access_kv_cstring(access: &Access, key: &str) -> Option<CString> {
 /// `Accept`s it) or `application/json` + a `Link` to the JSON-LD context. A
 /// concretely echoed origin also carries `Access-Control-Allow-Credentials:
 /// true` (cookie auth); `*` (public info.json) does not — CORS forbids the
-/// pairing. `vary`, set by the caller only in allowlist mode, adds
-/// `Vary: Origin`.
+/// pairing. `vary`, set by the caller, names every header the response varies
+/// on (e.g. `Origin` in allowlist mode, `Cookie`/`Authorization` whenever the
+/// permission/body is credential-dependent) and is emitted as one joined
+/// `Vary` header when non-empty. `private`, set by the caller whenever the
+/// body is credential-dependent, emits `Cache-Control: private, no-store` so
+/// an intermediary cache never shares one caller's response with another.
 fn json_response(
     status: StatusCode,
     value: &serde_json::Value,
     headers: &HeaderMap,
     link_context: Option<&str>,
     acao: Option<&str>,
-    vary: bool,
+    vary: &[&str],
+    private: bool,
 ) -> Response {
     let body = serde_json::to_vec(value).unwrap_or_default();
     let mut builder = Response::builder().status(status);
@@ -2060,11 +2152,11 @@ fn json_response(
             }
         }
     }
-    // `vary` is set whenever the allowlist is non-empty (allowlist mode),
-    // independent of whether `acao` is `Some` — a shared cache must not
-    // serve a cached deny to a later allowed origin.
-    if vary {
-        builder = builder.header(header::VARY, "Origin");
+    if !vary.is_empty() {
+        builder = builder.header(header::VARY, vary.join(", "));
+    }
+    if private {
+        builder = builder.header(header::CACHE_CONTROL, "private, no-store");
     }
 
     let wants_ldjson =
@@ -2276,6 +2368,7 @@ mod tests {
             &headers(&[]),
             None,
             Some("https://example.org"),
+            &[],
             false,
         );
         assert_eq!(
@@ -2297,6 +2390,7 @@ mod tests {
             &headers(&[]),
             None,
             Some("*"),
+            &[],
             false,
         );
         assert_eq!(
@@ -2383,7 +2477,8 @@ mod tests {
             &headers(&[]),
             None,
             Some("https://a.example"),
-            true,
+            &["Origin"],
+            false,
         );
         let h = resp.headers();
         assert_eq!(
@@ -2400,18 +2495,52 @@ mod tests {
     #[test]
     fn json_response_unlisted_origin_emits_no_cors_headers() {
         let value = serde_json::json!({ "ok": true });
-        let resp = json_response(StatusCode::OK, &value, &headers(&[]), None, None, false);
+        let resp = json_response(
+            StatusCode::OK,
+            &value,
+            &headers(&[]),
+            None,
+            None,
+            &[],
+            false,
+        );
         let h = resp.headers();
         assert!(h.get(header::ACCESS_CONTROL_ALLOW_ORIGIN).is_none());
         assert!(h.get(header::ACCESS_CONTROL_ALLOW_CREDENTIALS).is_none());
         assert!(h.get(header::VARY).is_none());
+        assert!(h.get(header::CACHE_CONTROL).is_none());
 
-        // Allowlist mode (`vary: true`) still emits `Vary: Origin` on a deny
-        // (no `acao`) — the caller passes `vary` independent of `acao`.
-        let resp = json_response(StatusCode::OK, &value, &headers(&[]), None, None, true);
+        // Allowlist mode (`vary: ["Origin"]`) still emits `Vary: Origin` on a
+        // deny (no `acao`) — the caller passes `vary` independent of `acao`.
+        let resp = json_response(
+            StatusCode::OK,
+            &value,
+            &headers(&[]),
+            None,
+            None,
+            &["Origin"],
+            false,
+        );
         let h = resp.headers();
         assert!(h.get(header::ACCESS_CONTROL_ALLOW_ORIGIN).is_none());
         assert_eq!(h.get(header::VARY).unwrap(), "Origin");
+    }
+
+    #[test]
+    fn json_response_private_and_multi_vary() {
+        let value = serde_json::json!({ "ok": true });
+        let resp = json_response(
+            StatusCode::OK,
+            &value,
+            &headers(&[]),
+            None,
+            Some("*"),
+            &["Cookie", "Authorization"],
+            true,
+        );
+        let h = resp.headers();
+        assert_eq!(h.get(header::VARY).unwrap(), "Cookie, Authorization");
+        assert_eq!(h.get(header::CACHE_CONTROL).unwrap(), "private, no-store");
     }
 
     #[test]
