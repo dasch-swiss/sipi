@@ -22,6 +22,7 @@
 
 namespace {
 
+using Sipi::ErrorCode;
 using Sipi::ExtraSamples;
 using Sipi::PhotometricInterpretation;
 using Sipi::SipiImage;
@@ -53,6 +54,28 @@ public:
   [[nodiscard]] ExtraSamples extraSampleAt(size_t i) const { return es.at(i); }
 };
 
+// convertYCC2RGB() indexes channels 0..2 unconditionally; a single-channel
+// image (e.g. a JP2 whose colr box claims sYCC but whose codestream carries
+// Csiz=1) has no channel-count guard before that indexing runs. Pre-fix this
+// is a 2-4 byte heap write past the single-channel pixel buffer, observable
+// under the CI asan-ubsan leg (local ASan is broken, per repo convention);
+// post-fix it is a clean kMalformedInput rejection.
+TEST(ConvertYcc, RejectsTooFewChannels8Bit)
+{
+  SipiImage img(2, 2, 1, 8, PhotometricInterpretation::MINISBLACK);
+  const auto result = Sipi::processing::convertYCC2RGB(img);
+  ASSERT_FALSE(result.has_value());
+  EXPECT_EQ(result.error().code(), ErrorCode::kMalformedInput);
+}
+
+TEST(ConvertYcc, RejectsTooFewChannels16Bit)
+{
+  SipiImage img(2, 2, 1, 16, PhotometricInterpretation::MINISBLACK);
+  const auto result = Sipi::processing::convertYCC2RGB(img);
+  ASSERT_FALSE(result.has_value());
+  EXPECT_EQ(result.error().code(), ErrorCode::kMalformedInput);
+}
+
 // The 16-bit YCbCr->RGB conversion keeps all `nc` channels (channels beyond
 // the first three are copied through unchanged); it must size and index its
 // output buffer with the same `nc` the 8-bit branch uses. A 4-channel image
@@ -66,8 +89,8 @@ TEST(ConvertYcc, ConvertYcc16BitDoesNotOverflow)
   for (size_t y = 0; y < ny; ++y) {
     for (size_t x = 0; x < nx; ++x) {
       const size_t idx = y * nx + x;
-      img.setPixel(x, y, 0, 128);// Cr
-      img.setPixel(x, y, 1, 128);// Cb
+      img.setPixel(x, y, 0, 32768);// Cr, 16-bit chroma midpoint
+      img.setPixel(x, y, 1, 32768);// Cb, 16-bit chroma midpoint
       img.setPixel(x, y, 2, 200);// Y
       img.setPixel(x, y, 3, static_cast<int>(1000 + idx));// pass-through channel, distinct per pixel
     }
@@ -80,7 +103,7 @@ TEST(ConvertYcc, ConvertYcc16BitDoesNotOverflow)
   for (size_t y = 0; y < ny; ++y) {
     for (size_t x = 0; x < nx; ++x) {
       const size_t idx = y * nx + x;
-      // Y=200, Cb=Cr=128 (mid-gray, zero chroma offset) -> R=G=B=200.
+      // Y=200, Cb=Cr=32768 (16-bit mid-gray, zero chroma offset) -> R=G=B=200.
       EXPECT_EQ(img.getPixel(x, y, 0), 200) << "R at pixel " << idx;
       EXPECT_EQ(img.getPixel(x, y, 1), 200) << "G at pixel " << idx;
       EXPECT_EQ(img.getPixel(x, y, 2), 200) << "B at pixel " << idx;

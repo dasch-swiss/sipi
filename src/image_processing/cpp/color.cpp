@@ -31,6 +31,11 @@ namespace processing {
     const size_t nc = img.getNc();
     const size_t bps = img.getBps();
 
+    if (nc < 3) {
+      return std::unexpected(SipiValueError{
+        ErrorCode::kMalformedInput, "YCbCr conversion needs at least 3 channels, got " + std::to_string(nc) });
+    }
+
     if (bps == 8) {
       const auto buf_size = checked_buf_size(nx, ny, nc, 1);
       if (!buf_size) {
@@ -82,9 +87,9 @@ namespace processing {
           ;
           auto Cr = (double)inbuf[nc * (j * nx + i) + 0];
 
-          int r = (int)(Y + 1.40200 * (Cr - 0x80));
-          int g = (int)(Y - 0.34414 * (Cb - 0x80) - 0.71414 * (Cr - 0x80));
-          int b = (int)(Y + 1.77200 * (Cb - 0x80));
+          int r = (int)(Y + 1.40200 * (Cr - 32768));
+          int g = (int)(Y - 0.34414 * (Cb - 32768) - 0.71414 * (Cr - 32768));
+          int b = (int)(Y + 1.77200 * (Cb - 32768));
 
           outbuf[nc * (j * nx + i) + 0] = std::max(0, std::min(65535, r));
           outbuf[nc * (j * nx + i) + 1] = std::max(0, std::min(65535, g));
