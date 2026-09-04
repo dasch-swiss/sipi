@@ -364,6 +364,32 @@ Result<void> subtract(SipiImage &lhs, const SipiImage &rhs)
   }
   int maxmax = abs(min) > abs(max) ? abs(min) : abs(max);
 
+  // Identical inputs produce an all-zero diff range; the rescale formula below
+  // converges to MAX/2 as maxmax -> 0, so fill with mid-grey directly instead
+  // of dividing by 2 * maxmax.
+  if (maxmax == 0) {
+    switch (bps) {
+    case 8: {
+      std::ranges::fill_n(lhs.pixels_writable().data(), nc * ny * nx, static_cast<byte>(UCHAR_MAX / 2));
+      break;
+    }
+
+    case 16: {
+      word *ltmp = reinterpret_cast<word *>(lhs.pixels_writable().data());
+      std::ranges::fill_n(ltmp, nc * ny * nx, static_cast<word>(USHRT_MAX / 2));
+      break;
+    }
+
+    default: {
+      return std::unexpected(SipiValueError{ ErrorCode::kUnsupportedFormat,
+        "Unsupported bits/sample (" + std::to_string(bps)
+          + ") for image diff operation, only 8 and 16 are supported" });
+    }
+    }
+
+    return {};
+  }
+
   switch (bps) {
   case 8: {
     byte *ltmp = lhs.pixels_writable().data();

@@ -12,6 +12,8 @@
  * the unsigned form would produce an enormous max and fail loudly.
  */
 
+#include <climits>
+
 #include <gtest/gtest.h>
 
 #include "image/SipiImage.h"
@@ -114,6 +116,30 @@ TEST(MaxPixelDelta, IncomparableDimensionsReturnsNullopt)
   SipiImage img2(2, 2, 1, 8, PhotometricInterpretation::MINISBLACK);
 
   EXPECT_FALSE(Sipi::processing::maxPixelDelta(img1, img2).has_value());
+}
+
+// `subtract` feeds the `sipi compare` verb; identical inputs are a normal,
+// reachable case. Before the fix, an all-zero diff range made `maxmax == 0`
+// and the rescale formula divided by `2 * maxmax`, a div-by-zero.
+TEST(Subtract, IdenticalImagesFillMidGrey)
+{
+  constexpr size_t N = 3;
+  SipiImage img1(N, N, 1, 8, PhotometricInterpretation::MINISBLACK);
+  SipiImage img2(N, N, 1, 8, PhotometricInterpretation::MINISBLACK);
+
+  for (size_t y = 0; y < N; ++y) {
+    for (size_t x = 0; x < N; ++x) {
+      img1.setPixel(x, y, 0, 42);
+      img2.setPixel(x, y, 0, 42);
+    }
+  }
+
+  const auto result = Sipi::processing::subtract(img1, img2);
+  ASSERT_TRUE(result.has_value());
+
+  for (size_t y = 0; y < N; ++y) {
+    for (size_t x = 0; x < N; ++x) { EXPECT_EQ(img1.getPixel(x, y, 0), UCHAR_MAX / 2); }
+  }
 }
 
 }// namespace
