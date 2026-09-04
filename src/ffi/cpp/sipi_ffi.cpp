@@ -248,6 +248,7 @@ int sipi_metrics_snapshot(SipiMetricsSnapshot *out)
     out->cache_files_limit = gauge(m.cache_files_limit);
     out->decode_memory_budget_bytes = gauge(m.decode_memory_budget_bytes);
     out->decode_memory_used_bytes = gauge(m.decode_memory_used_bytes);
+    out->wedged_threads = gauge(m.wedged_threads);
 
     return static_cast<int>(Sipi::ffi::SipiStatus::Ok);
   });
