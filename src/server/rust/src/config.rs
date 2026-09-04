@@ -64,6 +64,28 @@ pub fn public_hosts_from_env() -> Vec<String> {
     parse_csv_list(std::env::var("SIPI_PUBLIC_HOSTS").ok().as_deref())
 }
 
+/// The handler-wall-clock-timeout default (S2-18): 60 seconds.
+pub const DEFAULT_REQUEST_TIMEOUT_SECS: u64 = 60;
+
+/// Parses `SIPI_REQUEST_TIMEOUT` — an integer number of seconds — into the
+/// [`std::time::Duration`] `lib.rs` hands to `tower_http::timeout::TimeoutLayer`.
+///
+/// Read directly via `std::env`, like [`allowed_origins_from_env`] /
+/// [`public_hosts_from_env`]: the handler timeout is a Rust-shell-only serve
+/// knob and never crosses the FFI seam.
+///
+/// Unset, unparseable, or `0` all fall back to [`DEFAULT_REQUEST_TIMEOUT_SECS`]
+/// (S2-18) — a `0`-second timeout would answer every request with 408, which
+/// is never the intent of an accidental empty/zero value.
+pub fn request_timeout_from_env() -> std::time::Duration {
+    let secs = std::env::var("SIPI_REQUEST_TIMEOUT")
+        .ok()
+        .and_then(|v| v.parse::<u64>().ok())
+        .filter(|&secs| secs != 0)
+        .unwrap_or(DEFAULT_REQUEST_TIMEOUT_SECS);
+    std::time::Duration::from_secs(secs)
+}
+
 /// Pure parse, split out from [`allowed_origins_from_env`] / [`public_hosts_from_env`]
 /// so it is testable without mutating process-global env state.
 fn parse_csv_list(raw: Option<&str>) -> Vec<String> {
@@ -693,5 +715,52 @@ mod csv_list_tests {
             parse_csv_list(Some(" iiif.example.org ,iiif2.example.org,,")),
             vec!["iiif.example.org", "iiif2.example.org"]
         );
+    }
+}
+
+#[cfg(test)]
+mod request_timeout_tests {
+    use super::{request_timeout_from_env, DEFAULT_REQUEST_TIMEOUT_SECS};
+    use std::sync::Mutex;
+    use std::time::Duration;
+
+    /// Serializes every test in this module: `std::env::var` reads
+    /// process-global state, so tests that set/remove `SIPI_REQUEST_TIMEOUT`
+    /// would otherwise race in parallel.
+    static SERIAL: Mutex<()> = Mutex::new(());
+
+    fn with_env<T>(value: Option<&str>, f: impl FnOnce() -> T) -> T {
+        let _guard = SERIAL.lock().unwrap_or_else(|e| e.into_inner());
+        match value {
+            Some(v) => std::env::set_var("SIPI_REQUEST_TIMEOUT", v),
+            None => std::env::remove_var("SIPI_REQUEST_TIMEOUT"),
+        }
+        let result = f();
+        std::env::remove_var("SIPI_REQUEST_TIMEOUT");
+        result
+    }
+
+    #[test]
+    fn unset_defaults_to_60s() {
+        let got = with_env(None, request_timeout_from_env);
+        assert_eq!(got, Duration::from_secs(DEFAULT_REQUEST_TIMEOUT_SECS));
+    }
+
+    #[test]
+    fn valid_value_is_honored() {
+        let got = with_env(Some("30"), request_timeout_from_env);
+        assert_eq!(got, Duration::from_secs(30));
+    }
+
+    #[test]
+    fn invalid_value_defaults_to_60s() {
+        let got = with_env(Some("not-a-number"), request_timeout_from_env);
+        assert_eq!(got, Duration::from_secs(DEFAULT_REQUEST_TIMEOUT_SECS));
+    }
+
+    #[test]
+    fn zero_defaults_to_60s() {
+        let got = with_env(Some("0"), request_timeout_from_env);
+        assert_eq!(got, Duration::from_secs(DEFAULT_REQUEST_TIMEOUT_SECS));
     }
 }

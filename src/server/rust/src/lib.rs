@@ -409,6 +409,19 @@ pub fn app(state: Arc<routes::AppState>) -> Router {
         // Outermost, so the recorded duration spans the whole in-router path
         // (tracing layers included) rather than just the handler.
         .layer(axum::middleware::from_fn(metrics::record_http_duration))
+        // Handler wall-clock timeout (S2-18): `tower_http::timeout::TimeoutLayer`
+        // (not `tower::timeout::TimeoutLayer` — its `BoxError` error type is
+        // incompatible with axum 0.8's `Infallible` router requirement) answers
+        // 408 once `SIPI_REQUEST_TIMEOUT` elapses. This bounds the handler future
+        // up to the response head (request-body read, preflight, engine
+        // dispatch) and does NOT bound a streaming image body after the head is
+        // sent; on the IIIF path the admission `Permit` is moved into
+        // `spawn_blocking` and dropping the handler future does not cancel that
+        // task, so the 408 bounds client-visible latency, not permit occupancy.
+        .layer(tower_http::timeout::TimeoutLayer::with_status_code(
+            axum::http::StatusCode::REQUEST_TIMEOUT,
+            config::request_timeout_from_env(),
+        ))
         // Registered after the layers so liveness / asset probes never enter the
         // trace pipeline or the latency histogram — they also bypass the engine
         // pool.
@@ -489,6 +502,14 @@ async fn serve(
     };
     // `with_graceful_shutdown` yields an `IntoFuture`, not a `Future`; resolve it
     // so the select arm can poll `&mut server`.
+    //
+    // `axum::serve` exposes no hyper builder, so it cannot enforce a
+    // header-read timeout or cap concurrent connections directly. The chosen
+    // option (S2-18) is (b): keep `axum::serve` and enforce both at the edge in
+    // Traefik (a Phase 11 operator change). Option (a) — a hyper-util accept
+    // loop with `header_read_timeout` plus a connection `Semaphore` — is
+    // deferred to a Linear follow-up if a slow-header incident is ever
+    // observed.
     let server = axum::serve(listener, app(state))
         .with_graceful_shutdown(graceful)
         .into_future();
