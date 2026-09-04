@@ -9,6 +9,7 @@
 #include <sys/stat.h>
 #include <unistd.h>
 
+#include <algorithm>
 #include <array>
 #include <chrono>
 #include <cmath>
@@ -585,14 +586,64 @@ std::expected<ServeResponse, SipiStatus>
     return std::unexpected(SipiStatus::BadRequest);
   }
 
+  size_t rest_w{ 0 }, rest_h{ 0 };
   try {
-    restricted_size->get_size(img_w, img_h, tmp_r_w, tmp_r_h, tmp_red, tmp_ro);
+    restricted_size->get_size(img_w, img_h, rest_w, rest_h, tmp_red, tmp_ro);
   } catch (Sipi::SipiSizeError &) {
     return std::unexpected(SipiStatus::BadRequest);
   } catch (Sipi::SipiError &) {
     return std::unexpected(SipiStatus::BadRequest);
   }
-  if (!restricted_size->undefined() && (*size > *restricted_size)) { size = restricted_size; }
+  if (!restricted_size->undefined()) {
+    // The restricted-size cap must bound the effective SAMPLING FACTOR of ANY
+    // region, not the full-image output box: comparing full-image boxes (the
+    // previous check) lets a client reconstruct the full-resolution image by
+    // requesting many native-scale REGIONS, since each region's own absolute
+    // output stays below the restricted full-image box and the cap never
+    // fires. `f` is the fraction of native resolution the restricted profile
+    // may reveal; the requested output for THIS region is capped to `f` times
+    // that region's own pixel extent, so the cap composes across regions
+    // where an absolute output box does not. We SCALE, not reject — rejecting
+    // region requests on a restricted image breaks IIIF viewers that tile
+    // through the image.
+    //
+    // Two residuals accepted here, not fixed by this change:
+    //  - Many overlapping, sub-pixel-offset regions each resampled at `f`
+    //    from the full-resolution source form a super-resolution attack that
+    //    can recover more detail than a single `f`-scaled image. Accepted:
+    //    rejecting region requests on restricted images breaks viewers.
+    //  - The canonical `Link` header still emits the region in native pixel
+    //    coordinates (`SipiRegion::canonical`), so e.g. `pct:0,0,100,100`
+    //    discloses the native width/height even though the served bytes are
+    //    capped. Recommendation for a later finding: omit the canonical Link
+    //    for non-Allow permissions.
+    const double f = std::min(static_cast<double>(rest_w) / static_cast<double>(img_w),
+      static_cast<double>(rest_h) / static_cast<double>(img_h));
+
+    int region_x{ 0 }, region_y{ 0 };
+    size_t region_w{ 0 }, region_h{ 0 };
+    try {
+      region->crop_coords(img_w, img_h, region_x, region_y, region_w, region_h);
+    } catch (Sipi::SipiError &) {
+      return std::unexpected(SipiStatus::BadRequest);
+    }
+
+    size_t out_w{ 0 }, out_h{ 0 };
+    int out_reduce{ 0 };
+    bool out_redonly{ false };
+    try {
+      size->get_size(region_w, region_h, out_w, out_h, out_reduce, out_redonly);
+    } catch (Sipi::SipiSizeError &) {
+      return std::unexpected(SipiStatus::BadRequest);
+    } catch (Sipi::SipiError &) {
+      return std::unexpected(SipiStatus::BadRequest);
+    }
+
+    if (static_cast<double>(out_w) > static_cast<double>(region_w) * f
+        || static_cast<double>(out_h) > static_cast<double>(region_h) * f) {
+      size = std::make_shared<SipiSize>(static_cast<float>(f * 100.0));
+    }
+  }
 
   // Canonical URL (Link header + cache key). The Link header honours
   // X-Forwarded-Proto (SIPI serves plain HTTP behind Traefik); the cache key

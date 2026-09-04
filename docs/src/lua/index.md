@@ -109,7 +109,14 @@ The pre-flight function must return at least 2 parameters:
     `{ type = 'restrict', watermark = './wm/mywatermark.tif' }`
     - Restricted access with size limitation. The size must be a
       [IIIF size expression](https://iiif.io/api/image/3.0/#42-size). For example:  
-     `{ type = 'restrict', size='!256,256' }`
+     `{ type = 'restrict', size='!256,256' }`  
+     The size expression caps the effective *sampling factor* of any served
+     bytes, not just a full-image output box: it is converted to a scale
+     factor `f` (the restricted size relative to the full image), and every
+     request — including a region request — is capped so its output cannot
+     exceed `f` times that region's own pixel extent. A client cannot recover
+     full resolution by requesting many native-scale regions instead of the
+     full image.
     - SIPI also supports the [IIIF Authentification API](https://iiif.io/api/auth/1.0/). See section [IIIF
       Authentification]() on how to implement this feature in the pre-flight function.
 - `filepath`: The path to the Service File in the media files repository. This path can be assembled using the
