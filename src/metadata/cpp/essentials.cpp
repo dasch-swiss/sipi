@@ -4,7 +4,6 @@
  */
 
 #include <cerrno>
-#include <cmath>
 #include <cstddef>
 #include <cstdlib>
 #include <cstring>
@@ -24,21 +23,22 @@
 
 namespace {
 
-int calcDecodeLength(const std::string &b64input)
+std::size_t calcDecodeLength(const std::string &b64input)
 {
-  int padding = 0;
+  std::size_t padding = 0;
   if (b64input.length() >= 2 && b64input[b64input.length() - 1] == '=' && b64input[b64input.length() - 2] == '=')
     padding = 2;
   else if (!b64input.empty() && b64input[b64input.length() - 1] == '=')
     padding = 1;
-  return static_cast<int>(b64input.length() * 0.75) - padding;
+  const std::size_t base = b64input.length() / 4 * 3;
+  return base >= padding ? base - padding : 0;
 }
 
 std::vector<unsigned char> base64Decode(const std::string &b64message)
 {
   if (b64message.empty()) return {};
 
-  std::size_t decodedLength = calcDecodeLength(b64message);
+  const std::size_t decodedLength = calcDecodeLength(b64message);
 
   std::vector<unsigned char> buffer(decodedLength + 1);
   std::unique_ptr<FILE, decltype(&fclose)> stream(
@@ -51,7 +51,7 @@ std::vector<unsigned char> base64Decode(const std::string &b64message)
   if (file_bio == nullptr) { throw shttps::Error("BIO_new_fp failed"); }
   BIO_push(bio.get(), file_bio);
   BIO_set_flags(bio.get(), BIO_FLAGS_BASE64_NO_NL);
-  const int nread = BIO_read(bio.get(), buffer.data(), static_cast<int>(b64message.size()));
+  const int nread = BIO_read(bio.get(), buffer.data(), static_cast<int>(buffer.size()));
   if (nread < 0) { throw shttps::Error("base64 decode failed"); }
 
   buffer.resize(static_cast<size_t>(nread));
