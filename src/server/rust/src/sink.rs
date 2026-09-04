@@ -272,6 +272,15 @@ pub fn serve_streaming<F>(
             };
             let _ = tx.send(outcome);
         }
+    } else if code != 0 {
+        // The head (status + headers) already went out over `outcome_tx` before
+        // the body callback failed, so the status on the wire can't change — a
+        // clean channel close here would end the chunked body as an
+        // indistinguishable-from-complete 200 (Sentry SIPI-1Q). Push an abort
+        // item instead so `stream_response`'s body stream errors and hyper
+        // resets the connection. `blocking_send` erring means the client (and
+        // thus the receiver) is already gone, which is fine to ignore.
+        let _ = sink.body_tx.blocking_send(Err(BodyAbort));
     }
 }
 
@@ -347,4 +356,56 @@ pub fn error_response(status: StatusCode) -> Response {
         .status(status)
         .body(Body::empty())
         .expect("static empty-body response is always valid")
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// Drive `serve_streaming` with a synthetic `call` that writes one chunk
+    /// through the raw `write` callback (committing the head) and then returns
+    /// `code`. `body_tx`/`body_rx` use production capacity, so the ≤2 items
+    /// these tests push never block `blocking_send`.
+    fn drive(code: i32) -> mpsc::Receiver<BodyItem> {
+        let (otx, _orx) = oneshot::channel();
+        let (body_tx, body_rx) = mpsc::channel(BODY_CHANNEL_CAP);
+        serve_streaming(otx, body_tx, |resp: &SipiResponse| {
+            let data = b"chunk";
+            // `write` is a plain (non-`unsafe`) extern "C" fn pointer, always
+            // populated by `serve_streaming`; `data` is a live byte slice for
+            // the call's duration.
+            (resp.write.unwrap())(resp.ctx, data.as_ptr(), data.len());
+            code
+        });
+        body_rx
+    }
+
+    #[test]
+    fn post_commit_failure_emits_body_abort() {
+        let mut body_rx = drive(500);
+        assert!(
+            matches!(body_rx.try_recv(), Ok(Ok(_))),
+            "expected the chunk written before the failure"
+        );
+        assert!(
+            matches!(body_rx.try_recv(), Ok(Err(BodyAbort))),
+            "a post-commit failure must abort the body channel, not close it cleanly"
+        );
+    }
+
+    #[test]
+    fn clean_success_emits_no_body_abort() {
+        let mut body_rx = drive(0);
+        assert!(
+            matches!(body_rx.try_recv(), Ok(Ok(_))),
+            "expected the chunk written before completion"
+        );
+        assert!(
+            matches!(
+                body_rx.try_recv(),
+                Err(mpsc::error::TryRecvError::Disconnected)
+            ),
+            "a clean completion must close the channel with no abort item"
+        );
+    }
 }

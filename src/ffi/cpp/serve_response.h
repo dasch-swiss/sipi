@@ -127,8 +127,9 @@ struct ServeResponse
 [[nodiscard]] std::expected<ServeResponse, SipiStatus> build_file_response(const char *resolved_path, const char *range);
 
 /*! The single place that drives the C-ABI response callbacks: set status, add
- *  each header, then deliver the one body. */
-void apply(ServeResponse &&response, const SipiResponse &resp);
+ *  each header, then deliver the one body. Returns 0 on success, or the
+ *  body-delivery (write/encode) error code. */
+[[nodiscard]] int apply(ServeResponse &&response, const SipiResponse &resp);
 
 /*! Run an FFI entry body so no C++ exception crosses the `extern "C"` boundary:
  *  returns the body's status code, or 500 on any throw. */

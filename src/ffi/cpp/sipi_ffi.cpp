@@ -40,8 +40,8 @@ int sipi_serve_file(const char *resolved_path, const char *range, const SipiResp
   return Sipi::ffi::sipi_guard([&] {
     auto result = Sipi::ffi::build_file_response(resolved_path, range);
     if (!result) { return static_cast<int>(result.error()); }
-    Sipi::ffi::apply(std::move(*result), *resp);
-    return static_cast<int>(Sipi::ffi::SipiStatus::Ok);
+    const int rc = Sipi::ffi::apply(std::move(*result), *resp);
+    return static_cast<int>(rc != 0 ? Sipi::ffi::SipiStatus::InternalError : Sipi::ffi::SipiStatus::Ok);
   });
 }
 
@@ -59,8 +59,13 @@ int sipi_serve_image(const SipiServeRequest *req, const SipiResponse *resp)
     const auto cancelled = [resp] { return resp->cancelled != nullptr && resp->cancelled(resp->ctx) != 0; };
     auto result = Sipi::ffi::build_image_response(*req, Sipi::ffi::engine_context(), cancelled);
     if (!result) { return static_cast<int>(result.error()); }
-    Sipi::ffi::apply(std::move(*result), *resp);
-    return static_cast<int>(Sipi::ffi::SipiStatus::Ok);
+    // A non-zero rc means the body delivery (write/encode) failed. If any bytes
+    // were already written the head is committed, so the Rust shell resets the
+    // connection (BodyAbort); if the encode failed before its first write the
+    // head was never sent and the shell renders this as a clean 500. Either way
+    // the failure must not surface as a clean, complete-looking response.
+    const int rc = Sipi::ffi::apply(std::move(*result), *resp);
+    return static_cast<int>(rc != 0 ? Sipi::ffi::SipiStatus::InternalError : Sipi::ffi::SipiStatus::Ok);
   });
 }
 
