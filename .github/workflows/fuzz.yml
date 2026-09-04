@@ -91,7 +91,10 @@ jobs:
             corpus_out: src/iiifparser/fuzz/parse_request_fuzz_corpus
             max_len: ""
             dict: ""
-            asan_options: ""
+            # `detect_container_overflow=0` suppresses an ASan
+            # container-overflow false positive on this Rust parser leg
+            # (DEV-7081); the check stays on for the codec legs.
+            asan_options: "detect_container_overflow=0"
           - target: tiff
             bin: src/format_handlers/fuzz/tiff_decode_fuzz_bin
             corpus_out: src/format_handlers/fuzz/tiff_decode_fuzz_corpus
