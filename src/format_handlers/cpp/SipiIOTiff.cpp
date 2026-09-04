@@ -482,6 +482,15 @@ Result<std::vector<unsigned char>> read_watermark(const std::string &wmfile, int
       tiff_diag));
   }
 
+  if (auto r = validate_decode_dims(static_cast<std::size_t>(nx),
+        static_cast<std::size_t>(ny),
+        static_cast<std::size_t>(spp),
+        static_cast<int>(bps),
+        wmfile);
+      !r) {
+    return std::unexpected(std::move(r).error());
+  }
+
   sll = nx * spp * bps / 8;
 
   std::vector<unsigned char> wmbuf;
@@ -1779,6 +1788,16 @@ Result<SipiImgInfo> SipiIOTiff::read_shape(const std::string &filepath)
           // TIFFGetField returned and skip read_resolutions(). Partial
           // population falls through to the slow path.
           if (f.img_w != 0 && f.img_h != 0) {
+            // Reject an Essentials packet that claims malformed shape before trusting
+            // its fields for the fast path (malformed metadata is fatal, not logged).
+            if (auto r = validate_decode_dims(static_cast<std::size_t>(f.img_w),
+                  static_cast<std::size_t>(f.img_h),
+                  static_cast<std::size_t>(f.nc),
+                  static_cast<int>(f.bps),
+                  filepath);
+                !r) {
+              return std::unexpected(std::move(r).error());
+            }
             info.width = static_cast<int>(f.img_w);
             info.height = static_cast<int>(f.img_h);
             info.tile_width = static_cast<int>(f.tile_w);
