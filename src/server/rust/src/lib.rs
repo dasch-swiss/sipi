@@ -451,6 +451,9 @@ async fn serve(
             // Read directly (like `SIPI_RS_PORT` below): CORS is a Rust-shell
             // knob, never a `ServerOverrides`/FFI concern (DEV-6061).
             config::allowed_origins_from_env(),
+            // Same rationale: the public-host allowlist is a Rust-shell knob,
+            // never a `ServerOverrides`/FFI concern (S2-17).
+            config::public_hosts_from_env(),
         )
         .map_err(|e| std::io::Error::new(std::io::ErrorKind::InvalidInput, e.to_string()))?,
     );
@@ -631,6 +634,7 @@ mod app_tests {
                 None,
                 None,
                 None,
+                Vec::new(),
                 Vec::new(),
             )
             .expect("default admission config is valid"),

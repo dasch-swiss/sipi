@@ -42,12 +42,31 @@ pub(crate) const DEFAULT_LARGE_DECODE_THRESHOLD_BYTES: u64 = 32 * 1024 * 1024;
 /// reflect-any-origin behaviour, byte-identical to a build predating this
 /// knob. Setting the var switches an instance into allowlist mode.
 pub fn allowed_origins_from_env() -> Vec<String> {
-    parse_allowed_origins(std::env::var("SIPI_ALLOWED_ORIGINS").ok().as_deref())
+    parse_csv_list(std::env::var("SIPI_ALLOWED_ORIGINS").ok().as_deref())
 }
 
-/// Pure parse, split out from [`allowed_origins_from_env`] so it is testable
-/// without mutating process-global env state.
-fn parse_allowed_origins(raw: Option<&str>) -> Vec<String> {
+/// Parses `SIPI_PUBLIC_HOSTS` — a comma-separated list of exact hosts (e.g.
+/// `iiif.example.org,iiif2.example.org`) — into the host allowlist
+/// `routes::forwarded` reads.  Entries are trimmed; empty entries are dropped.
+///
+/// Read directly via `std::env`, like [`allowed_origins_from_env`]: the
+/// `X-Forwarded-Host`/`Host` validation is a Rust-shell-only concern and never
+/// crosses the FFI seam (`config.hostname` is Lua-config-only and is not the
+/// validation source here).
+///
+/// S2-17 (opt-in hardening): unset or empty is the "no restriction
+/// configured" sentinel — `forwarded` then falls back to today's
+/// reflect-any-host behaviour, byte-identical to a build predating this knob.
+/// Setting the var switches an instance into allowlist mode: a header host on
+/// the list passes through unchanged, any other host is replaced by the first
+/// allowlisted host.
+pub fn public_hosts_from_env() -> Vec<String> {
+    parse_csv_list(std::env::var("SIPI_PUBLIC_HOSTS").ok().as_deref())
+}
+
+/// Pure parse, split out from [`allowed_origins_from_env`] / [`public_hosts_from_env`]
+/// so it is testable without mutating process-global env state.
+fn parse_csv_list(raw: Option<&str>) -> Vec<String> {
     raw.map(|s| {
         s.split(',')
             .map(str::trim)
@@ -651,24 +670,28 @@ mod overrides_tests {
 }
 
 #[cfg(test)]
-mod allowed_origins_tests {
-    use super::parse_allowed_origins;
+mod csv_list_tests {
+    use super::parse_csv_list;
 
     #[test]
     fn unset_yields_empty_allowlist() {
-        assert_eq!(parse_allowed_origins(None), Vec::<String>::new());
+        assert_eq!(parse_csv_list(None), Vec::<String>::new());
     }
 
     #[test]
     fn empty_string_yields_empty_allowlist() {
-        assert_eq!(parse_allowed_origins(Some("")), Vec::<String>::new());
+        assert_eq!(parse_csv_list(Some("")), Vec::<String>::new());
     }
 
     #[test]
     fn splits_trims_and_drops_empty_entries() {
         assert_eq!(
-            parse_allowed_origins(Some(" https://a.example ,https://b.example,,")),
+            parse_csv_list(Some(" https://a.example ,https://b.example,,")),
             vec!["https://a.example", "https://b.example"]
+        );
+        assert_eq!(
+            parse_csv_list(Some(" iiif.example.org ,iiif2.example.org,,")),
+            vec!["iiif.example.org", "iiif2.example.org"]
         );
     }
 }

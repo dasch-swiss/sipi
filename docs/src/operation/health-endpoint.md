@@ -12,6 +12,11 @@ Returns JSON with server status, version, and uptime:
 - **Method**: GET only
 - **Route**: Registered before the catch-all IIIF handler
 
+The `version` field is kept (not scrubbed as an information-disclosure
+concern): UptimeRobot and release-train checks read it, and the Docker image
+tag already discloses the running version, so removing it from the body
+closes no attack surface.
+
 ## Healthcheck Ownership
 
 The image does **not** embed a Docker `HEALTHCHECK`. `HEALTHCHECK` is a
