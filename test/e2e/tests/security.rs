@@ -339,3 +339,85 @@ fn slowloris_resilience() {
         }
     }
 }
+
+// =============================================================================
+// info.json / knora.json disclosure (S2-16)
+// =============================================================================
+
+#[test]
+fn restricted_info_json_hides_native_resolution_and_tiles() {
+    // `test_restrict` caps the view to `thumb_size` (`!128,128`) — the
+    // resolved lena512.jp2 is 512x512 native, so a clamped info.json must
+    // report the restricted dims, not the native ones, and must not carry a
+    // `tiles` pyramid built from the native grid.
+    let srv = server();
+    let resp = client()
+        .get(format!(
+            "{}/test_restrict/lena512.jp2/info.json",
+            srv.base_url
+        ))
+        .send()
+        .expect("GET restricted info.json failed");
+
+    assert_eq!(resp.status().as_u16(), 200);
+    let vary = resp
+        .headers()
+        .get(reqwest::header::VARY)
+        .and_then(|v| v.to_str().ok())
+        .unwrap_or_default()
+        .to_owned();
+    let cache_control = resp
+        .headers()
+        .get(reqwest::header::CACHE_CONTROL)
+        .and_then(|v| v.to_str().ok())
+        .unwrap_or_default()
+        .to_owned();
+
+    let json: serde_json::Value = resp.json().expect("restricted info.json must be JSON");
+    let width = json["width"].as_u64().expect("width must be numeric");
+    assert!(
+        width < 512,
+        "restricted info.json must report a clamped width < 512 (native), got {}",
+        width
+    );
+    assert!(
+        json.get("tiles").is_none(),
+        "restricted info.json must not disclose the native tiling pyramid"
+    );
+    assert!(
+        vary.contains("Cookie") && vary.contains("Authorization"),
+        "restricted info.json must vary on Cookie/Authorization, got Vary: {}",
+        vary
+    );
+    assert_eq!(
+        cache_control, "private, no-store",
+        "restricted info.json must not be cacheable across credentials"
+    );
+}
+
+#[test]
+fn knora_json_denied_path_returns_not_found() {
+    // `tmp` always denies — knora.json is a DSP-internal surface and must not
+    // disclose an auth challenge or the resource's existence to a denied caller.
+    let srv = server();
+    let resp = client()
+        .get(format!("{}/tmp/lena512.jp2/knora.json", srv.base_url))
+        .send()
+        .expect("GET denied knora.json failed");
+
+    assert_eq!(resp.status().as_u16(), 404);
+}
+
+#[test]
+fn knora_json_allowed_path_still_succeeds() {
+    let srv = server();
+    let resp = client()
+        .get(format!("{}/unit/lena512.jp2/knora.json", srv.base_url))
+        .send()
+        .expect("GET allowed knora.json failed");
+
+    assert_eq!(resp.status().as_u16(), 200);
+    let json: serde_json::Value = resp.json().expect("allowed knora.json must be JSON");
+    assert_eq!(json["width"], 512);
+    assert_eq!(json["height"], 512);
+}

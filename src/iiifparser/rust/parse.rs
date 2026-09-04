@@ -270,6 +270,47 @@ fn parse_size(s: &str) -> Result<SizeParts, ParseError> {
     Ok(parts)
 }
 
+/// Apply a restricted-view IIIF size string to native (width, height),
+/// returning the bounded output dimensions. Used to clamp info.json /
+/// knora.json dimensions for non-Allow permissions so image metadata never
+/// discloses the native resolution. Never upscales past native regardless of
+/// the `^` marker.
+pub fn clamp_dims_to_size(size: &str, width: u32, height: u32) -> Result<(u32, u32), ParseError> {
+    let parts = parse_size(size)?;
+    let w = u64::from(width);
+    let h = u64::from(height);
+    let (out_w, out_h) = match parts.kind {
+        SizeKind::Full | SizeKind::Undefined => (w, h),
+        SizeKind::Percents => {
+            let pct = f64::from(parts.percent) / 100.0;
+            (
+                (w as f64 * pct).round() as u64,
+                (h as f64 * pct).round() as u64,
+            )
+        }
+        SizeKind::Reduce => {
+            let shift = parts.reduce.clamp(0, 63) as u32;
+            (w >> shift, h >> shift)
+        }
+        SizeKind::PixelsX => {
+            let nx = parts.nx as u64;
+            (nx, h * nx / w.max(1))
+        }
+        SizeKind::PixelsY => {
+            let ny = parts.ny as u64;
+            (w * ny / h.max(1), ny)
+        }
+        SizeKind::PixelsXy => (parts.nx as u64, parts.ny as u64),
+        SizeKind::Maxdim => {
+            let fx = parts.nx as f64 / w as f64;
+            let fy = parts.ny as f64 / h as f64;
+            let f = fx.min(fy);
+            ((w as f64 * f).round() as u64, (h as f64 * f).round() as u64)
+        }
+    };
+    Ok((out_w.min(w).max(1) as u32, out_h.min(h).max(1) as u32))
+}
+
 fn parse_rotation(s: &str) -> Result<(bool, f32), ParseError> {
     if s.is_empty() {
         return Ok((false, 0.0));
@@ -404,6 +445,32 @@ mod tests {
         let huge = "9".repeat(40);
         assert!(parse_size(&format!("pct:{huge}")).is_err());
         assert!(parse_size("pct:50").is_ok());
+    }
+
+    #[test]
+    fn clamp_dims_to_size_maxdim_fits_in_box() {
+        assert_eq!(
+            clamp_dims_to_size("!128,128", 512, 512).unwrap(),
+            (128, 128)
+        );
+    }
+
+    #[test]
+    fn clamp_dims_to_size_percent() {
+        assert_eq!(clamp_dims_to_size("pct:10", 500, 500).unwrap(), (50, 50));
+    }
+
+    #[test]
+    fn clamp_dims_to_size_pixels_x_preserves_aspect() {
+        assert_eq!(clamp_dims_to_size("256,", 512, 256).unwrap(), (256, 128));
+    }
+
+    #[test]
+    fn clamp_dims_to_size_never_exceeds_native() {
+        assert_eq!(
+            clamp_dims_to_size("1000,1000", 512, 512).unwrap(),
+            (512, 512)
+        );
     }
 
     #[test]
