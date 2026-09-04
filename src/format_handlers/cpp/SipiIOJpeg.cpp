@@ -506,11 +506,6 @@ Result<bool> SipiIOJpeg::read(SipiImage *img,
   // move infile position back to the beginning of the file
   ::lseek(infile, 0, SEEK_SET);
 
-  //
-  // Since libjpeg is not thread safe, we have unfortunately use a mutex...
-  //
-  // std::lock_guard<std::mutex> inlock_mutex_guard(inlock);
-
   struct jpeg_decompress_struct cinfo {};
   JpegErrorMgr jerr;
 
@@ -1241,9 +1236,9 @@ Result<void> SipiIOJpeg::write(SipiImage *img, const OutputSink &sink, const Sip
   std::shared_ptr<Exif> exif = img->getExif();
   if (exif != nullptr) {
     std::vector<unsigned char> buf = exif->exifBytes();
-    if (buf.size() <= 65535) {
-      char start[] = "Exif\000\000";
-      size_t start_l = sizeof(start) - 1;
+    char start[] = "Exif\000\000";
+    size_t start_l = sizeof(start) - 1;
+    if (start_l + buf.size() <= 65533) {
       // NOTE: make_unique leak on longjmp is acceptable (see comment above setjmp)
       auto exifchunk = std::make_unique<unsigned char[]>(buf.size() + start_l);
       memcpy(exifchunk.get(), start, (size_t)start_l);
@@ -1255,9 +1250,9 @@ Result<void> SipiIOJpeg::write(SipiImage *img, const OutputSink &sink, const Sip
   std::shared_ptr<Xmp> xmp = img->getXmp();
   if (xmp != nullptr) {
     std::string buf = xmp->xmpBytes();
-    if ((!buf.empty()) && (buf.size() <= 65535)) {
-      char start[] = "http://ns.adobe.com/xap/1.0/\000";
-      size_t start_l = sizeof(start) - 1;
+    char start[] = "http://ns.adobe.com/xap/1.0/\000";
+    size_t start_l = sizeof(start) - 1;
+    if ((!buf.empty()) && (start_l + buf.size() <= 65533)) {
       auto xmpchunk = std::make_unique<char[]>(buf.size() + start_l);
       memcpy(xmpchunk.get(), start, (size_t)start_l);
       memcpy(xmpchunk.get() + start_l, buf.data(), (size_t)buf.size());
@@ -1306,9 +1301,9 @@ Result<void> SipiIOJpeg::write(SipiImage *img, const OutputSink &sink, const Sip
   std::shared_ptr<Iptc> iptc = img->getIptc();
   if (iptc != nullptr) {
     std::vector<unsigned char> buf = iptc->iptcBytes();
-    if (buf.size() <= 65535) {
-      char start[] = " Photoshop 3.0\0008BIM\004\004\000\000";
-      size_t start_l = sizeof(start) - 1;
+    char start[] = " Photoshop 3.0\0008BIM\004\004\000\000";
+    size_t start_l = sizeof(start) - 1;
+    if (start_l + 4 + buf.size() <= 65533) {
       unsigned char siz[4];
       siz[0] = (unsigned char)((buf.size() >> 24) & 0x000000ff);
       siz[1] = (unsigned char)((buf.size() >> 16) & 0x000000ff);
@@ -1319,7 +1314,7 @@ Result<void> SipiIOJpeg::write(SipiImage *img, const OutputSink &sink, const Sip
       memcpy(iptcchunk.get(), start, (size_t)start_l);
       memcpy(iptcchunk.get() + start_l, siz, (size_t)4);
       if (buf.size() > 0) memcpy(iptcchunk.get() + start_l + 4, buf.data(), (size_t)buf.size());
-      jpeg_write_marker(&cinfo, JPEG_APP0 + 13, (JOCTET *)iptcchunk.get(), start_l + buf.size());
+      jpeg_write_marker(&cinfo, JPEG_APP0 + 13, (JOCTET *)iptcchunk.get(), start_l + 4 + buf.size());
     }
   }
 

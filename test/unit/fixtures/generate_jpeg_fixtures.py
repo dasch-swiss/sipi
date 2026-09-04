@@ -19,12 +19,13 @@ Produces three fixtures under test/_test_data/images/jpeg/:
      F3 feature-contract test to prove that log_warn is routed to stderr under
      --json without breaking the single-document contract on stdout.
 
-Also produces six marker-parsing regression fixtures as a
+Also produces seven marker-parsing regression fixtures as a
 sibling `../malformed/` directory (relative to the given output dir), see
 `generate_malformed()` and test/_test_data/images/malformed/README.md for
 each fixture's defect (DEV-6066, N1, N4, the parse_photoshop
 even-padding pointer overshoot, DEV-7056's fatal-metadata-parse fixture,
-and DEV-7078's zero-tag-count ICC profile).
+DEV-7078's zero-tag-count ICC profile, and S2-14's oversized-Exif marker
+guard).
 
 Run (from the sipi repo root):
 
@@ -205,6 +206,41 @@ def _build_icc_profile_no_description(size: int = 536) -> bytes:
     return bytes(header)
 
 
+def _build_oversized_exif_tiff(target_total: int = 65527) -> bytes:
+    """Build a minimal but well-formed little-endian TIFF/Exif blob whose
+    single IFD0 entry (`ImageDescription`, ASCII) carries enough data to
+    bring the whole blob to `target_total` bytes -- the largest an Exif TIFF
+    blob can be and still fit, together with the 6-byte "Exif\\0\\0"
+    identifier, inside a single APP1 marker segment (2-byte JPEG segment
+    length field: 65535 max, minus 2 length bytes minus 6 identifier bytes =
+    65527).
+
+    Layout: TIFF header (8) + IFD0 entry count (2) + one 12-byte entry + next
+    IFD offset (4) = 26 bytes of structure, followed by the ASCII value data
+    itself (NUL-terminated).
+    """
+    header_and_ifd_overhead = 8 + 2 + 12 + 4
+    n = target_total - header_and_ifd_overhead
+    assert n > 4, "ASCII value must be large enough to need an offset, not inline storage"
+    value_offset = header_and_ifd_overhead
+    data = (b"A" * (n - 1)) + b"\x00"
+
+    tiff = bytearray()
+    tiff += b"II"  # little-endian byte order
+    tiff += (42).to_bytes(2, "little")  # TIFF magic number
+    tiff += (8).to_bytes(4, "little")  # offset to IFD0
+    tiff += (1).to_bytes(2, "little")  # IFD0 entry count
+    tiff += (0x010E).to_bytes(2, "little")  # tag: ImageDescription
+    tiff += (2).to_bytes(2, "little")  # type: ASCII
+    tiff += n.to_bytes(4, "little")  # count (bytes, incl. NUL terminator)
+    tiff += value_offset.to_bytes(4, "little")  # value offset
+    tiff += (0).to_bytes(4, "little")  # next IFD offset (none)
+    assert len(tiff) == value_offset
+    tiff += data
+    assert len(tiff) == target_total
+    return bytes(tiff)
+
+
 def generate_malformed(malformed_dir: pathlib.Path) -> None:
     """Regression fixtures for the JPEG marker-parsing over-reads fixed
     alongside DEV-6066 / N1 / N4, plus the DEV-7056 fatal-metadata-parse
@@ -313,6 +349,23 @@ def generate_malformed(malformed_dir: pathlib.Path) -> None:
     icc_no_desc_path = malformed_dir / "jpeg_icc_no_description.jpg"
     icc_no_desc_path.write_bytes(icc_no_desc)
     print(f"  wrote {icc_no_desc_path} ({len(icc_no_desc)} bytes, ICC profile with zero tag count)")
+
+    # jpeg_oversized_exif.jpg — a single APP1 segment carrying the largest
+    # Exif TIFF blob that still fits a JPEG marker's 2-byte length field
+    # (65527 TIFF bytes + the 6-byte "Exif\0\0" identifier = 65533, plus the
+    # 2 length bytes themselves = 65535, the field's maximum value). The TIFF
+    # blob is well-formed (single IFD0 entry, ImageDescription/ASCII) so
+    # Exif::parse() accepts it; SipiIOJpeg::write()'s re-serialized Exif
+    # blob is then at or above the 65533-byte total-marker-length limit
+    # libjpeg's write_marker_header() enforces, regressing the guard that
+    # skips (rather than emits) an oversized marker instead of longjmp'ing
+    # out of jpeg_write_marker() (S2-14).
+    exif_oversized_tiff = _build_oversized_exif_tiff()
+    exif_oversized_payload = b"Exif\x00\x00" + exif_oversized_tiff
+    exif_oversized = _insert_app_marker(base_jpeg, 0xE1, exif_oversized_payload)
+    exif_oversized_path = malformed_dir / "jpeg_oversized_exif.jpg"
+    exif_oversized_path.write_bytes(exif_oversized)
+    print(f"  wrote {exif_oversized_path} ({len(exif_oversized)} bytes, oversized Exif APP1 payload)")
 
 
 def generate(out_dir: pathlib.Path) -> None:
