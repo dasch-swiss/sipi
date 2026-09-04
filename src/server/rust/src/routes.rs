@@ -536,11 +536,16 @@ fn iiif_access(
         // was configured): a hit skips the whole FFI + Lua + dsp-api round-trip.
         // Keyed on (prefix, identifier, raw Cookie, raw Authorization) — distinct
         // credentials never share a decision. The key does NOT cover the rest of the
-        // request the hook can read via `server.*` (the full `server.uri` path,
-        // other headers such as `X-Api-Key`, host, client IP); the cache is only
-        // correct for a hook whose decision is a pure function of the keyed fields
-        // (see `crate::preflight_cache` and `docs/src/lua/index.md`). Only plain
-        // outcomes are cached (a hook `direct_response` is request-specific).
+        // request the hook can read via `server.*` (the path, other headers such as
+        // `X-Api-Key`, host, client IP); the cache is only correct for a hook whose
+        // decision is a pure function of the keyed fields (see
+        // `crate::preflight_cache` and `docs/src/lua/index.md`). The key is
+        // query-free by design and never will cover the raw query string — that
+        // would turn a query-string cache-buster into an unbounded amplifier
+        // against dsp-api; `build_request_data` is the structural guard (its
+        // explicit `RequestData` literal keeps the preflight view query- and
+        // body-free). Only plain outcomes are cached (a hook `direct_response` is
+        // request-specific).
         let cache_key = state.preflight_cache.as_ref().map(|_| {
             preflight_cache::make_key(
                 &parsed.prefix,
@@ -709,6 +714,15 @@ fn build_request_data(
         .collect();
     let cookies = parse_cookies(headers);
     let (_scheme, host) = forwarded(headers);
+    // The preflight view is deliberately query- and body-free: `get_params`,
+    // `post_params`, `request_params`, `uploads`, and `content` are always
+    // empty, and `uri` carries the path only (never the query). The
+    // preflight-cache key (`preflight_cache::make_key`) covers only
+    // `(prefix, identifier, Cookie, Authorization)` — a hook decision that
+    // depended on any field left out of this literal would be served a stale
+    // cached decision for a different request. An explicit literal (no
+    // `..Default::default()`) means a new `RequestData` field fails to
+    // compile here until it is deliberately classified as keyed or excluded.
     scripting::bindings::RequestData {
         method: method.as_str().to_owned(),
         client_ip: client_ip(headers),
@@ -718,8 +732,15 @@ fn build_request_data(
         uri: uri.path().to_owned(),
         headers: header_vec,
         cookies,
+        get_params: Vec::new(),
+        post_params: Vec::new(),
+        request_params: Vec::new(),
+        uploads: Vec::new(),
+        content: Vec::new(),
+        content_type: String::new(),
+        jwt_secret: String::new(),
+        docroot: None,
         traceparent: crate::telemetry::current_traceparent(),
-        ..Default::default()
     }
 }
 
@@ -2293,6 +2314,34 @@ mod tests {
             );
         }
         h
+    }
+
+    #[test]
+    fn preflight_request_data_is_query_and_body_free() {
+        // The preflight-cache key covers only (prefix, identifier, Cookie,
+        // Authorization); this asserts the request view the hook actually sees
+        // stays query- and body-free, so a future edit can't silently widen it
+        // without the cache serving stale decisions for distinct requests.
+        let uri: Uri = "/prefix/identifier/full/0/default.jpg?x=random"
+            .parse()
+            .unwrap();
+        let h = headers(&[
+            ("host", "iiif.example.org"),
+            ("cookie", "session=abc"),
+            ("authorization", "Bearer token"),
+        ]);
+        let data = build_request_data(&Method::GET, &uri, &h);
+
+        assert_eq!(data.uri, "/prefix/identifier/full/0/default.jpg");
+        assert!(data.get_params.is_empty());
+        assert!(data.post_params.is_empty());
+        assert!(data.request_params.is_empty());
+        assert!(data.content.is_empty());
+
+        assert_eq!(data.method, "GET");
+        assert_eq!(data.host, "iiif.example.org");
+        assert!(!data.headers.is_empty());
+        assert_eq!(data.cookies, vec![("session".to_owned(), "abc".to_owned())]);
     }
 
     #[test]
