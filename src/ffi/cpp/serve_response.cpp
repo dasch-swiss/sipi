@@ -8,6 +8,7 @@
 #include <sys/stat.h>
 #include <unistd.h>
 
+#include <cstring>
 #include <ctime>
 #include <regex>
 #include <string>
@@ -31,6 +32,10 @@ namespace {
    */
   bool parse_range(const char *range, std::uint64_t fsize, std::uint64_t &start, std::uint64_t &end)
   {
+    // A Range header this long is never legitimate; cap it before the regex so a
+    // pathologically long header can't drive libc++'s recursive matcher into a
+    // stack overflow. The caller maps false -> 400.
+    if (std::strlen(range) > 128) { return false; }
     static const std::regex re(R"(bytes=\s*(\d+)-(\d*)[\D.*]?)");
     std::cmatch m;
     if (!std::regex_match(range, m, re) || m.size() < 2) { return false; }

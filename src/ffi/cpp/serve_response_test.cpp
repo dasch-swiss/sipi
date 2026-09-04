@@ -123,6 +123,20 @@ TEST(BuildFileResponse, MalformedRangeIsBadRequest)
   EXPECT_EQ(static_cast<int>(result.error()), 400);
 }
 
+TEST(BuildFileResponse, OversizedRangeHeaderIsBadRequest)
+{
+  const auto path = make_temp_file("serve_bigrange.bin", std::string(1000, 'x'));
+  // A syntactically valid but >128-byte Range: leading-zero start so it parses
+  // to 0 with no numeric overflow. On main this is a valid 206; the length cap
+  // makes it a 400.
+  const std::string big = "bytes=" + std::string(130, '0') + "-99";
+
+  const auto result = build_file_response(path.c_str(), big.c_str());
+
+  ASSERT_FALSE(result.has_value());
+  EXPECT_EQ(result.error(), SipiStatus::BadRequest);
+}
+
 TEST(BuildFileResponse, StartBeyondEofIsError)
 {
   const auto path = make_temp_file("serve_beyond.bin", std::string(10, 'x'));
