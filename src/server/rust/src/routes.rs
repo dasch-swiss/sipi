@@ -293,7 +293,7 @@ pub async fn iiif(
         || (state.prefix_as_path && path::contains_traversal(&parsed.prefix))
     {
         tracing::warn!(identifier = %parsed.identifier, prefix = %parsed.prefix, "rejected path traversal");
-        return sink::error_response(StatusCode::BAD_REQUEST);
+        return sink::error_response(StatusCode::NOT_FOUND);
     }
 
     // Redirect is cheap and engine-free — answer it on the async path.
@@ -1478,6 +1478,16 @@ async fn serve_docroot(state: Arc<AppState>, req: Request) -> Response {
     } else {
         format!("/{suffix}")
     };
+    // Hardening: a hidden file (a path component starting with `.`, e.g. `.env`,
+    // `.git`, `.htaccess`) is never a served asset, regardless of whether it
+    // exists — 404 rather than distinguishing "not found" from "exists but
+    // hidden".
+    if suffix
+        .split('/')
+        .any(|component| !component.is_empty() && component.starts_with('.'))
+    {
+        return sink::error_response(StatusCode::NOT_FOUND);
+    }
 
     // infile = raw docroot + suffix: the Content-Disposition path (206) and the
     // canonicalisation input.
