@@ -25,7 +25,7 @@ fn connect(srv: &SipiServer, addr: &str) -> TcpStream {
 // =============================================================================
 
 #[test]
-fn path_traversal_encoded_dotdot_returns_400() {
+fn path_traversal_encoded_dotdot_returns_404() {
     let srv = server();
     // Use raw TCP to send %2e%2e without client-side URL normalization
     let addr = format!("127.0.0.1:{}", srv.http_port);
@@ -39,14 +39,14 @@ fn path_traversal_encoded_dotdot_returns_400() {
     let _ = stream.read_to_string(&mut response);
 
     assert!(
-        response.contains("400"),
-        "path traversal with %2e%2e should return 400, got: {}",
+        response.contains("404"),
+        "path traversal with %2e%2e should return 404 (indistinguishable from not-found), got: {}",
         response.lines().next().unwrap_or("")
     );
 }
 
 #[test]
-fn path_traversal_double_encoded_returns_400() {
+fn path_traversal_double_encoded_returns_404() {
     let srv = server();
     let addr = format!("127.0.0.1:{}", srv.http_port);
     let mut stream = connect(srv, &addr);
@@ -59,8 +59,8 @@ fn path_traversal_double_encoded_returns_400() {
     let _ = stream.read_to_string(&mut response);
 
     assert!(
-        response.contains("400"),
-        "double-encoded path traversal should return 400, got: {}",
+        response.contains("404"),
+        "double-encoded path traversal should return 404 (indistinguishable from not-found), got: {}",
         response.lines().next().unwrap_or("")
     );
 }
@@ -106,8 +106,8 @@ fn path_traversal_mixed_case_encoded() {
     let _ = stream.read_to_string(&mut response);
 
     assert!(
-        response.contains("400"),
-        "mixed-case encoded traversal should return 400, got: {}",
+        response.contains("404"),
+        "mixed-case encoded traversal should return 404 (indistinguishable from not-found), got: {}",
         response.lines().next().unwrap_or("")
     );
 }

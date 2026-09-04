@@ -89,3 +89,22 @@ fn missing_script_is_404() {
         .expect("GET failed");
     assert_eq!(resp.status().as_u16(), 404);
 }
+
+/// A dotfile is never a served asset, even when it exists on disk — the
+/// docroot fileserver rejects it with a bare 404 before any open/stat, the
+/// same response a genuinely missing file gets.
+#[test]
+fn dotfile_is_404_even_when_present() {
+    let _fixture = DocrootScript::create(".env", "SECRET=hunter2\n");
+    let srv = server();
+    let resp = client()
+        .get(format!("{}/server/.env", srv.base_url))
+        .send()
+        .expect("GET failed");
+    assert_eq!(resp.status().as_u16(), 404);
+    let body = resp.text().expect("read body");
+    assert!(
+        !body.contains("hunter2"),
+        "dotfile content must not be served, got: {body}"
+    );
+}
