@@ -9,6 +9,18 @@
 // `read_shape`/`read` take a filesystem path — so the harness's only option is
 // to materialize each fuzzer-supplied buffer as a temp file and drive the
 // handler over that path.
+//
+// `run_decode` drives two decode passes per input:
+//   1. The whole `data`/`size` buffer is written to a temp file and decoded
+//      with the region/size-less 2-arg `read`. This is unchanged from before
+//      and keeps every existing corpus seed decodable exactly as it was.
+//   2. If the buffer is longer than a small fixed header, the header is
+//      parsed as an explicit region/size (consumed from the front, not part
+//      of the decoded file) and the remainder is decoded with the
+//      region/size-aware `read` overload, reaching the ROI-dependent decode
+//      branches the first pass can never exercise. Because the header is
+//      stripped before the file is written, pass 1 still sees the exact
+//      bytes a seed corpus was captured with.
 
 #pragma once
 
@@ -20,8 +32,11 @@
 #include <exception>
 #include <filesystem>
 #include <fstream>
+#include <memory>
 #include <string>
 
+#include "iiifparser/SipiRegion.h"
+#include "iiifparser/SipiSize.h"
 #include "image/SipiImage.h"
 
 namespace sipi::fuzz {
@@ -33,7 +48,12 @@ namespace sipi::fuzz {
 // `cc_fuzz_test` replay engine sets it), falling back to the platform temp dir
 // otherwise (mirrors `sipi::test::tmp_dir()` in `test/test_paths.h`, which the
 // fuzz package intentionally does not depend on).
-inline const std::string &fuzz_temp_path(const char *suffix)
+// `ForRoi` exists solely to give each call site (the whole-buffer path vs. the
+// region/size-aware remainder path below) its own function-local static: a
+// single non-template function would cache only the first suffix it was ever
+// called with for the lifetime of the process, silently reusing that path for
+// every later call regardless of the suffix argument.
+template<bool ForRoi> inline const std::string &fuzz_temp_path_for(const char *suffix)
 {
   static const std::string path = [suffix] {
     const char *base = std::getenv("TEST_TMPDIR");
@@ -41,6 +61,29 @@ inline const std::string &fuzz_temp_path(const char *suffix)
     return (dir / ("sipi_codec_fuzz_" + std::to_string(getpid()) + suffix)).string();
   }();
   return path;
+}
+
+inline const std::string &fuzz_temp_path(const char *suffix) { return fuzz_temp_path_for<false>(suffix); }
+
+// Second per-process temp file, used for the region/size-aware remainder pass
+// in `run_decode`.
+inline const std::string &fuzz_roi_temp_path(const char *suffix) { return fuzz_temp_path_for<true>(suffix); }
+
+// Fixed header consumed from the front of the fuzzer-supplied buffer to drive
+// the region/size-aware decode pass: four little-endian `uint16_t` region
+// coordinates (x, y, w, h), two little-endian `uint16_t` size dimensions (w,
+// h), a little-endian `uint16_t` rotation, a `uint8_t` reduce factor, and one
+// reserved byte. Rotation/reduce are parsed for a future pass — the base
+// `read` overload driven here takes neither parameter.
+inline constexpr std::size_t kHeaderBytes = 16;
+
+// Reads a little-endian `uint16_t` from `data[offset]`/`data[offset + 1]`.
+// Explicit byte shifts, not a `reinterpret_cast`, because `data` has no
+// guaranteed alignment for a 2-byte read.
+inline std::uint16_t read_u16le(const uint8_t *data, std::size_t offset)
+{
+  return static_cast<std::uint16_t>(static_cast<std::uint16_t>(data[offset])
+                                     | static_cast<std::uint16_t>(static_cast<std::uint16_t>(data[offset + 1]) << 8));
 }
 
 // Fuzzing budget for the second (full `read`) decode step, not a codec limit.
@@ -90,6 +133,14 @@ inline std::uint64_t estimated_decode_bytes(const Sipi::SipiImgInfo &info)
 // parsers are `Result`-returning factories and `Xmp`'s constructor is
 // infallible (it stores the given bytes verbatim, never parsing them), so
 // none of the four metadata types can still throw here.
+//
+// When `size` exceeds `kHeaderBytes`, a second pass follows the same
+// read_shape-then-read shape over the buffer's remainder (after `data` is
+// interpreted as a fixed header), this time through the region/size-aware
+// `read` overload — the only way to reach the ROI-dependent decode branches
+// (e.g. planar-separate region handling) from this harness. The header is
+// consumed from the front rather than appended, so the first pass keeps
+// decoding every existing corpus seed byte-for-byte as before.
 template<typename Handler> int run_decode(const uint8_t *data, size_t size, const char *suffix)
 {
   const std::string &path = fuzz_temp_path(suffix);
@@ -109,18 +160,68 @@ template<typename Handler> int run_decode(const uint8_t *data, size_t size, cons
   } catch (...) {
   }
 
-  if (skip_full_read) { return 0; }
+  if (!skip_full_read) {
+    try {
+      Sipi::SipiImage img;
+      // Qualified to reach the base class's 2-arg convenience overload
+      // (`SipiIO.h:172-175`): the concrete handlers only override the 6-arg
+      // `read`, which hides all base-class `read` overloads from unqualified
+      // lookup on the derived type. The base overload still dispatches
+      // virtually into the derived handler's 6-arg override.
+      if (const auto r = handler.Sipi::SipiIO::read(&img, path); !r) { /* a rejection is a valid fuzz outcome */ }
+    } catch (const std::exception &) {
+    } catch (...) {
+    }
+  }
 
-  try {
-    Sipi::SipiImage img;
-    // Qualified to reach the base class's 2-arg convenience overload
-    // (`SipiIO.h:172-175`): the concrete handlers only override the 6-arg
-    // `read`, which hides all base-class `read` overloads from unqualified
-    // lookup on the derived type. The base overload still dispatches
-    // virtually into the derived handler's 6-arg override.
-    if (const auto r = handler.Sipi::SipiIO::read(&img, path); !r) { /* a rejection is a valid fuzz outcome */ }
-  } catch (const std::exception &) {
-  } catch (...) {
+  // Region/size-aware pass: the leading `kHeaderBytes` of `data` are consumed
+  // as an explicit region/size rather than decoded, so this only runs once a
+  // buffer is long enough to hold both the header and some remainder to
+  // decode. This is independent of `skip_full_read` above — it has its own
+  // shape probe and its own budget check against the remainder's geometry.
+  if (size > kHeaderBytes) {
+    const std::uint16_t region_x = read_u16le(data, 0);
+    const std::uint16_t region_y = read_u16le(data, 2);
+    const std::uint16_t region_w = read_u16le(data, 4);
+    const std::uint16_t region_h = read_u16le(data, 6);
+    const std::uint16_t size_w = read_u16le(data, 8);
+    const std::uint16_t size_h = read_u16le(data, 10);
+    // Reserved for a future rotation/reduce-aware pass; the `read` overload
+    // driven below takes neither parameter.
+    [[maybe_unused]] const std::uint16_t rotation = read_u16le(data, 12);
+    [[maybe_unused]] const std::uint8_t reduce = data[14];
+    // byte 15 is reserved/ignored.
+
+    const std::string &roi_path = fuzz_roi_temp_path(suffix);
+    {
+      std::ofstream out{ roi_path, std::ios::binary | std::ios::trunc };
+      out.write(reinterpret_cast<const char *>(data + kHeaderBytes),
+        static_cast<std::streamsize>(size - kHeaderBytes));
+    }
+
+    bool skip_roi_read = false;
+    try {
+      if (const auto r = handler.read_shape(roi_path); r) {
+        skip_roi_read = estimated_decode_bytes(*r) > kMaxHarnessDecodeBytes;
+      }
+    } catch (const std::exception &) {
+    } catch (...) {
+    }
+
+    if (!skip_roi_read) {
+      try {
+        Sipi::SipiImage roi_img;
+        const auto region = std::make_shared<Sipi::SipiRegion>(region_x, region_y, region_w, region_h);
+        const auto roi_size =
+          std::make_shared<Sipi::SipiSize>(Sipi::SipiSize::PIXELS_XY, false, 0.0F, 0, size_w, size_h);
+        // Qualified for the same reason as the whole-buffer pass above.
+        if (const auto r = handler.Sipi::SipiIO::read(&roi_img, roi_path, region, roi_size); !r) {
+          /* a rejection is a valid fuzz outcome */
+        }
+      } catch (const std::exception &) {
+      } catch (...) {
+      }
+    }
   }
 
   return 0;
