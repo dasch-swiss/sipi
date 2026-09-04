@@ -24,6 +24,15 @@
 //! constraint on the deployed hook, not a property the seam guarantees. See
 //! `docs/src/lua/index.md`.
 //!
+//! The preflight request view (`routes::build_request_data`) is deliberately
+//! query- and body-free (empty `get`/`post`/`request` params, no `content`, `uri`
+//! is the path only) — a recommendation, not something this key enforces — and the
+//! key itself never adds the raw query string: keying `…?x=<random>` would turn an
+//! anonymous request into an unbounded cache-busting amplifier against dsp-api (one
+//! `/admin/files` call plus a SPARQL query per distinct query string). If query
+//! fields are ever exposed to the hook, key a normalized allowlist of the
+//! parameters the hook actually consumes — never the raw query string.
+//!
 //! **This is a burst-coalescing cache, not a durable auth store.** The TTL is the
 //! staleness bound on a permission change (revocation, token expiry): a cached
 //! decision can be served for at most `ttl` after the hook last ran. It coalesces
