@@ -119,10 +119,13 @@ jobs:
             dict: src/format_handlers/fuzz/dicts/png.dict
             # Same setjmp/longjmp reasoning as jpeg (libpng's error handler).
             asan_options: "detect_leaks=0"
+          # The header-prefixed j2k decode target ran at ~9 exec/s at max_len
+          # 32768; a smaller cap raises exec/s so the budget explores more
+          # inputs (exec/s before/after is recorded in the PR).
           - target: j2k
             bin: src/format_handlers/fuzz/j2k_decode_fuzz_bin
             corpus_out: src/format_handlers/fuzz/j2k_decode_fuzz_corpus
-            max_len: "32768"
+            max_len: "8192"
             dict: ""
             asan_options: ""
           # Round-trip legs: decode-then-encode, reaching each handler's

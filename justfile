@@ -319,7 +319,7 @@ parse_request //src/iiifparser/fuzz:parse_request_fuzz_bin //src/iiifparser/fuzz
 tiff //src/format_handlers/fuzz:tiff_decode_fuzz_bin //src/format_handlers/fuzz:tiff_decode_fuzz_corpus src/format_handlers/fuzz/dicts/tiff.dict 16384 src/format_handlers/corpus/tiff
 jpeg //src/format_handlers/fuzz:jpeg_decode_fuzz_bin //src/format_handlers/fuzz:jpeg_decode_fuzz_corpus src/format_handlers/fuzz/dicts/jpeg.dict 16384 src/format_handlers/corpus/jpeg
 png //src/format_handlers/fuzz:png_decode_fuzz_bin //src/format_handlers/fuzz:png_decode_fuzz_corpus src/format_handlers/fuzz/dicts/png.dict 8192 src/format_handlers/corpus/png
-j2k //src/format_handlers/fuzz:j2k_decode_fuzz_bin //src/format_handlers/fuzz:j2k_decode_fuzz_corpus - 32768 src/format_handlers/corpus/j2k
+j2k //src/format_handlers/fuzz:j2k_decode_fuzz_bin //src/format_handlers/fuzz:j2k_decode_fuzz_corpus - 8192 src/format_handlers/corpus/j2k
 tiff_roundtrip //src/format_handlers/fuzz:tiff_roundtrip_fuzz_bin //src/format_handlers/fuzz:tiff_roundtrip_fuzz_corpus src/format_handlers/fuzz/dicts/tiff.dict 16384 src/format_handlers/corpus/tiff
 jpeg_roundtrip //src/format_handlers/fuzz:jpeg_roundtrip_fuzz_bin //src/format_handlers/fuzz:jpeg_roundtrip_fuzz_corpus src/format_handlers/fuzz/dicts/jpeg.dict 16384 src/format_handlers/corpus/jpeg
 png_roundtrip //src/format_handlers/fuzz:png_roundtrip_fuzz_bin //src/format_handlers/fuzz:png_roundtrip_fuzz_corpus src/format_handlers/fuzz/dicts/png.dict 8192 src/format_handlers/corpus/png
