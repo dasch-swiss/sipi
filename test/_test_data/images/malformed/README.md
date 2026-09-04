@@ -23,6 +23,7 @@ Each fixture's defect is documented in the table below as fixtures land.
 | `palette_undersized_lut.jp2` | Palette (indexed-color) JP2 with an 8-bit index component but a `pclr` box declaring only 128 entries, so index values 128..255 would read past the R/G/B LUTs; regresses `validate_j2k_palette_mapping()` rejecting the mapping through the whole `SipiIOJ2k::read()` decode path — Kakadu parses the box structure, the guard fails it closed before the expansion buffer is sized (DEV-6065). The well-formed counterpart it must be distinguished from is the ISO/IEC 15444-4 conformance file `iso-15444-4/testfiles_jp2/file9.jp2` (256-entry, 3-column palette), which decodes to RGB. |
 | `j2k_oversized_dimensions.jp2` | JP2 whose codestream `SIZ` marker segment (`0xFF51`) declares `Xsiz`/`Ysiz`/`XTsiz`/`YTsiz` of 262144px (`1 << 18`, above `kMaxDecodeDim` = `1 << 17`), with the `ihdr` box's height/width patched to match so container and codestream agree; regresses `validate_decode_dims()` rejecting the header — Kakadu parses the (structurally valid, single-tile) main header and `SipiIOJ2k::read()` gets as far as `codestream.get_dims()` before the guard reports the rejection, well before any decode buffer is sized (DEV-6063). |
 | `j2k_exif_truncated.jp2` | A top-level `uuid` box, appended after the codestream (`jp2c`) box, whose first 16 bytes are the EXIF UUID (`JpgTiffExif->JP2`) and whose payload is `"II*"` (3 bytes: a little-endian TIFF byte-order mark and magic-number high byte, but no low byte, no IFD offset, and no IFD behind it) — the same payload the JPEG `jpeg_exif_truncated.jpg` fixture uses. `SipiIOJ2k::read()`'s box walk reaches this box, reads the 16-byte UUID and hands the remaining bytes to `Exif::parse()`, which throws on the malformed TIFF structure; regresses `SipiIOJ2k::read()`'s fatal-metadata contract — a file whose embedded EXIF blob fails to parse is refused with `ErrorCode::kMetadataParseFailed`, not admitted with the bad blob silently dropped (DEV-7056). |
+| `tiff_planar_separate_lzw_rgb.tif` | Well-formed 16x16 RGB TIFF, LZW-compressed, `PlanarConfig=Separate` (RRRR…GGGG…BBBB…), with a deterministic per-channel gradient (R = x*16 mod 256, G = y*16 mod 256, B = (x+y)*8 mod 256) so a cropped decode's pixel values can be asserted exactly. Regresses `read_standard_data()`'s `PLANARCONFIG_SEPARATE` branches (both the uncompressed and LZW-compressed variants), which wrote each channel's rows at the absolute-row offset `nc * roi_w + roi_h + i * roi_w` instead of the ROI-relative `(c * roi_h + (i - roi_y)) * roi_w` — an out-of-bounds `inbuf` write for any requested region with `roi_y > 0` (S2-01). |
 
 ## Git LFS
 
@@ -76,6 +77,23 @@ a single well-formed top-level `uuid` box (4-byte big-endian box length,
 described above) is appended verbatim after the file's existing boxes, with
 no other byte changed and the codestream left untouched. `SipiIOJ2k::read()`'s
 box walk visits it like any other top-level box and reaches `Exif::parse()`.
+
+`tiff_planar_separate_lzw_rgb.tif` is not produced by `generate_malformed_images`
+either: it is a well-formed file (the defect is in SIPI's decode path, not
+the file itself), generated with `tifffile` (Python):
+
+    python3 -c "
+    import numpy as np, tifffile
+    nx, ny = 16, 16
+    arr = np.zeros((3, ny, nx), dtype=np.uint8)  # (sample, y, x): planarconfig='separate' needs the sample axis first
+    for y in range(ny):
+        for x in range(nx):
+            arr[0, y, x] = (x * 16) % 256
+            arr[1, y, x] = (y * 16) % 256
+            arr[2, y, x] = ((x + y) * 8) % 256
+    tifffile.imwrite('tiff_planar_separate_lzw_rgb.tif', arr,
+        photometric='rgb', planarconfig='separate', compression='lzw')
+    "
 
 The `.tif`/`.jp2`/`.jpg`/`.png` files the generators produce are committed
 (via Git LFS) so CI does not need to regenerate them at test time. Each

@@ -15,8 +15,11 @@
 #include "gtest/gtest.h"
 
 #include "error/SipiValueError.h"
+#include "iiifparser/SipiRegion.h"
 #include "image/SipiImage.h"
 #include "test_paths.h"
+
+#include <memory>
 
 namespace {
 
@@ -101,4 +104,40 @@ TEST(MalformedTiff, IccGarbageFailsMetadataParse)
   const auto r = img.read(malformed_path("tiff_icc_garbage.tif"));
   ASSERT_FALSE(r.has_value());
   EXPECT_EQ(r.error().code(), Sipi::ErrorCode::kMetadataParseFailed);
+}
+
+// S2-01: a PLANARCONFIG_SEPARATE, LZW-compressed RGB TIFF cropped to a
+// region with roi_y > 0 must not corrupt memory. Before the fix,
+// read_standard_data()'s PLANARCONFIG_SEPARATE branches (both the
+// uncompressed and the compressed variant) wrote each channel's rows at
+// `nc * roi_w + roi_h + i * roi_w`, an absolute-row (not ROI-relative)
+// destination offset that overflows `inbuf` for any roi_y > 0 — an
+// out-of-bounds write only observed under the CI asan-ubsan leg (local
+// ASan is broken on this toolchain). This test asserts the post-fix
+// decode is not just crash-free but pixel-correct: `tiff_planar_separate_lzw_rgb.tif`
+// is a 16x16 fixture with a deterministic per-channel gradient
+// (R = x*16 mod 256, G = y*16 mod 256, B = (x+y)*8 mod 256), and the
+// region requested here is the bottom-right 8x8 quadrant (roi_x=8,
+// roi_y=8), so roi_y > 0 exercises the previously-broken offset.
+TEST(MalformedTiff, PlanarSeparateRoiNearBottomEdgeDecodesCorrectly)
+{
+  Sipi::SipiImage img;
+  auto region = std::make_shared<Sipi::SipiRegion>(8, 8, 8, 8);
+  const auto r = img.read(malformed_path("tiff_planar_separate_lzw_rgb.tif"), region);
+  ASSERT_TRUE(r.has_value());
+  EXPECT_EQ(img.getNx(), 8U);
+  EXPECT_EQ(img.getNy(), 8U);
+  EXPECT_EQ(img.getNc(), 3U);
+  // local (0,0) -> global (8,8): R=128, G=128, B=128
+  EXPECT_EQ(img.getPixel(0, 0, 0), 128);
+  EXPECT_EQ(img.getPixel(0, 0, 1), 128);
+  EXPECT_EQ(img.getPixel(0, 0, 2), 128);
+  // local (7,7) -> global (15,15): R=240, G=240, B=240
+  EXPECT_EQ(img.getPixel(7, 7, 0), 240);
+  EXPECT_EQ(img.getPixel(7, 7, 1), 240);
+  EXPECT_EQ(img.getPixel(7, 7, 2), 240);
+  // local (3,5) -> global (11,13): R=176, G=208, B=192
+  EXPECT_EQ(img.getPixel(3, 5, 0), 176);
+  EXPECT_EQ(img.getPixel(3, 5, 1), 208);
+  EXPECT_EQ(img.getPixel(3, 5, 2), 192);
 }

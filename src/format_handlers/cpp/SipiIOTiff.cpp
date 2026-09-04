@@ -741,31 +741,34 @@ static Result<std::vector<T>> read_standard_data(
     } else if (planar == PLANARCONFIG_SEPARATE) {// RRRRR…RRR GGGGG…GGGG BBBBB…BBB
       line = std::make_unique<T[]>(nx);
       for (uint32_t c = 0; c < nc; ++c) {
-        for (uint32_t i = roi_y; i < roi_h; ++i) {
+        for (uint32_t i = roi_y; i < roi_y + roi_h; ++i) {
           if (TIFFReadScanline(tif, scanline.get(), i, c) == -1) {
             return std::unexpected(SipiValueError{ ErrorCode::kDecodeFailed,
               "TIFFReadScanline failed on scanline " + std::to_string(i)
                 + ", dimensions=" + std::to_string(nx) + "x" + std::to_string(ny)
                 + ", channels=" + std::to_string(nc) + ", bps=" + std::to_string(bps) });
           }
+          // Destination offsets are `(c * roi_h + (i - roi_y)) * roi_w` so
+          // channel c writes into its own [c * roi_h, (c + 1) * roi_h) row
+          // band and the first destination row is always row 0 of that band.
           switch (bps) {
           case 1:
             one2eight<T>(scanline.get(), line.get(), nx, black, white);
-            std::memcpy(inbuf.data() + nc * roi_w + roi_h + i * roi_w, line.get() + roi_x, roi_w);
+            std::memcpy(inbuf.data() + (c * roi_h + (i - roi_y)) * roi_w, line.get() + roi_x, roi_w);
             break;
           case 4:
             four2eight<T>(scanline.get(), line.get(), nx, photo == PhotometricInterpretation::PALETTE);
-            std::memcpy(inbuf.data() + nc * roi_w + roi_h + i * roi_w, line.get() + roi_x, roi_w);
+            std::memcpy(inbuf.data() + (c * roi_h + (i - roi_y)) * roi_w, line.get() + roi_x, roi_w);
             break;
           case 8:
-            std::memcpy(inbuf.data() + nc * roi_w + roi_h + i * roi_w, scanline.get() + roi_x, roi_w);
+            std::memcpy(inbuf.data() + (c * roi_h + (i - roi_y)) * roi_w, scanline.get() + roi_x, roi_w);
             break;
           case 12:
             twelve2sixteen<T>(scanline.get(), line.get(), nx, photo == PhotometricInterpretation::PALETTE);
-            std::memcpy(inbuf.data() + nc * roi_w + roi_h + i * roi_w, line.get() + roi_x, roi_w * psiz);
+            std::memcpy(inbuf.data() + (c * roi_h + (i - roi_y)) * roi_w, line.get() + roi_x, roi_w * psiz);
             break;
           case 16:
-            std::memcpy(inbuf.data() + nc * roi_w + roi_h + i * roi_w, scanline.get() + roi_x * psiz, roi_w * psiz);
+            std::memcpy(inbuf.data() + (c * roi_h + (i - roi_y)) * roi_w, scanline.get() + roi_x * psiz, roi_w * psiz);
             break;
           default:;
           }
@@ -803,7 +806,7 @@ static Result<std::vector<T>> read_standard_data(
             break;
           case 12:
             twelve2sixteen<T>(scanline.get(), line.get(), nc * nx, photo == PhotometricInterpretation::PALETTE);
-            std::memcpy(inbuf.data() + nc * (i - roi_y) * roi_w, line.get() + nc * roi_x * psiz, nc * roi_w * psiz);
+            std::memcpy(inbuf.data() + nc * (i - roi_y) * roi_w, line.get() + nc * roi_x, nc * roi_w * psiz);
             break;
           case 16:
             std::memcpy(inbuf.data() + nc * (i - roi_y) * roi_w, scanline.get() + nc * roi_x * psiz, nc * roi_w * psiz);
@@ -823,24 +826,29 @@ static Result<std::vector<T>> read_standard_data(
                 + ", channels=" + std::to_string(nc) + ", bps=" + std::to_string(bps) });
           }
           if ((i >= roi_y) && (i < (roi_y + roi_h))) {
+            // Destination offsets are `(c * roi_h + (i - roi_y)) * roi_w` so
+            // channel c writes into its own [c * roi_h, (c + 1) * roi_h) row
+            // band and the first destination row is always row 0 of that band.
             switch (bps) {
             case 1:
               one2eight<T>(scanline.get(), line.get(), nx, black, white);
-              std::memcpy(inbuf.data() + nc * roi_w + roi_h + i * roi_w, line.get() + roi_x, roi_w);
+              std::memcpy(inbuf.data() + (c * roi_h + (i - roi_y)) * roi_w, line.get() + roi_x, roi_w);
               break;
             case 4:
               four2eight<T>(scanline.get(), line.get(), nx, photo == PhotometricInterpretation::PALETTE);
-              std::memcpy(inbuf.data() + nc * roi_w + roi_h + i * roi_w, line.get() + roi_x, roi_w);
+              std::memcpy(inbuf.data() + (c * roi_h + (i - roi_y)) * roi_w, line.get() + roi_x, roi_w);
               break;
             case 8:
-              std::memcpy(inbuf.data() + nc * roi_w + roi_h + i * roi_w, scanline.get() + roi_x, roi_w);
+              std::memcpy(inbuf.data() + (c * roi_h + (i - roi_y)) * roi_w, scanline.get() + roi_x, roi_w);
               break;
             case 12:
               twelve2sixteen<T>(scanline.get(), line.get(), nx, photo == PhotometricInterpretation::PALETTE);
-              std::memcpy(inbuf.data() + nc * roi_w + roi_h + i * roi_w, line.get() + roi_x * psiz, roi_w * psiz);
+              std::memcpy(inbuf.data() + (c * roi_h + (i - roi_y)) * roi_w, line.get() + roi_x, roi_w * psiz);
               break;
             case 16:
-              std::memcpy(inbuf.data() + nc * roi_w + roi_h + i * roi_w, scanline.get() + roi_x * psiz, roi_w * psiz);
+              std::memcpy(inbuf.data() + (c * roi_h + (i - roi_y)) * roi_w,
+                scanline.get() + roi_x * psiz,
+                roi_w * psiz);
               break;
             default:;
             }
