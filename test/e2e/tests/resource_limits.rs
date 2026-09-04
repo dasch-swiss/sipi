@@ -1,7 +1,8 @@
 mod common;
 
 use common::{client, server};
-use sipi_e2e::{http_client, poll_cache_file_count, test_data_dir};
+use sipi_e2e::{http_client, poll_cache_file_count, test_data_dir, SipiServer};
+use std::time::{Duration, Instant};
 
 // =============================================================================
 // Resource limits tests — verify server handles heavy load without crashes
@@ -84,6 +85,42 @@ fn sustained_load_memory_growth() {
         .send()
         .expect("server should respond after sustained load");
     assert_eq!(health.status().as_u16(), 200);
+}
+
+/// S2-18: a handler that exceeds `SIPI_REQUEST_TIMEOUT` answers 408, not
+/// whatever the handler itself would eventually produce. Reuses the
+/// hardening config's `/hardening/loop` route (an infinite pre-commit Lua
+/// loop, see `lua_hardening.rs`) with the Lua deadline set far above the
+/// request timeout, so the axum-level wall-clock timeout — not the Lua VM's
+/// own deadline kill — is what fires and answers first.
+#[test]
+fn handler_exceeding_request_timeout_answers_408() {
+    let srv = SipiServer::start_env(
+        "config/sipi.lua-hardening-config.lua",
+        &test_data_dir(),
+        &[],
+        &[
+            ("SIPI_LUA_TIMEOUT_MS", "10000"),
+            ("SIPI_REQUEST_TIMEOUT", "1"),
+        ],
+    );
+
+    let start = Instant::now();
+    let resp = http_client()
+        .get(format!("{}/hardening/loop", srv.base_url))
+        .send()
+        .expect("request to the looping route failed");
+    let elapsed = start.elapsed();
+
+    assert_eq!(
+        resp.status().as_u16(),
+        408,
+        "handler exceeding SIPI_REQUEST_TIMEOUT should answer 408"
+    );
+    assert!(
+        elapsed < Duration::from_secs(9),
+        "408 should fire near the 1s request timeout, not the 10s Lua deadline (took {elapsed:?})"
+    );
 }
 
 #[test]

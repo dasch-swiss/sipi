@@ -68,6 +68,7 @@ rust_library(
         "@crates//:tokio-stream",
         "@crates//:toml",
         "@crates//:tower",
+        "@crates//:tower-http",
         "@crates//:tracing",
         "@crates//:tracing-opentelemetry",
         "@crates//:tracing-subscriber",
