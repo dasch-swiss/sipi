@@ -45,6 +45,7 @@ namespace Sipi::ffi {
 enum class SipiStatus : int {
   Ok = 0,
   BadRequest = 400,
+  Forbidden = 403,
   NotFound = 404,
   InternalError = 500,
   ServiceUnavailable = 503,//!< memory budget exhausted (with Retry-After)

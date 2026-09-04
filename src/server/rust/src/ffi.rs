@@ -463,9 +463,10 @@ pub fn build_commit() -> Option<&'static str> {
 extern "C" {
     /// IIIF decode→transform→encode→stream; honours the restrict size/watermark.
     /// Returns 0 when the response was emitted via the sink, or an HTTP status
-    /// code (400/404/500/…) on a pre-commit failure (499 = client gone → no
-    /// response). The engine reads `engine_context()`, so `sipi_init` must have
-    /// run first.
+    /// code (400/403/404/500/…) on a pre-commit failure (403 = a restrict
+    /// decision that does not actually restrict resolution or add a
+    /// watermark; 499 = client gone → no response). The engine reads
+    /// `engine_context()`, so `sipi_init` must have run first.
     pub fn sipi_serve_image(req: *const SipiServeRequest, resp: *const SipiResponse) -> c_int;
 
     /// Copy the current thread's per-serve observations into `*out`. Call on the

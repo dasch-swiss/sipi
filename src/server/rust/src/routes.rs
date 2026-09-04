@@ -602,7 +602,8 @@ fn iiif_access(
 
 /// Resolve the infile + permission for a `/file` download: build the path, then
 /// run `file_pre_flight` on it when defined.
-/// A non-allow/restrict permission is rejected here (401).
+/// A restrict decision is rejected here (403, S2-09); any other non-allow
+/// permission is rejected here (401).
 fn file_access(
     state: &AppState,
     parsed: &ParsedRequest,
@@ -653,7 +654,11 @@ fn file_access(
         }
     };
     match outcome.permission {
-        SipiPermType::Allow | SipiPermType::Restrict => Ok(access_from(outcome)),
+        SipiPermType::Allow => Ok(access_from(outcome)),
+        // A restrict decision cannot be applied to a raw `/file` download (no
+        // clamp or watermark point exists on that path), so it is refused
+        // rather than served at full fidelity (S2-09).
+        SipiPermType::Restrict => Err(Box::new(sink::error_response(StatusCode::FORBIDDEN))),
         _ => Err(Box::new(sink::error_response(StatusCode::UNAUTHORIZED))),
     }
 }
@@ -768,6 +773,12 @@ fn serve_image(
     let c_watermark = (access.permission == SipiPermType::Restrict)
         .then(|| access_kv_cstring(access, "watermark"))
         .flatten();
+    // A restrict decision that supplies neither a size cap nor a watermark
+    // arrives at the seam indistinguishable from `allow` (both NULL) — refuse
+    // it here rather than let the engine pass the original through (S2-09).
+    if access.permission == SipiPermType::Restrict && c_size.is_none() && c_watermark.is_none() {
+        return complete(outcome_tx, sink::error_response(StatusCode::FORBIDDEN));
+    }
 
     let req = SipiServeRequest {
         resolved_path: c_resolved.as_ptr(),

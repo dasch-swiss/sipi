@@ -85,6 +85,19 @@ function pre_flight(prefix, identifier, cookie)
         return {type = 'restrict', size = config.thumb_size, watermark = config.imgroot .. '/unit/watermark_correct.tif'}, actual_filepath
     end
 
+    -- Test-only prefixes for a restrict decision that does not actually
+    -- restrict resolution or add a watermark (S2-09): the engine must refuse
+    -- these rather than serve the original at full fidelity.
+    if prefix == "test_restrict_max" then
+        local actual_filepath = config.imgroot .. '/unit/' .. identifier
+        return {type = 'restrict', size = 'max'}, actual_filepath
+    end
+
+    if prefix == "test_restrict_bare" then
+        local actual_filepath = config.imgroot .. '/unit/' .. identifier
+        return {type = 'restrict'}, actual_filepath
+    end
+
     -- Test-only prefix mirroring the production pattern that failed to
     -- decode a bearer token below: a pre_flight hook that emits a response
     -- directly (server.sendStatus) instead of, or before, returning a
