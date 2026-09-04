@@ -72,3 +72,59 @@ cc_fuzz_test(
         "//src/image",
     ],
 )
+
+cc_fuzz_test(
+    name = "tiff_roundtrip_fuzz",
+    srcs = [
+        "codec_fuzz_harness.h",
+        "tiff_roundtrip_fuzz.cc",
+    ],
+    testonly = True,
+    corpus = ["//src/format_handlers/corpus/tiff:seed_corpus"],
+    deps = [
+        "//src/format_handlers",
+        "//src/image",
+    ],
+)
+
+cc_fuzz_test(
+    name = "jpeg_roundtrip_fuzz",
+    srcs = [
+        "codec_fuzz_harness.h",
+        "jpeg_roundtrip_fuzz.cc",
+    ],
+    testonly = True,
+    corpus = ["//src/format_handlers/corpus/jpeg:seed_corpus"],
+    deps = [
+        "//src/format_handlers",
+        "//src/image",
+    ],
+)
+
+cc_fuzz_test(
+    name = "png_roundtrip_fuzz",
+    srcs = [
+        "codec_fuzz_harness.h",
+        "png_roundtrip_fuzz.cc",
+    ],
+    testonly = True,
+    corpus = ["//src/format_handlers/corpus/png:seed_corpus"],
+    deps = [
+        "//src/format_handlers",
+        "//src/image",
+    ],
+)
+
+cc_fuzz_test(
+    name = "j2k_roundtrip_fuzz",
+    srcs = [
+        "codec_fuzz_harness.h",
+        "j2k_roundtrip_fuzz.cc",
+    ],
+    testonly = True,
+    corpus = ["//src/format_handlers/corpus/j2k:seed_corpus"],
+    deps = [
+        "//src/format_handlers",
+        "//src/image",
+    ],
+)
