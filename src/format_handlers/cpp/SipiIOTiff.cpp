@@ -700,6 +700,16 @@ static Result<std::vector<T>> read_standard_data(
     psiz = sizeof(uint16_t);
   }
 
+  const uint64_t samples_per_line =
+    (planar == PLANARCONFIG_CONTIG) ? static_cast<uint64_t>(nx) * nc : static_cast<uint64_t>(nx);
+  const uint64_t expected_sll = (samples_per_line * bps + 7) / 8;
+  if (sll < expected_sll) {
+    return std::unexpected(SipiValueError{ ErrorCode::kMalformedInput,
+      "TIFF scanline size " + std::to_string(sll) + " smaller than expected " + std::to_string(expected_sll)
+        + " for " + std::to_string(nx) + "x" + std::to_string(ny) + ", channels=" + std::to_string(nc)
+        + ", bps=" + std::to_string(bps) });
+  }
+
   std::vector<T> inbuf(checked_buf_size_or_throw(roi_h, roi_w, nc, 1));
   auto scanline = std::make_unique<uint8_t[]>(sll);
   std::unique_ptr<T[]> line;

@@ -141,3 +141,19 @@ TEST(MalformedTiff, PlanarSeparateRoiNearBottomEdgeDecodesCorrectly)
   EXPECT_EQ(img.getPixel(3, 5, 1), 208);
   EXPECT_EQ(img.getPixel(3, 5, 2), 192);
 }
+
+// S2-08: a TIFF whose corrupted IFD makes libtiff's own `TIFFScanlineSize()`
+// smaller than SIPI's independently-computed per-scanline byte count
+// (`nx * SamplesPerPixel * BitsPerSample / 8`) must be rejected before
+// `read_standard_data()` copies a SIPI-sized chunk into the
+// `TIFFScanlineSize()`-allocated scanline buffer. `tiff_scanline_undersized.tif`
+// is the verbatim nightly libFuzzer/ASan crash reproducer for this defect
+// (a heap-buffer-overflow read in the contiguous-scanline memcpy); this test
+// asserts a clean rejection rather than the crash.
+TEST(MalformedTiff, ScanlineUndersizedRejectsCleanly)
+{
+  Sipi::SipiImage img;
+  const auto r = img.read(malformed_path("tiff_scanline_undersized.tif"));
+  ASSERT_FALSE(r.has_value());
+  EXPECT_EQ(r.error().code(), Sipi::ErrorCode::kMalformedInput);
+}
