@@ -24,6 +24,7 @@ Each fixture's defect is documented in the table below as fixtures land.
 | `j2k_oversized_dimensions.jp2` | JP2 whose codestream `SIZ` marker segment (`0xFF51`) declares `Xsiz`/`Ysiz`/`XTsiz`/`YTsiz` of 262144px (`1 << 18`, above `kMaxDecodeDim` = `1 << 17`), with the `ihdr` box's height/width patched to match so container and codestream agree; regresses `validate_decode_dims()` rejecting the header — Kakadu parses the (structurally valid, single-tile) main header and `SipiIOJ2k::read()` gets as far as `codestream.get_dims()` before the guard reports the rejection, well before any decode buffer is sized (DEV-6063). |
 | `j2k_exif_truncated.jp2` | A top-level `uuid` box, appended after the codestream (`jp2c`) box, whose first 16 bytes are the EXIF UUID (`JpgTiffExif->JP2`) and whose payload is `"II*"` (3 bytes: a little-endian TIFF byte-order mark and magic-number high byte, but no low byte, no IFD offset, and no IFD behind it) — the same payload the JPEG `jpeg_exif_truncated.jpg` fixture uses. `SipiIOJ2k::read()`'s box walk reaches this box, reads the 16-byte UUID and hands the remaining bytes to `Exif::parse()`, which throws on the malformed TIFF structure; regresses `SipiIOJ2k::read()`'s fatal-metadata contract — a file whose embedded EXIF blob fails to parse is refused with `ErrorCode::kMetadataParseFailed`, not admitted with the bad blob silently dropped (DEV-7056). |
 | `tiff_planar_separate_lzw_rgb.tif` | Well-formed 16x16 RGB TIFF, LZW-compressed, `PlanarConfig=Separate` (RRRR…GGGG…BBBB…), with a deterministic per-channel gradient (R = x*16 mod 256, G = y*16 mod 256, B = (x+y)*8 mod 256) so a cropped decode's pixel values can be asserted exactly. Regresses `read_standard_data()`'s `PLANARCONFIG_SEPARATE` branches (both the uncompressed and LZW-compressed variants), which wrote each channel's rows at the absolute-row offset `nc * roi_w + roi_h + i * roi_w` instead of the ROI-relative `(c * roi_h + (i - roi_y)) * roi_w` — an out-of-bounds `inbuf` write for any requested region with `roi_y > 0` (S2-01). |
+| `tiff_tiled_planar_separate_rgba.tif` | Well-formed 32x32, 16x16-tiled, `PlanarConfig=Separate` RGBA TIFF (4 samples, 8 bits/sample) spanning a 2x2 tile grid, with a deterministic per-channel gradient (R = x*7 mod 256, G = y*5 mod 256, B = (x+y)*3 mod 256, A = 255 - (x*y mod 256)) so a full-image decode's pixel values can be asserted exactly. Regresses `read_tiled_data()`'s `PLANARCONFIG_SEPARATE` branch, which read only the sample-0 plane of each tile into a one-plane buffer and then handed that buffer to `separateToContig()` as if it held all `nc` interleaved planes — a heap-buffer-overflow read of `(nc - 1) * tile_size` bytes of adjacent heap into the decoded image (S2-06). |
 | `tiff_scanline_undersized.tif` | A 145-byte TIFF with a corrupted IFD — an 8x17 `ImageWidth`/`ImageLength` pair, a duplicate `ImageWidth` entry carrying an invalid field type, and a `Photometric` entry whose `count` is garbage — that libtiff's own directory parser resolves to a `TIFFScanlineSize()` smaller than SIPI's independently-computed per-scanline byte count (`nx * SamplesPerPixel * BitsPerSample / 8`, both read via SIPI's own `TIFFGetField` calls on the same, differently-cached, directory). This is the exact nightly libFuzzer/ASan crash reproducer `crash-2866a0e15757123df010b783d3ce63b97c99724e` (downloaded verbatim from the `fuzz-crashes-tiff` artifact of the 2026-09-04 `fuzz.yml` nightly run), unmodified; regresses the `read_standard_data()` scanline-size validation that rejects the mismatch with `ErrorCode::kMalformedInput` before the undersized `TIFFScanlineSize()`-allocated buffer is ever memcpy'd into at the SIPI-computed length (S2-08). |
 
 ## Git LFS
@@ -94,6 +95,26 @@ the file itself), generated with `tifffile` (Python):
             arr[2, y, x] = ((x + y) * 8) % 256
     tifffile.imwrite('tiff_planar_separate_lzw_rgb.tif', arr,
         photometric='rgb', planarconfig='separate', compression='lzw')
+    "
+
+`tiff_tiled_planar_separate_rgba.tif` is likewise not produced by
+`generate_malformed_images`: it is a well-formed file (the defect is in
+SIPI's decode path, not the file itself), generated with `tifffile`
+(Python):
+
+    python3 -c "
+    import numpy as np, tifffile
+    nx, ny = 32, 32
+    arr = np.zeros((4, ny, nx), dtype=np.uint8)  # (sample, y, x): planarconfig='separate' needs the sample axis first
+    for y in range(ny):
+        for x in range(nx):
+            arr[0, y, x] = (x * 7) % 256
+            arr[1, y, x] = (y * 5) % 256
+            arr[2, y, x] = ((x + y) * 3) % 256
+            arr[3, y, x] = 255 - ((x * y) % 256)
+    tifffile.imwrite('tiff_tiled_planar_separate_rgba.tif', arr,
+        photometric='rgb', planarconfig='separate', tile=(16, 16),
+        extrasamples=['unassalpha'])
     "
 
 The `.tif`/`.jp2`/`.jpg`/`.png` files the generators produce are committed

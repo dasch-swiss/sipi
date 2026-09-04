@@ -922,13 +922,22 @@ static Result<std::vector<T>> read_tiled_data(TIFF *tif, int32_t roi_x, int32_t 
   uint32_t nx, ny, nc, bps;
   TIFFGetField(tif, TIFFTAG_IMAGEWIDTH, &nx);
   TIFFGetField(tif, TIFFTAG_IMAGELENGTH, &ny);
+
+  uint16_t stmp;
+  TIFF_GET_FIELD(tif, TIFFTAG_SAMPLESPERPIXEL, &stmp, 1)
+  nc = static_cast<uint32_t>(stmp);
+
   uint32_t ntiles_x = epsilon_ceil_division(static_cast<float>(nx), static_cast<float>(tile_width));
   uint32_t ntiles_y = epsilon_ceil_division(static_cast<float>(ny), static_cast<float>(tile_length));
   uint32_t ntiles = TIFFNumberOfTiles(tif);
-  if (ntiles != (ntiles_x * ntiles_y)) {
+  // For PLANARCONFIG_SEPARATE, each of the nc samples is stored as its own
+  // set of spatial tiles, so the on-disk tile count is nc times the spatial
+  // tile grid; for PLANARCONFIG_CONTIG it is just the spatial grid.
+  const uint32_t expected_ntiles = ntiles_x * ntiles_y * (planar == PLANARCONFIG_SEPARATE ? nc : 1);
+  if (ntiles != expected_ntiles) {
     return std::unexpected(SipiValueError{ ErrorCode::kMalformedInput,
-      "Number of tiles not consistent: expected " + std::to_string(ntiles_x * ntiles_y)
-        + " (" + std::to_string(ntiles_x) + "x" + std::to_string(ntiles_y) + ")"
+      "Number of tiles not consistent: expected " + std::to_string(expected_ntiles)
+        + " (" + std::to_string(ntiles_x) + "x" + std::to_string(ntiles_y) + ", channels=" + std::to_string(nc) + ")"
         + ", got " + std::to_string(ntiles)
         + ", dimensions=" + std::to_string(nx) + "x" + std::to_string(ny)
         + ", tile=" + std::to_string(tile_width) + "x" + std::to_string(tile_length) });
@@ -937,10 +946,6 @@ static Result<std::vector<T>> read_tiled_data(TIFF *tif, int32_t roi_x, int32_t 
   uint32_t starttile_y = epsilon_floor_division(static_cast<float>(roi_y), static_cast<float>(tile_length));
   uint32_t endtile_x = epsilon_ceil_division(static_cast<float>(roi_x + roi_w), static_cast<float>(tile_width));
   uint32_t endtile_y = epsilon_ceil_division(static_cast<float>(roi_y + roi_h), static_cast<float>(tile_length));
-
-  uint16_t stmp;
-  TIFF_GET_FIELD(tif, TIFFTAG_SAMPLESPERPIXEL, &stmp, 1)
-  nc = static_cast<uint32_t>(stmp);
 
   TIFF_GET_FIELD(tif, TIFFTAG_BITSPERSAMPLE, &stmp, 8)
   bps = static_cast<uint32_t>(stmp);
@@ -953,20 +958,54 @@ static Result<std::vector<T>> read_tiled_data(TIFF *tif, int32_t roi_x, int32_t 
         + ", tile=" + std::to_string(tile_width) + "x" + std::to_string(tile_length) });
   }
 
-  uint32_t tile_size = TIFFTileSize(tif);
-  auto tilebuf = std::make_unique<T[]>(bps == 8 ? tile_size : (tile_size >> 1));
+  const tmsize_t tile_size_signed = TIFFTileSize(tif);
+  if (tile_size_signed <= 0) {
+    return std::unexpected(SipiValueError{ ErrorCode::kMalformedInput,
+      "TIFFTileSize returned a non-positive size for tile " + std::to_string(tile_width) + "x"
+        + std::to_string(tile_length) + ", channels=" + std::to_string(nc) + ", bps=" + std::to_string(bps) });
+  }
+  const uint32_t tile_size = static_cast<uint32_t>(tile_size_signed);
+  // For PLANARCONFIG_CONTIG, TIFFTileSize() already accounts for all nc
+  // samples per tile, so plane_elems covers the whole interleaved tile. For
+  // PLANARCONFIG_SEPARATE, TIFFTileSize() reports the size of a single-sample
+  // plane, so nc of these are needed to hold one tile.
+  const uint32_t plane_elems = (bps == 8) ? tile_size : (tile_size >> 1);
+
+  auto tilebuf = std::make_unique<T[]>(plane_elems);
   auto inbuf = std::vector<T>(checked_buf_size_or_throw(roi_w, roi_h, nc, 1));
   for (uint32_t ty = starttile_y; ty < endtile_y; ++ty) {
     for (uint32_t tx = starttile_x; tx < endtile_x; ++tx) {
-      if (TIFFReadTile(tif, tilebuf.get(), tx * tile_width, ty * tile_length, 0, 0) < 0) {
-        return std::unexpected(SipiValueError{ ErrorCode::kDecodeFailed,
-          "TIFFReadTile failed on tile (" + std::to_string(tx) + ", " + std::to_string(ty) + ")"
-            + ", dimensions=" + std::to_string(nx) + "x" + std::to_string(ny)
-            + ", channels=" + std::to_string(nc) + ", bps=" + std::to_string(bps) });
-      }
+      const T *pixels = nullptr;
+      std::unique_ptr<T[]> contigbuf;
 
       if (planar == PLANARCONFIG_SEPARATE) {
-        tilebuf = separateToContig(std::move(tilebuf), tile_width, tile_length, nc, tile_width);
+        // Each of the nc samples lives in its own plane on disk, so it needs
+        // its own TIFFReadTile() call (sample index as the 6th argument) into
+        // its own plane_elems-sized slot. Reading only sample 0 into a
+        // one-plane buffer and then treating it as nc interleaved planes (the
+        // previous behavior) discloses (nc - 1) * plane_elems bytes of
+        // adjacent heap.
+        auto planebuf = std::make_unique<T[]>(static_cast<size_t>(nc) * plane_elems);
+        for (uint32_t c = 0; c < nc; ++c) {
+          if (TIFFReadTile(tif, planebuf.get() + static_cast<size_t>(c) * plane_elems, tx * tile_width,
+                ty * tile_length, 0, static_cast<uint16_t>(c))
+              < 0) {
+            return std::unexpected(SipiValueError{ ErrorCode::kDecodeFailed,
+              "TIFFReadTile failed on tile (" + std::to_string(tx) + ", " + std::to_string(ty) + "), sample "
+                + std::to_string(c) + ", dimensions=" + std::to_string(nx) + "x" + std::to_string(ny)
+                + ", channels=" + std::to_string(nc) + ", bps=" + std::to_string(bps) });
+          }
+        }
+        contigbuf = separateToContig(std::move(planebuf), tile_width, tile_length, nc, tile_width);
+        pixels = contigbuf.get();
+      } else {
+        if (TIFFReadTile(tif, tilebuf.get(), tx * tile_width, ty * tile_length, 0, 0) < 0) {
+          return std::unexpected(SipiValueError{ ErrorCode::kDecodeFailed,
+            "TIFFReadTile failed on tile (" + std::to_string(tx) + ", " + std::to_string(ty) + ")"
+              + ", dimensions=" + std::to_string(nx) + "x" + std::to_string(ny)
+              + ", channels=" + std::to_string(nc) + ", bps=" + std::to_string(bps) });
+        }
+        pixels = tilebuf.get();
       }
 
       for (uint32_t tile_x = 0; tile_x < tile_width; tile_x++) {
@@ -978,7 +1017,7 @@ static Result<std::vector<T>> read_tiled_data(TIFF *tif, int32_t roi_x, int32_t 
             uint32_t pixel_offset = nc * (final_y * roi_w + final_x);
 
             for (uint32_t c = 0; c < nc; ++c) {
-              inbuf[pixel_offset + c] = tilebuf[(tile_x + tile_y * tile_width) * nc + c];
+              inbuf[pixel_offset + c] = pixels[(tile_x + tile_y * tile_width) * nc + c];
             }
           }
         }
