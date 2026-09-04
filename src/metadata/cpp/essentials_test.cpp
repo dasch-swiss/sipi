@@ -27,6 +27,7 @@
 
 #include "metadata/essentials.h"
 #include "metadata/internal/protobuf_codec.h"
+#include "util/Error.h"
 
 namespace {
 
@@ -202,6 +203,19 @@ TEST(EssentialsParseLegacy, MalformedReturnsUnsetPacket)
   // an unset packet.
   const auto e = Essentials::parse_legacy("only|three|fields");
   EXPECT_FALSE(e.is_set());
+}
+
+TEST(EssentialsParseLegacy, ShortIccFieldDoesNotUnderflow)
+{
+  // Field 5 ("A=") is a degenerate 2-character base64 value: short enough
+  // that the pre-fix `calcDecodeLength` (length*0.75 - padding, truncated to
+  // int) would have gone negative and, once assigned into the size_t
+  // `decodedLength`, wrapped into a huge allocation and an over-wide
+  // BIO_read bound by the encoded length rather than the buffer size.
+  // OpenSSL rejects "A=" as an incomplete base64 quantum, so the fixed
+  // implementation surfaces that cleanly as a catchable `shttps::Error`
+  // instead of underflowing the buffer size and overrunning it.
+  EXPECT_THROW(Essentials::parse_legacy("scan.tif|image/tiff|sha256|0123456789abcdef|USE_ICC|A="), shttps::Error);
 }
 
 // --- to_hex / from_hex -----------------------------------------------------
