@@ -24,6 +24,7 @@
 #include <assert.h>
 #include <cmath>
 #include <cstddef>
+#include <cstdint>
 #include <cstdio>
 #include <cstdlib>
 #include <fstream>
@@ -65,6 +66,10 @@
 
 using namespace kdu_core;
 using namespace kdu_supp;
+
+namespace {
+constexpr std::int64_t kMaxMetadataBytes = 64 * 1024 * 1024;// 64 MiB cap on any single embedded metadata box
+}// namespace
 
 namespace Sipi {
 
@@ -365,17 +370,34 @@ Result<bool> SipiIOJ2k::read(SipiImage *img,
       do {
         if (box.get_box_type() == jp2_uuid_4cc) {
           kdu_byte buf[16];
-          box.read(buf, 16);
+          if (box.read(buf, 16) != 16) {
+            return std::unexpected(SipiValueError{ ErrorCode::kMalformedInput,
+              "Cannot read JPEG2000 file \"" + filepath + "\": truncated UUID box header" });
+          }
           if (memcmp(buf, xmp_uuid, 16) == 0) {
-            auto xmp_len = box.get_remaining_bytes();
+            const std::int64_t xmp_len = box.get_remaining_bytes();
+            if (xmp_len < 0 || xmp_len > kMaxMetadataBytes) {
+              return std::unexpected(SipiValueError{ ErrorCode::kMalformedInput,
+                "Cannot read JPEG2000 file \"" + filepath + "\": metadata box length out of range" });
+            }
             auto xmp_buf = std::make_unique<char[]>(xmp_len);
-            box.read((kdu_byte *)xmp_buf.get(), xmp_len);
+            if (box.read((kdu_byte *)xmp_buf.get(), static_cast<int>(xmp_len)) != xmp_len) {
+              return std::unexpected(SipiValueError{ ErrorCode::kMalformedInput,
+                "Cannot read JPEG2000 file \"" + filepath + "\": truncated XMP box" });
+            }
             img->set_xmp(std::make_shared<Xmp>(xmp_buf.get(),
               xmp_len));// ToDo: Problem with thread safety!!!!!!!!!!!!!!
           } else if (memcmp(buf, iptc_uuid, 16) == 0) {
-            auto iptc_len = box.get_remaining_bytes();
+            const std::int64_t iptc_len = box.get_remaining_bytes();
+            if (iptc_len < 0 || iptc_len > kMaxMetadataBytes) {
+              return std::unexpected(SipiValueError{ ErrorCode::kMalformedInput,
+                "Cannot read JPEG2000 file \"" + filepath + "\": metadata box length out of range" });
+            }
             auto iptc_buf = std::make_unique<unsigned char[]>(iptc_len);
-            box.read(iptc_buf.get(), iptc_len);
+            if (box.read(iptc_buf.get(), static_cast<int>(iptc_len)) != iptc_len) {
+              return std::unexpected(SipiValueError{ ErrorCode::kMalformedInput,
+                "Cannot read JPEG2000 file \"" + filepath + "\": truncated IPTC box" });
+            }
             // A malformed IPTC blob is fatal: SIPI is a repository and must
             // not admit corrupt embedded metadata. kdu_teardown releases the
             // live Kakadu resources on this early return.
@@ -385,9 +407,16 @@ Result<bool> SipiIOJ2k::read(SipiImage *img,
               return std::unexpected(iptc.error());
             }
           } else if (memcmp(buf, exif_uuid, 16) == 0) {
-            auto exif_len = box.get_remaining_bytes();
+            const std::int64_t exif_len = box.get_remaining_bytes();
+            if (exif_len < 0 || exif_len > kMaxMetadataBytes) {
+              return std::unexpected(SipiValueError{ ErrorCode::kMalformedInput,
+                "Cannot read JPEG2000 file \"" + filepath + "\": metadata box length out of range" });
+            }
             auto exif_buf = std::make_unique<unsigned char[]>(exif_len);
-            box.read(exif_buf.get(), exif_len);
+            if (box.read(exif_buf.get(), static_cast<int>(exif_len)) != exif_len) {
+              return std::unexpected(SipiValueError{ ErrorCode::kMalformedInput,
+                "Cannot read JPEG2000 file \"" + filepath + "\": truncated EXIF box" });
+            }
             // A malformed EXIF blob is fatal: SIPI is a repository and must
             // not admit corrupt embedded metadata. kdu_teardown releases the
             // live Kakadu resources on this early return.
@@ -400,9 +429,16 @@ Result<bool> SipiIOJ2k::read(SipiImage *img,
             // SIPI Essentials carrier (ADR-0005 / DEV-6410). New on-disk
             // location for the packet; the codestream-comment branch below
             // remains as the legacy fallback for pre-rollout JP2 files.
-            auto ess_len = box.get_remaining_bytes();
+            const std::int64_t ess_len = box.get_remaining_bytes();
+            if (ess_len < 0 || ess_len > kMaxMetadataBytes) {
+              return std::unexpected(SipiValueError{ ErrorCode::kMalformedInput,
+                "Cannot read JPEG2000 file \"" + filepath + "\": metadata box length out of range" });
+            }
             auto ess_buf = std::make_unique<std::byte[]>(ess_len);
-            box.read(reinterpret_cast<kdu_byte *>(ess_buf.get()), ess_len);
+            if (box.read(reinterpret_cast<kdu_byte *>(ess_buf.get()), static_cast<int>(ess_len)) != ess_len) {
+              return std::unexpected(SipiValueError{ ErrorCode::kMalformedInput,
+                "Cannot read JPEG2000 file \"" + filepath + "\": truncated Essentials box" });
+            }
             std::span<const std::byte> bytes(ess_buf.get(), ess_len);
             if (auto parsed = Essentials::parse(bytes)) {
               img->essential_metadata(*parsed);
@@ -464,7 +500,7 @@ Result<bool> SipiIOJ2k::read(SipiImage *img,
     kdu_codestream_comment comment = codestream.get_comment();
     while (comment.exists()) {
       const char *cstr = comment.get_text();
-      if (strncmp(cstr, "SIPI:", 5) == 0) {
+      if (cstr != nullptr && strncmp(cstr, "SIPI:", 5) == 0) {
         Essentials se = Essentials::parse_legacy(cstr + 5);
         img->essential_metadata(se);
         break;
@@ -928,11 +964,21 @@ Result<SipiImgInfo> SipiIOJ2k::read_shape(const std::string &filepath)
       do {
         if (box.get_box_type() == jp2_uuid_4cc) {
           kdu_byte buf[16];
-          box.read(buf, 16);
+          if (box.read(buf, 16) != 16) {
+            return std::unexpected(SipiValueError{ ErrorCode::kShapeProbeFailed,
+              "Cannot read JPEG2000 file \"" + filepath + "\": truncated UUID box header" });
+          }
           if (memcmp(buf, sipi_essentials_uuid, 16) == 0) {
-            auto ess_len = box.get_remaining_bytes();
+            const std::int64_t ess_len = box.get_remaining_bytes();
+            if (ess_len < 0 || ess_len > kMaxMetadataBytes) {
+              return std::unexpected(SipiValueError{ ErrorCode::kShapeProbeFailed,
+                "Cannot read JPEG2000 file \"" + filepath + "\": metadata box length out of range" });
+            }
             auto ess_buf = std::make_unique<std::byte[]>(ess_len);
-            box.read(reinterpret_cast<kdu_byte *>(ess_buf.get()), ess_len);
+            if (box.read(reinterpret_cast<kdu_byte *>(ess_buf.get()), static_cast<int>(ess_len)) != ess_len) {
+              return std::unexpected(SipiValueError{ ErrorCode::kShapeProbeFailed,
+                "Cannot read JPEG2000 file \"" + filepath + "\": truncated Essentials box" });
+            }
             std::span<const std::byte> bytes(ess_buf.get(), ess_len);
             if (auto parsed = Essentials::parse(bytes)) {
               const auto &f = parsed->fields();
@@ -1027,7 +1073,7 @@ Result<SipiImgInfo> SipiIOJ2k::read_shape(const std::string &filepath)
     kdu_codestream_comment comment = codestream.get_comment();
     while (comment.exists()) {
       const char *cstr = comment.get_text();
-      if (strncmp(cstr, "SIPI:", 5) == 0) {
+      if (cstr != nullptr && strncmp(cstr, "SIPI:", 5) == 0) {
         Essentials se = Essentials::parse_legacy(cstr + 5);
         info.origmimetype = se.fields().mimetype;
         info.origname = se.fields().origname;

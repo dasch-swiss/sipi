@@ -25,6 +25,7 @@ using Sipi::ErrorCode;
 using Sipi::SipiImage;
 
 const std::string kExifTruncatedJp2 = sipi::test::data_dir() + "/images/malformed/j2k_exif_truncated.jp2";
+const std::string kUuidRubberLengthJp2 = sipi::test::data_dir() + "/images/malformed/j2k_uuid_rubber_length.jp2";
 
 // The appended uuid box's payload is `Exif\0\0`-free — it is the bare
 // little-endian TIFF prefix `"II*"` (byte-order mark + magic-number high
@@ -37,6 +38,22 @@ TEST(J2kMetadataRegression, RejectsExifTruncatedJp2EndToEnd)
   auto result = img.read(kExifTruncatedJp2);
   ASSERT_FALSE(result.has_value());
   EXPECT_EQ(result.error().code(), ErrorCode::kMetadataParseFailed);
+}
+
+// The appended uuid box carries a 32-bit box-length field of 0 (ISO BMFF
+// "extends to end of file" / rubber length), so Kakadu's
+// `jp2_input_box::get_remaining_bytes()` returns -1 for it. read() must
+// reject this before sizing any allocation from that negative length — a
+// direct cast to the make_unique<char[]> size_t parameter would previously
+// have requested a SIZE_MAX-byte buffer; see
+// test/_test_data/images/malformed/README.md for how the fixture was
+// crafted.
+TEST(J2kMetadataRegression, RejectsUuidRubberLengthBoxEndToEnd)
+{
+  SipiImage img;
+  auto result = img.read(kUuidRubberLengthJp2);
+  ASSERT_FALSE(result.has_value());
+  EXPECT_EQ(result.error().code(), ErrorCode::kMalformedInput);
 }
 
 }// namespace

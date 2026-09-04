@@ -23,6 +23,7 @@ Each fixture's defect is documented in the table below as fixtures land.
 | `palette_undersized_lut.jp2` | Palette (indexed-color) JP2 with an 8-bit index component but a `pclr` box declaring only 128 entries, so index values 128..255 would read past the R/G/B LUTs; regresses `validate_j2k_palette_mapping()` rejecting the mapping through the whole `SipiIOJ2k::read()` decode path — Kakadu parses the box structure, the guard fails it closed before the expansion buffer is sized (DEV-6065). The well-formed counterpart it must be distinguished from is the ISO/IEC 15444-4 conformance file `iso-15444-4/testfiles_jp2/file9.jp2` (256-entry, 3-column palette), which decodes to RGB. |
 | `j2k_oversized_dimensions.jp2` | JP2 whose codestream `SIZ` marker segment (`0xFF51`) declares `Xsiz`/`Ysiz`/`XTsiz`/`YTsiz` of 262144px (`1 << 18`, above `kMaxDecodeDim` = `1 << 17`), with the `ihdr` box's height/width patched to match so container and codestream agree; regresses `validate_decode_dims()` rejecting the header — Kakadu parses the (structurally valid, single-tile) main header and `SipiIOJ2k::read()` gets as far as `codestream.get_dims()` before the guard reports the rejection, well before any decode buffer is sized (DEV-6063). |
 | `j2k_exif_truncated.jp2` | A top-level `uuid` box, appended after the codestream (`jp2c`) box, whose first 16 bytes are the EXIF UUID (`JpgTiffExif->JP2`) and whose payload is `"II*"` (3 bytes: a little-endian TIFF byte-order mark and magic-number high byte, but no low byte, no IFD offset, and no IFD behind it) — the same payload the JPEG `jpeg_exif_truncated.jpg` fixture uses. `SipiIOJ2k::read()`'s box walk reaches this box, reads the 16-byte UUID and hands the remaining bytes to `Exif::parse()`, which throws on the malformed TIFF structure; regresses `SipiIOJ2k::read()`'s fatal-metadata contract — a file whose embedded EXIF blob fails to parse is refused with `ErrorCode::kMetadataParseFailed`, not admitted with the bad blob silently dropped (DEV-7056). |
+| `j2k_uuid_rubber_length.jp2` | A top-level `uuid` box, appended after the codestream (`jp2c`) box, whose 32-bit box-length field (`LBox`) is `0` — the ISO BMFF "box extends to end of file" / rubber-length convention — carrying the EXIF UUID (`JpgTiffExif->JP2`) followed by 8 arbitrary payload bytes. Kakadu's `jp2_input_box::get_remaining_bytes()` returns `-1` for a box with a rubber length; regresses `SipiIOJ2k::read()`'s box-length guard, which rejects a negative (or over-cap) remaining-byte count with `ErrorCode::kMalformedInput` before sizing any `make_unique<...[]>` allocation from it — the unguarded cast of `-1` to the `size_t` allocation-size parameter would previously have requested a `SIZE_MAX`-byte buffer (S2-15). |
 | `tiff_planar_separate_lzw_rgb.tif` | Well-formed 16x16 RGB TIFF, LZW-compressed, `PlanarConfig=Separate` (RRRR…GGGG…BBBB…), with a deterministic per-channel gradient (R = x*16 mod 256, G = y*16 mod 256, B = (x+y)*8 mod 256) so a cropped decode's pixel values can be asserted exactly. Regresses `read_standard_data()`'s `PLANARCONFIG_SEPARATE` branches (both the uncompressed and LZW-compressed variants), which wrote each channel's rows at the absolute-row offset `nc * roi_w + roi_h + i * roi_w` instead of the ROI-relative `(c * roi_h + (i - roi_y)) * roi_w` — an out-of-bounds `inbuf` write for any requested region with `roi_y > 0` (S2-01). |
 | `tiff_tiled_planar_separate_rgba.tif` | Well-formed 32x32, 16x16-tiled, `PlanarConfig=Separate` RGBA TIFF (4 samples, 8 bits/sample) spanning a 2x2 tile grid, with a deterministic per-channel gradient (R = x*7 mod 256, G = y*5 mod 256, B = (x+y)*3 mod 256, A = 255 - (x*y mod 256)) so a full-image decode's pixel values can be asserted exactly. Regresses `read_tiled_data()`'s `PLANARCONFIG_SEPARATE` branch, which read only the sample-0 plane of each tile into a one-plane buffer and then handed that buffer to `separateToContig()` as if it held all `nc` interleaved planes — a heap-buffer-overflow read of `(nc - 1) * tile_size` bytes of adjacent heap into the decoded image (S2-06). |
 | `tiff_scanline_undersized.tif` | A 145-byte TIFF with a corrupted IFD — an 8x17 `ImageWidth`/`ImageLength` pair, a duplicate `ImageWidth` entry carrying an invalid field type, and a `Photometric` entry whose `count` is garbage — that libtiff's own directory parser resolves to a `TIFFScanlineSize()` smaller than SIPI's independently-computed per-scanline byte count (`nx * SamplesPerPixel * BitsPerSample / 8`, both read via SIPI's own `TIFFGetField` calls on the same, differently-cached, directory). This is the exact nightly libFuzzer/ASan crash reproducer `crash-2866a0e15757123df010b783d3ce63b97c99724e` (downloaded verbatim from the `fuzz-crashes-tiff` artifact of the 2026-09-04 `fuzz.yml` nightly run), unmodified; regresses the `read_standard_data()` scanline-size validation that rejects the mismatch with `ErrorCode::kMalformedInput` before the undersized `TIFFScanlineSize()`-allocated buffer is ever memcpy'd into at the SIPI-computed length (S2-08). |
@@ -81,6 +82,25 @@ a single well-formed top-level `uuid` box (4-byte big-endian box length,
 described above) is appended verbatim after the file's existing boxes, with
 no other byte changed and the codestream left untouched. `SipiIOJ2k::read()`'s
 box walk visits it like any other top-level box and reaches `Exif::parse()`.
+
+`j2k_uuid_rubber_length.jp2` is likewise hand-edited from
+`images/unit/ycbcr16.jpx`: a top-level `uuid` box with a 4-byte big-endian
+box-length field of `0` (rubber length), `uuid` type, the 16-byte EXIF UUID,
+then 8 arbitrary payload bytes, is appended verbatim after the file's
+existing boxes, with no other byte changed and the codestream left
+untouched:
+
+    python3 -c "
+    import struct
+    base = open('images/unit/ycbcr16.jpx', 'rb').read()
+    exif_uuid = b'JpgTiffExif->JP2'
+    out = base + struct.pack('>I', 0) + b'uuid' + exif_uuid + b'AAAAAAAA'
+    open('images/malformed/j2k_uuid_rubber_length.jp2', 'wb').write(out)
+    "
+
+`SipiIOJ2k::read()`'s box walk visits this box like any other top-level box,
+and Kakadu's `jp2_input_box::get_remaining_bytes()` reports `-1` for its
+(indeterminate) rubber length.
 
 `tiff_planar_separate_lzw_rgb.tif` is not produced by `generate_malformed_images`
 either: it is a well-formed file (the defect is in SIPI's decode path, not
