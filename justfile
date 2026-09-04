@@ -291,6 +291,10 @@ bazel-build-fuzz *FLAGS='':
         //src/format_handlers/fuzz:jpeg_decode_fuzz_bin //src/format_handlers/fuzz:jpeg_decode_fuzz_corpus \
         //src/format_handlers/fuzz:png_decode_fuzz_bin //src/format_handlers/fuzz:png_decode_fuzz_corpus \
         //src/format_handlers/fuzz:j2k_decode_fuzz_bin //src/format_handlers/fuzz:j2k_decode_fuzz_corpus \
+        //src/format_handlers/fuzz:tiff_roundtrip_fuzz_bin //src/format_handlers/fuzz:tiff_roundtrip_fuzz_corpus \
+        //src/format_handlers/fuzz:jpeg_roundtrip_fuzz_bin //src/format_handlers/fuzz:jpeg_roundtrip_fuzz_corpus \
+        //src/format_handlers/fuzz:png_roundtrip_fuzz_bin //src/format_handlers/fuzz:png_roundtrip_fuzz_corpus \
+        //src/format_handlers/fuzz:j2k_roundtrip_fuzz_bin //src/format_handlers/fuzz:j2k_roundtrip_fuzz_corpus \
         //bazel:llvm-symbolizer
     # The sanitizer runtime symbolizes crash frames by shelling out to
     # `llvm-symbolizer`, which is a source file inside the hermetic toolchain
@@ -300,7 +304,7 @@ bazel-build-fuzz *FLAGS='':
     # first-party frames print as bare `binary+0xOFFSET`.
     mkdir -p .fuzz
     ln -sfn "$(bazel info execution_root)/$(bazel cquery --config=fuzz //bazel:llvm-symbolizer --output=files 2>/dev/null | head -1)" .fuzz/llvm-symbolizer
-    echo "Instrumented fuzz binaries at: $(pwd)/bazel-bin/src/iiifparser/fuzz/parse_request_fuzz_bin, $(pwd)/bazel-bin/src/format_handlers/fuzz/{tiff,jpeg,png,j2k}_decode_fuzz_bin"
+    echo "Instrumented fuzz binaries at: $(pwd)/bazel-bin/src/iiifparser/fuzz/parse_request_fuzz_bin, $(pwd)/bazel-bin/src/format_handlers/fuzz/{tiff,jpeg,png,j2k}_decode_fuzz_bin, $(pwd)/bazel-bin/src/format_handlers/fuzz/{tiff,jpeg,png,j2k}_roundtrip_fuzz_bin"
     echo "llvm-symbolizer at:            $(pwd)/.fuzz/llvm-symbolizer"
 
 # short name -> "_bin target|_corpus target|dict path|max_len|checked-in corpus dir"
@@ -316,6 +320,10 @@ tiff //src/format_handlers/fuzz:tiff_decode_fuzz_bin //src/format_handlers/fuzz:
 jpeg //src/format_handlers/fuzz:jpeg_decode_fuzz_bin //src/format_handlers/fuzz:jpeg_decode_fuzz_corpus src/format_handlers/fuzz/dicts/jpeg.dict 16384 src/format_handlers/corpus/jpeg
 png //src/format_handlers/fuzz:png_decode_fuzz_bin //src/format_handlers/fuzz:png_decode_fuzz_corpus src/format_handlers/fuzz/dicts/png.dict 8192 src/format_handlers/corpus/png
 j2k //src/format_handlers/fuzz:j2k_decode_fuzz_bin //src/format_handlers/fuzz:j2k_decode_fuzz_corpus - 32768 src/format_handlers/corpus/j2k
+tiff_roundtrip //src/format_handlers/fuzz:tiff_roundtrip_fuzz_bin //src/format_handlers/fuzz:tiff_roundtrip_fuzz_corpus src/format_handlers/fuzz/dicts/tiff.dict 16384 src/format_handlers/corpus/tiff
+jpeg_roundtrip //src/format_handlers/fuzz:jpeg_roundtrip_fuzz_bin //src/format_handlers/fuzz:jpeg_roundtrip_fuzz_corpus src/format_handlers/fuzz/dicts/jpeg.dict 16384 src/format_handlers/corpus/jpeg
+png_roundtrip //src/format_handlers/fuzz:png_roundtrip_fuzz_bin //src/format_handlers/fuzz:png_roundtrip_fuzz_corpus src/format_handlers/fuzz/dicts/png.dict 8192 src/format_handlers/corpus/png
+j2k_roundtrip //src/format_handlers/fuzz:j2k_roundtrip_fuzz_bin //src/format_handlers/fuzz:j2k_roundtrip_fuzz_corpus - 16384 src/format_handlers/corpus/j2k
 '
 
 # Run the mutation loop locally, e.g. `just fuzz tiff -max_total_time=60`.
@@ -342,7 +350,7 @@ fuzz TARGET='parse_request' *FLAGS='': bazel-build-fuzz
         fi
     done <<< "{{_fuzz_target_table}}"
     if [ -z "$bin" ]; then
-        echo "ERROR: unknown fuzz TARGET '{{TARGET}}' — valid names: parse_request, tiff, jpeg, png, j2k" >&2
+        echo "ERROR: unknown fuzz TARGET '{{TARGET}}' — valid names: parse_request, tiff, jpeg, png, j2k, tiff_roundtrip, jpeg_roundtrip, png_roundtrip, j2k_roundtrip" >&2
         exit 1
     fi
     bin_path="bazel-bin/${bin#//}"
@@ -389,7 +397,7 @@ fuzz-corpus-merge TARGET='parse_request': bazel-build-fuzz
         fi
     done <<< "{{_fuzz_target_table}}"
     if [ -z "$bin" ]; then
-        echo "ERROR: unknown fuzz TARGET '{{TARGET}}' — valid names: parse_request, tiff, jpeg, png, j2k" >&2
+        echo "ERROR: unknown fuzz TARGET '{{TARGET}}' — valid names: parse_request, tiff, jpeg, png, j2k, tiff_roundtrip, jpeg_roundtrip, png_roundtrip, j2k_roundtrip" >&2
         exit 1
     fi
     bin_path="bazel-bin/${bin#//}"

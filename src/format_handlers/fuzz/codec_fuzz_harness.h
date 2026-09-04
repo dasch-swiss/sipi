@@ -69,6 +69,36 @@ inline const std::string &fuzz_temp_path(const char *suffix) { return fuzz_temp_
 // in `run_decode`.
 inline const std::string &fuzz_roi_temp_path(const char *suffix) { return fuzz_temp_path_for<true>(suffix); }
 
+// Third per-process temp file, holding the round-trip pass's decode input
+// (distinct from `run_decode`'s two paths above so a target that links both
+// harnesses in the same process never collides). A separate template from
+// `fuzz_temp_path_for` above rather than a third `bool` value: `bool` only
+// has the two states that function already uses.
+template<int Slot> inline const std::string &fuzz_extra_temp_path_for(const char *suffix)
+{
+  static const std::string path = [suffix] {
+    const char *base = std::getenv("TEST_TMPDIR");
+    std::filesystem::path dir = (base != nullptr) ? std::filesystem::path{ base } : std::filesystem::temp_directory_path();
+    return (dir / ("sipi_codec_fuzz_" + std::to_string(getpid()) + "_extra" + std::to_string(Slot) + suffix)).string();
+  }();
+  return path;
+}
+
+inline const std::string &fuzz_roundtrip_temp_path(const char *suffix) { return fuzz_extra_temp_path_for<0>(suffix); }
+
+// One temp output path per encoder `ftype` string. Unlike the paths above,
+// this is computed fresh on every call rather than cached in a function-local
+// static: the encode targets loop over several `ftype` strings per fuzz
+// iteration, so a single cached path (stable-per-process, keyed only by the
+// first argument it ever saw) would silently make every encoder after the
+// first overwrite the same file instead of getting its own.
+inline std::string fuzz_roundtrip_out_path(const char *ftype)
+{
+  const char *base = std::getenv("TEST_TMPDIR");
+  std::filesystem::path dir = (base != nullptr) ? std::filesystem::path{ base } : std::filesystem::temp_directory_path();
+  return (dir / ("sipi_codec_fuzz_roundtrip_out_" + std::to_string(getpid()) + "_" + std::string(ftype))).string();
+}
+
 // Fixed header consumed from the front of the fuzzer-supplied buffer to drive
 // the region/size-aware decode pass: four little-endian `uint16_t` region
 // coordinates (x, y, w, h), two little-endian `uint16_t` size dimensions (w,
@@ -221,6 +251,72 @@ template<typename Handler> int run_decode(const uint8_t *data, size_t size, cons
       } catch (const std::exception &) {
       } catch (...) {
       }
+    }
+  }
+
+  return 0;
+}
+
+// Decode-then-encode round trip: `run_decode` above only ever reaches
+// `SipiIO::read`, so every encoder (`SipiIO::write`) is unreachable from the
+// fuzzer — a blind spot that let a JP2-encode bug (S2-02) and a
+// JPEG-marker-write bug (S2-14) ship undetected. This drives the same
+// `read_shape`-then-`read` decode as `run_decode`'s whole-buffer pass, then,
+// if the decode produced an image, re-encodes it through every format
+// `SipiImage::write` supports ("tif", "jpx", "png", "jpg" — see
+// `SipiImage.cpp`'s write dispatch), including the handler's own format when
+// that differs from `Handler`'s native decode format. A write failure or
+// thrown exception is a valid fuzz outcome, exactly like a decode rejection
+// above; only a crash/sanitizer report is a finding.
+template<typename Handler> int run_roundtrip(const uint8_t *data, size_t size, const char *in_suffix)
+{
+  const std::string &path = fuzz_roundtrip_temp_path(in_suffix);
+  {
+    std::ofstream out{ path, std::ios::binary | std::ios::trunc };
+    out.write(reinterpret_cast<const char *>(data), static_cast<std::streamsize>(size));
+  }
+
+  Handler handler;
+  bool skip_read = false;
+
+  try {
+    if (const auto r = handler.read_shape(path); r) {
+      skip_read = estimated_decode_bytes(*r) > kMaxHarnessDecodeBytes;
+    }
+  } catch (const std::exception &) {
+  } catch (...) {
+  }
+
+  if (skip_read) { return 0; }
+
+  std::unique_ptr<Sipi::SipiImage> img;
+  try {
+    img = std::make_unique<Sipi::SipiImage>();
+    // Qualified for the same reason as `run_decode`'s whole-buffer pass.
+    if (const auto r = handler.Sipi::SipiIO::read(img.get(), path); !r) { img.reset(); }
+  } catch (const std::exception &) {
+    img.reset();
+  } catch (...) {
+    img.reset();
+  }
+
+  if (!img) { return 0; }
+
+  // A malformed input can decode "successfully" into a degenerate image — zero
+  // width, height, or channels (e.g. a TIFF whose directory yields no strips,
+  // leaving SamplesPerPixel/scanline size at 0). Round-tripping that is not a
+  // meaningful encode test and drives the encoders through zero-size buffers
+  // and divisors that trip ASan; a real decoded image always has non-zero
+  // extent, so skip the encode rather than exercise a nonsense one.
+  if (img->getNx() == 0 || img->getNy() == 0 || img->getNc() == 0) { return 0; }
+
+  static constexpr const char *kEncodeFtypes[] = { "tif", "jpx", "png", "jpg" };
+  for (const char *ftype : kEncodeFtypes) {
+    const std::string out_path = fuzz_roundtrip_out_path(ftype);
+    try {
+      if (const auto r = img->write(ftype, out_path); !r) { /* a write rejection is a valid fuzz outcome */ }
+    } catch (const std::exception &) {
+    } catch (...) {
     }
   }
 

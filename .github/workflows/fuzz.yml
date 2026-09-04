@@ -1,8 +1,9 @@
 # Nightly coverage-guided fuzzing: the production Rust IIIF parser and the
-# four C++ codec decode handlers (SipiIOTiff, SipiIOJpeg, SipiIOPng,
-# SipiIOJ2k; DEV-7066).
+# four C++ codec handlers (SipiIOTiff, SipiIOJpeg, SipiIOPng, SipiIOJ2k;
+# DEV-7066), each with a decode-only leg and a decode-then-encode round-trip
+# leg (the latter is what reaches every codec's `write()`).
 #
-# Structure — a 5-entry matrix (one leg per harness, `fail-fast: false` so a
+# Structure — a 9-entry matrix (one leg per harness, `fail-fast: false` so a
 # crash in one codec never discards another target's corpus growth for the
 # night), each leg its own runner running five phases:
 #   1. Build — `just bazel-build-fuzz` (RBE-eligible Bazel build, same
@@ -69,7 +70,7 @@ jobs:
     # Two cold instrumented builds (plain + ASan, each building compiler-rt
     # from source), 900s of fuzzing, and a merge pass, per leg. ci.yml's
     # `coverage` job uses 90 for ONE instrumented config. The matrix runs its
-    # five legs in parallel, so wall-clock is unchanged from the single-target
+    # nine legs in parallel, so wall-clock is unchanged from the single-target
     # job this replaced.
     timeout-minutes: 150
     env:
@@ -77,10 +78,10 @@ jobs:
       # on every `bazel` invocation, and this job invokes `bazel` (via
       # `bazel-build-fuzz`) twice per leg (plain + ASan build) — a step-level
       # GH_TOKEN would miss whichever invocation didn't carry it. Job-level
-      # covers all of them uniformly. The codec targets (tiff/jpeg/png/j2k)
-      # link Kakadu and need this; the parser-only leg builds it too (one
-      # `bazel-build-fuzz` invocation builds all five binaries) but doesn't
-      # read it.
+      # covers all of them uniformly. The codec targets (tiff/jpeg/png/j2k,
+      # decode and round-trip) link Kakadu and need this; the parser-only leg
+      # builds it too (one `bazel-build-fuzz` invocation builds all nine
+      # binaries) but doesn't read it.
       GH_TOKEN: ${{ secrets.DASCHBOT_PAT }}
     strategy:
       fail-fast: false
@@ -124,9 +125,42 @@ jobs:
             max_len: "32768"
             dict: ""
             asan_options: ""
+          # Round-trip legs: decode-then-encode, reaching each handler's
+          # `write()` — the decode-only legs above never call it, which left
+          # every encoder (the JP2-encode bug S2-02 and the JPEG-marker-write
+          # bug S2-14) outside fuzzer reach.
+          - target: tiff_roundtrip
+            bin: src/format_handlers/fuzz/tiff_roundtrip_fuzz_bin
+            corpus_out: src/format_handlers/fuzz/tiff_roundtrip_fuzz_corpus
+            max_len: "16384"
+            dict: src/format_handlers/fuzz/dicts/tiff.dict
+            asan_options: ""
+          - target: jpeg_roundtrip
+            bin: src/format_handlers/fuzz/jpeg_roundtrip_fuzz_bin
+            corpus_out: src/format_handlers/fuzz/jpeg_roundtrip_fuzz_corpus
+            max_len: "16384"
+            dict: src/format_handlers/fuzz/dicts/jpeg.dict
+            # The round-trip leg also encodes via libjpeg-turbo's
+            # setjmp/longjmp error path — same LSan false-positive reasoning
+            # as the decode-only jpeg leg above.
+            asan_options: "detect_leaks=0"
+          - target: png_roundtrip
+            bin: src/format_handlers/fuzz/png_roundtrip_fuzz_bin
+            corpus_out: src/format_handlers/fuzz/png_roundtrip_fuzz_corpus
+            max_len: "8192"
+            dict: src/format_handlers/fuzz/dicts/png.dict
+            # Same setjmp/longjmp reasoning as the decode-only png leg above,
+            # now also on the libpng encode path.
+            asan_options: "detect_leaks=0"
+          - target: j2k_roundtrip
+            bin: src/format_handlers/fuzz/j2k_roundtrip_fuzz_bin
+            corpus_out: src/format_handlers/fuzz/j2k_roundtrip_fuzz_corpus
+            max_len: "16384"
+            dict: ""
+            asan_options: ""
     # One fuzz run per target at a time, and never kill a nightly leg
     # mid-flight: cancelling would discard the corpus growth the next run
-    # chains from. `matrix.target` is part of the group so the five legs run
+    # chains from. `matrix.target` is part of the group so the nine legs run
     # concurrently; a manual `workflow_dispatch` queues behind a running
     # nightly for the SAME target only.
     concurrency:
@@ -154,7 +188,7 @@ jobs:
           rbe-client-cert: ${{ secrets.REMOTEBUILD_CLIENT_CERT }}
           rbe-client-key: ${{ secrets.REMOTEBUILD_CLIENT_KEY }}
 
-      # Builds all five instrumented fuzz binaries every leg
+      # Builds all nine instrumented fuzz binaries every leg
       # (`bazel-build-fuzz` builds the whole target set in one invocation);
       # this leg only executes its own `matrix.bin`. A normal cacheable RBE
       # action — only the loop below is runner-local. The recipe already
@@ -277,7 +311,7 @@ jobs:
       # reason as the merge: a crash anywhere above still leaves the corpus
       # chained forward, which is the whole point of a coverage corpus.
       # `include-hidden-files` because the working directory is `.fuzz/`. The
-      # artifact name carries `matrix.target` — five legs run in parallel and
+      # artifact name carries `matrix.target` — nine legs run in parallel and
       # each needs its own chain.
       - name: Upload minimized corpus (chains into the next nightly)
         if: ${{ !cancelled() }}
@@ -325,7 +359,7 @@ jobs:
       # BEP for cache-hit-rate analysis (see the `bep-*` uploads in ci.yml).
       # One artifact per leg, both invocations: the glob tolerates the ASan
       # build's file being absent when an earlier step failed. The name
-      # carries `matrix.target` — five legs upload in the same workflow run
+      # carries `matrix.target` — nine legs upload in the same workflow run
       # and artifact names must be unique within it.
       - name: Upload build event JSON (cache-hit-rate analysis)
         if: always()

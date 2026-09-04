@@ -62,14 +62,25 @@ exercise a byte sequence this harness skips.
 
 Fuzzing of the `SipiIO` decode entry points — `read_shape` and `read` — for
 each of the four format handlers: `SipiIOTiff`, `SipiIOJpeg`, `SipiIOPng`,
-`SipiIOJ2k` (DEV-7066). The four targets live in `src/format_handlers/fuzz/`:
-`//src/format_handlers/fuzz:tiff_decode_fuzz`, `:jpeg_decode_fuzz`, `:png_decode_fuzz`,
-`:j2k_decode_fuzz`. This reopens the codec-level gap
+`SipiIOJ2k` (DEV-7066). Eight targets live in `src/format_handlers/fuzz/`:
+a decode-only target per handler (`//src/format_handlers/fuzz:tiff_decode_fuzz`,
+`:jpeg_decode_fuzz`, `:png_decode_fuzz`, `:j2k_decode_fuzz`) and a matching
+decode-then-encode round-trip target (`:tiff_roundtrip_fuzz`, `:jpeg_roundtrip_fuzz`,
+`:png_roundtrip_fuzz`, `:j2k_roundtrip_fuzz`). This reopens the codec-level gap
 [ADR-0020](../../adr/0020-oracle-removal.md) left when the oracle-only C++
 fuzz harness was retired — no other test layer feeds these handlers arbitrary
 byte streams. The motivating bug class is crafted-input memory corruption in
 header/marker parsing (TIFF IFD entries, JPEG APPn segments, PNG chunks,
 JP2 boxes) that no unit test catches and that hand review finds only by luck.
+
+The decode-only targets never call `SipiIO::write`, so every encoder was
+unreachable from the fuzzer — the blind spot a JP2-encode bug and a
+JPEG-marker-write bug both shipped through undetected. The round-trip targets
+close it: `run_roundtrip` (`codec_fuzz_harness.h`) decodes exactly like the
+decode-only pass, then, if the decode produced an image, re-encodes it through
+every format `SipiImage::write` supports ("tif", "jpx", "png", "jpg"). A write
+failure or thrown exception is a valid fuzz outcome, same as a decode
+rejection; only a crash or sanitizer report is a finding.
 
 ### The temp-file mechanism
 
@@ -124,17 +135,20 @@ limit survives that argument — only skipping the oversized decode does.
 
 ### Per-target knobs
 
-Each codec target passes `-max_len` and (except J2K) a `-dict=` flag; all five
+Each codec target passes `-max_len` and (except J2K) a `-dict=` flag; all nine
 targets (including the parser) pass `-timeout=25`.
 
-- **`-max_len` caps**: 16 KB for TIFF and JPEG, 8 KB for PNG, 32 KB for J2K.
-  The bug class these harnesses hunt is header/marker parsing at the front of
-  the file, so a small cap concentrates the mutation budget there instead of
-  on bulk pixel data a full-size image would carry.
+- **`-max_len` caps**: 16 KB for TIFF and JPEG (decode and round-trip alike),
+  8 KB for PNG (decode and round-trip), 32 KB for the J2K decode target, 16 KB
+  for the J2K round-trip target. The bug class these harnesses hunt is
+  header/marker parsing at the front of the file, so a small cap concentrates
+  the mutation budget there instead of on bulk pixel data a full-size image
+  would carry.
 - **Dictionaries**: `src/format_handlers/fuzz/dicts/{tiff,jpeg,png}.dict`, vendored
   verbatim from AFL++ (see the package README for provenance and license).
-  There is no canonical J2K dictionary upstream, so that target runs without
-  one. They are passed as explicit `-dict=` flags from the `justfile` recipes
+  Each round-trip target reuses its decode-side counterpart's dictionary.
+  There is no canonical J2K dictionary upstream, so neither J2K target runs
+  with one. They are passed as explicit `-dict=` flags from the `justfile` recipes
   rather than through `rules_fuzzing`'s `dictionary` `cc_fuzz_test` attribute:
   that attribute only reaches libFuzzer through the rule's Python launcher via
   `FUZZER_DICTIONARY_PATH`, and this repo executes the built `..._bin` binary
@@ -163,15 +177,17 @@ false-positive theory rather than an unrelated leak.
 
 `rules_fuzzing`'s default engine is `//fuzzing/engines:replay` with
 instrumentation `none`, so **without** `--config=fuzz` every target — the
-parser and all four codec handlers — needs no libFuzzer runtime and, e.g.,
+parser and all eight codec handlers (decode and round-trip) — needs no
+libFuzzer runtime and, e.g.,
 
 ```bash
 bazel test //src/iiifparser/fuzz:parse_request_fuzz
 bazel test //src/format_handlers/fuzz:tiff_decode_fuzz
+bazel test //src/format_handlers/fuzz:tiff_roundtrip_fuzz
 ```
 
 is a corpus-replay regression run: every seed through the harness, asserting no
-crash. All five build and run on every platform — macOS included — and ride
+crash. All nine build and run on every platform — macOS included — and ride
 along in the `//src/...` sweeps (`just bazel-test`, `bazel-test-unit`,
 `bazel-test-sanitized`, `bazel-coverage`), so every PR replays every corpus, and
 the sanitizer leg replays them under ASan/UBSan.
@@ -236,9 +252,9 @@ compiler-rt libFuzzer runtime for darwin (`libclang_rt.fuzzer_osx.a`, upstream
 gap where `@llvm//toolchain:resource_dir` used to select `[]` for
 `@platforms//os:macos`. The clang driver also links `libclang_rt.ubsan_osx_dynamic`
 on darwin, so `--@llvm//config:ubsan=true` is required there too (already set by
-`--config=fuzz`). This applies uniformly to all five targets, including the
-Kakadu-linked J2K harness — Kakadu itself is a native `cc_library` dependency
-with no darwin-specific gap here.
+`--config=fuzz`). This applies uniformly to all nine targets, including the
+Kakadu-linked J2K harnesses (decode and round-trip) — Kakadu itself is a
+native `cc_library` dependency with no darwin-specific gap here.
 
 One macOS-only wrinkle, unrelated to the LLVM runtime: `rules_fuzzing`'s Python
 launcher deps (`absl-py`) resolve as an sdist, and `rules_python`'s macOS sdist
@@ -347,8 +363,9 @@ needs the instrumented binary.
 
 `.github/workflows/fuzz.yml`, scheduled `17 3 * * *` (03:17 UTC — off-peak for
 the team and off the congested top of the hour), plus `workflow_dispatch` for
-manual runs. One job, a **5-leg matrix** (`parse_request`, `tiff`, `jpeg`,
-`png`, `j2k`) on `ubuntu-24.04` with `fail-fast: false` — a crash in one leg
+manual runs. One job, a **9-leg matrix** (`parse_request`, `tiff`, `jpeg`,
+`png`, `j2k`, `tiff_roundtrip`, `jpeg_roundtrip`, `png_roundtrip`,
+`j2k_roundtrip`) on `ubuntu-24.04` with `fail-fast: false` — a crash in one leg
 must never discard another target's corpus growth for the night. Each leg runs
 the same five phases: build, restore the working corpus, fuzz for 600s,
 minimize and upload the `fuzz-corpus-<target>` artifact, then a 300s
