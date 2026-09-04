@@ -223,3 +223,28 @@ fn crlf_in_identifier_no_header_injection() {
         "CRLF injection must not create new response headers"
     );
 }
+
+// =============================================================================
+// Unbounded Numeric Parameter Tests
+// =============================================================================
+
+#[test]
+fn oversized_rotation_returns_400() {
+    let srv = server();
+    let url = format!(
+        "{}/unit/lena512.jp2/full/max/99999999999/default.jpg",
+        srv.base_url
+    );
+
+    let resp = client()
+        .get(&url)
+        .timeout(Duration::from_secs(60))
+        .send()
+        .expect("request should complete, not hang");
+
+    assert_eq!(
+        resp.status().as_u16(),
+        400,
+        "oversized rotation parameter should return 400"
+    );
+}

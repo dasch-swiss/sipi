@@ -125,11 +125,25 @@ fn parse_region(s: &str) -> Result<(RegionKind, [f32; 4]), ParseError> {
             "IIIF Error reading Region parameter \"{s}\""
         )));
     }
+    let region_err = || ParseError(format!("IIIF Error reading Region parameter \"{s}\""));
     let mut coords = [0.0f32; 4];
     for (i, n) in nums.iter().enumerate() {
-        coords[i] = n
-            .parse::<f32>()
-            .map_err(|_| ParseError(format!("IIIF Error reading Region parameter \"{s}\"")))?;
+        let v = n.parse::<f32>().map_err(|_| region_err())?;
+        if !v.is_finite() {
+            return Err(region_err());
+        }
+        coords[i] = v;
+    }
+    // Downstream SipiRegion.cpp rounds Coords into `int` via `lroundf`; Percents
+    // are a fraction of the image dimensions, so anything outside 0..=100 is
+    // meaningless. Reject both here rather than letting UB or nonsense reach C++.
+    let in_range = match kind {
+        RegionKind::Coords => 0.0..=2_147_483_647.0,
+        RegionKind::Percents => 0.0..=100.0,
+        RegionKind::Full | RegionKind::Square => unreachable!(),
+    };
+    if coords.iter().any(|c| !in_range.contains(c)) {
+        return Err(region_err());
     }
     Ok((kind, coords))
 }
@@ -175,6 +189,9 @@ fn parse_size(s: &str) -> Result<SizeParts, ParseError> {
             return Err(err());
         }
         let mut pct = p.parse::<f32>().map_err(|_| err())?;
+        if !pct.is_finite() {
+            return Err(err());
+        }
         if pct <= 0.000_000_000_001 {
             pct = 1.0;
         }
@@ -261,9 +278,11 @@ fn parse_rotation(s: &str) -> Result<(bool, f32), ParseError> {
         Some(r) => (true, r),
         None => (false, s),
     };
-    let angle = body
-        .parse::<f32>()
-        .map_err(|_| ParseError(format!("Could not parse IIIF rotation parameter: {s}")))?;
+    let rotation_err = || ParseError(format!("Could not parse IIIF rotation parameter: {s}"));
+    let angle = body.parse::<f32>().map_err(|_| rotation_err())?;
+    if !angle.is_finite() || !(0.0..=360.0).contains(&angle) {
+        return Err(rotation_err());
+    }
     Ok((mirror, angle))
 }
 
@@ -360,6 +379,31 @@ mod tests {
         assert_eq!(parse_rotation("").unwrap(), (false, 0.0));
         assert_eq!(parse_rotation("90").unwrap(), (false, 90.0));
         assert_eq!(parse_rotation("!180").unwrap(), (true, 180.0));
+    }
+
+    #[test]
+    fn rotation_param_rejects_out_of_range() {
+        assert!(parse_rotation("400").is_err());
+        assert!(parse_rotation("360.1").is_err());
+        assert!(parse_rotation(&"9".repeat(40)).is_err());
+        assert!(parse_rotation("360").is_ok());
+        assert!(parse_rotation("0").is_ok());
+    }
+
+    #[test]
+    fn region_param_rejects_out_of_range() {
+        let huge = "9".repeat(40);
+        assert!(parse_region(&format!("{huge},{huge},{huge},{huge}")).is_err());
+        assert!(parse_region("pct:0,0,150,50").is_err());
+        assert!(parse_region("pct:0,0,50,50").is_ok());
+        assert!(parse_region("10,20,30,40").is_ok());
+    }
+
+    #[test]
+    fn size_param_rejects_non_finite_pct() {
+        let huge = "9".repeat(40);
+        assert!(parse_size(&format!("pct:{huge}")).is_err());
+        assert!(parse_size("pct:50").is_ok());
     }
 
     #[test]

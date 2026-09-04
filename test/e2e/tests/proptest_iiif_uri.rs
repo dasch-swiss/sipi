@@ -193,6 +193,64 @@ proptest! {
     }
 }
 
+/// Digit-only strings long enough that `f32::from_str` overflows them to
+/// infinity — the shape that used to slip past classification and hang or
+/// blow up the engine downstream.
+fn oversized_digit_string_strategy() -> impl Strategy<Value = String> {
+    (39usize..=45)
+        .prop_flat_map(|n| proptest::string::string_regex(&format!("[0-9]{{{n}}}")).unwrap())
+}
+
+proptest! {
+    #![proptest_config(ProptestConfig::with_cases(16))]
+
+    /// An oversized numeric value in the rotation, region, or size-pct segment
+    /// must be rejected with 400, not hang or crash the server.
+    #[test]
+    fn oversized_numeric_segment_returns_400(d in oversized_digit_string_strategy()) {
+        let srv = server();
+
+        let rotation_url = format!(
+            "{}/unit/lena512.jp2/full/max/{}/default.jpg",
+            srv.base_url, d
+        );
+        let region_url = format!(
+            "{}/unit/lena512.jp2/{},{},{},{}/max/0/default.jpg",
+            srv.base_url, d, d, d, d
+        );
+        let size_pct_url = format!(
+            "{}/unit/lena512.jp2/full/pct:{}/0/default.jpg",
+            srv.base_url, d
+        );
+
+        for url in [&rotation_url, &region_url, &size_pct_url] {
+            let resp = client()
+                .get(url)
+                .timeout(std::time::Duration::from_secs(60))
+                .send();
+
+            match resp {
+                Ok(r) => {
+                    prop_assert_eq!(
+                        r.status().as_u16(),
+                        400,
+                        "oversized numeric segment should return 400 for URL: {}",
+                        url
+                    );
+                }
+                Err(e) => {
+                    prop_assert!(
+                        false,
+                        "request failed (possible hang/crash) for URL {}: {}",
+                        url,
+                        e
+                    );
+                }
+            }
+        }
+    }
+}
+
 // ---------------------------------------------------------------------------
 // Property: URL-encoded identifiers round-trip correctly
 // ---------------------------------------------------------------------------
