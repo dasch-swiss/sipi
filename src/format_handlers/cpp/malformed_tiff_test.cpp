@@ -10,7 +10,9 @@
 // //test/unit/fixtures:generate_malformed_images); see that directory's
 // README.md for what each file's defect is. This is the DECODE path only
 // (SipiImage::read()) — a JPX write path is out of scope here (unrelated
-// Kakadu PALETTE_Conversion SIGILL on some platforms).
+// Kakadu PALETTE_Conversion SIGILL on some platforms). The S2-02/S2-03 tests
+// below are the exception: they exercise SipiIOJ2k's non-PALETTE JP2
+// encode/decode paths, which do not trip that SIGILL.
 
 #include "gtest/gtest.h"
 
@@ -19,6 +21,7 @@
 #include "image/SipiImage.h"
 #include "test_paths.h"
 
+#include <cstdio>
 #include <memory>
 
 namespace {
@@ -201,4 +204,36 @@ TEST(MalformedTiff, ScanlineUndersizedRejectsCleanly)
   const auto r = img.read(malformed_path("tiff_scanline_undersized.tif"));
   ASSERT_FALSE(r.has_value());
   EXPECT_EQ(r.error().code(), Sipi::ErrorCode::kMalformedInput);
+}
+
+// S2-02: an 8-component image (5 more than the fixed-size `int
+// stripe_heights[5]` array SipiIOJ2k::write() used to declare) must encode
+// to JP2 without corrupting the stack. `tiff_eight_sample.tif` is a 16x16,
+// 8-bit, 8-sample (RGB + 5 unspecified extra samples) TIFF; regresses the
+// `push_stripe` stripe-heights buffer being sized from `img->getNc()`
+// (a `std::vector<int>`) instead of the fixed 5-element array (S2-02).
+TEST(MalformedTiff, EightSampleTiffEncodesToJp2Cleanly)
+{
+  Sipi::SipiImage img;
+  ASSERT_TRUE(img.read(malformed_path("tiff_eight_sample.tif")).has_value());
+  ASSERT_EQ(img.getNc(), 8U);
+
+  const std::string dst = sipi::test::tmp_dir() + "/_j2k_eight_sample_write_test.jp2";
+  ASSERT_TRUE(img.write("jpx", dst).has_value());
+  std::remove(dst.c_str());
+}
+
+// S2-03: an 8-component JP2 (same overrun as S2-02, but on the decode side's
+// `pull_stripe` call) must decode cleanly. `j2k_eight_component.jp2` is the
+// JP2 encoding of `tiff_eight_sample.tif`; regresses the stripe-heights
+// buffer being sized from `codestream.get_num_components()` instead of the
+// fixed 5-element array (S2-03).
+TEST(MalformedTiff, EightComponentJp2DecodesCleanly)
+{
+  Sipi::SipiImage img;
+  const auto r = img.read(malformed_path("j2k_eight_component.jp2"));
+  ASSERT_TRUE(r.has_value());
+  EXPECT_EQ(img.getNx(), 16U);
+  EXPECT_EQ(img.getNy(), 16U);
+  EXPECT_EQ(img.getNc(), 8U);
 }

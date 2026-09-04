@@ -26,6 +26,8 @@ Each fixture's defect is documented in the table below as fixtures land.
 | `tiff_planar_separate_lzw_rgb.tif` | Well-formed 16x16 RGB TIFF, LZW-compressed, `PlanarConfig=Separate` (RRRR…GGGG…BBBB…), with a deterministic per-channel gradient (R = x*16 mod 256, G = y*16 mod 256, B = (x+y)*8 mod 256) so a cropped decode's pixel values can be asserted exactly. Regresses `read_standard_data()`'s `PLANARCONFIG_SEPARATE` branches (both the uncompressed and LZW-compressed variants), which wrote each channel's rows at the absolute-row offset `nc * roi_w + roi_h + i * roi_w` instead of the ROI-relative `(c * roi_h + (i - roi_y)) * roi_w` — an out-of-bounds `inbuf` write for any requested region with `roi_y > 0` (S2-01). |
 | `tiff_tiled_planar_separate_rgba.tif` | Well-formed 32x32, 16x16-tiled, `PlanarConfig=Separate` RGBA TIFF (4 samples, 8 bits/sample) spanning a 2x2 tile grid, with a deterministic per-channel gradient (R = x*7 mod 256, G = y*5 mod 256, B = (x+y)*3 mod 256, A = 255 - (x*y mod 256)) so a full-image decode's pixel values can be asserted exactly. Regresses `read_tiled_data()`'s `PLANARCONFIG_SEPARATE` branch, which read only the sample-0 plane of each tile into a one-plane buffer and then handed that buffer to `separateToContig()` as if it held all `nc` interleaved planes — a heap-buffer-overflow read of `(nc - 1) * tile_size` bytes of adjacent heap into the decoded image (S2-06). |
 | `tiff_scanline_undersized.tif` | A 145-byte TIFF with a corrupted IFD — an 8x17 `ImageWidth`/`ImageLength` pair, a duplicate `ImageWidth` entry carrying an invalid field type, and a `Photometric` entry whose `count` is garbage — that libtiff's own directory parser resolves to a `TIFFScanlineSize()` smaller than SIPI's independently-computed per-scanline byte count (`nx * SamplesPerPixel * BitsPerSample / 8`, both read via SIPI's own `TIFFGetField` calls on the same, differently-cached, directory). This is the exact nightly libFuzzer/ASan crash reproducer `crash-2866a0e15757123df010b783d3ce63b97c99724e` (downloaded verbatim from the `fuzz-crashes-tiff` artifact of the 2026-09-04 `fuzz.yml` nightly run), unmodified; regresses the `read_standard_data()` scanline-size validation that rejects the mismatch with `ErrorCode::kMalformedInput` before the undersized `TIFFScanlineSize()`-allocated buffer is ever memcpy'd into at the SIPI-computed length (S2-08). |
+| `tiff_eight_sample.tif` | Well-formed 16x16 RGB TIFF with 5 extra (unspecified) samples, 8 components total, 8 bits/sample, with a deterministic per-sample gradient (`(x*13 + y*7 + c*31) % 256`). Drives `SipiIOJ2k::write()`'s JP2 encode path with more than 5 components; regresses the fixed-size `int stripe_heights[5]` stack array that `push_stripe`'s per-component loop wrote past for any component count above 5 — now a `std::vector<int>` sized from `img->getNc()` (S2-02). |
+| `j2k_eight_component.jp2` | JP2 encoding of `tiff_eight_sample.tif` (8 components, 8 bits/sample), produced through the post-fix `SipiIOJ2k::write()` path. Drives `SipiIOJ2k::read()`'s decode path with more than 5 components; regresses the matching fixed-size `int stripe_heights[5]` stack array that `pull_stripe`'s per-component loop wrote past — now a `std::vector<int>` sized from `codestream.get_num_components()` (S2-03). |
 
 ## Git LFS
 
@@ -116,6 +118,28 @@ SIPI's decode path, not the file itself), generated with `tifffile`
         photometric='rgb', planarconfig='separate', tile=(16, 16),
         extrasamples=['unassalpha'])
     "
+
+`tiff_eight_sample.tif` is likewise not produced by `generate_malformed_images`:
+it is a well-formed file (the defect is in SIPI's J2K codec, not the file
+itself), generated with `tifffile` (Python):
+
+    python3 -c "
+    import numpy as np, tifffile
+    nx, ny = 16, 16
+    arr = np.zeros((ny, nx, 8), dtype=np.uint8)
+    for y in range(ny):
+        for x in range(nx):
+            for c in range(8):
+                arr[y, x, c] = (x * 13 + y * 7 + c * 31) % 256
+    tifffile.imwrite('tiff_eight_sample.tif', arr,
+        photometric='rgb', extrasamples=['unspecified']*5)
+    "
+
+`j2k_eight_component.jp2` is produced from `tiff_eight_sample.tif` via SIPI's
+own `convert` verb, once the `SipiIOJ2k::write()` fix (S2-02) is in place:
+
+    bazel-bin/src/cli/sipi convert test/_test_data/images/malformed/tiff_eight_sample.tif \
+        test/_test_data/images/malformed/j2k_eight_component.jp2 -F jp2
 
 The `.tif`/`.jp2`/`.jpg`/`.png` files the generators produce are committed
 (via Git LFS) so CI does not need to regenerate them at test time. Each

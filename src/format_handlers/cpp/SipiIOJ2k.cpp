@@ -717,10 +717,7 @@ Result<bool> SipiIOJ2k::read(SipiImage *img,
     return std::unexpected(SipiValueError{ ErrorCode::kMalformedInput,
       "Cannot read JPEG2000 file \"" + filepath + "\": corrupt codestream (decompressor start failed)" });
   }
-  // TODO: check image for number of components and make this dynamic
-  int stripe_heights[5] = {
-    dims.size.y, dims.size.y, dims.size.y, dims.size.y, dims.size.y
-  };// enough for alpha channel (5 components)
+  std::vector<int> stripe_heights(codestream.get_num_components(), dims.size.y);
 
   if (force_bps_8) img->set_geometry(img->getNx(), img->getNy(), img->getNc(), 8);// forces kakadu to convert to 8 bit!
   switch (img->getBps()) {
@@ -737,7 +734,7 @@ Result<bool> SipiIOJ2k::read(SipiImage *img,
     img->set_pixels(std::vector<byte>(*buf8_size), img->getNx(), img->getNy(), img->getNc(), img->getBps());
     byte *dst = img->pixels_writable().data();
     try {
-      decompressor.pull_stripe(dst, stripe_heights);
+      decompressor.pull_stripe(dst, stripe_heights.data());
     } catch (kdu_exception&) {
       log_err("Error while decompressing image: %s.", filepath.c_str());
       return std::unexpected(SipiValueError{ ErrorCode::kMalformedInput,
@@ -746,7 +743,7 @@ Result<bool> SipiIOJ2k::read(SipiImage *img,
     break;
   }
   case 12: {
-    std::vector<char> get_signed(img->getNc(), 0);// vector<bool> does not work -> special treatment in C++
+    std::vector<char> get_signed(codestream.get_num_components(), 0);// vector<bool> does not work -> special treatment in C++
     const auto buf16_size = checked_buf_size(
       static_cast<std::size_t>(dims.size.x), static_cast<std::size_t>(dims.size.y), static_cast<std::size_t>(img->getNc()), 2);
     if (!buf16_size) {
@@ -757,7 +754,7 @@ Result<bool> SipiIOJ2k::read(SipiImage *img,
     byte *dst = img->pixels_writable().data();
     try {
       decompressor.pull_stripe(reinterpret_cast<kdu_core::kdu_int16 *>(dst),
-        stripe_heights,
+        stripe_heights.data(),
         nullptr,
         nullptr,
         nullptr,
@@ -771,7 +768,7 @@ Result<bool> SipiIOJ2k::read(SipiImage *img,
     break;
   }
   case 16: {
-    std::vector<char> get_signed(img->getNc(), 0);// vector<bool> does not work -> special treatment in C++
+    std::vector<char> get_signed(codestream.get_num_components(), 0);// vector<bool> does not work -> special treatment in C++
     const auto buf16_size = checked_buf_size(
       static_cast<std::size_t>(dims.size.x), static_cast<std::size_t>(dims.size.y), static_cast<std::size_t>(img->getNc()), 2);
     if (!buf16_size) {
@@ -782,7 +779,7 @@ Result<bool> SipiIOJ2k::read(SipiImage *img,
     byte *dst = img->pixels_writable().data();
     try {
       decompressor.pull_stripe(reinterpret_cast<kdu_core::kdu_int16 *>(dst),
-        stripe_heights,
+        stripe_heights.data(),
         nullptr,
         nullptr,
         nullptr,
@@ -1560,16 +1557,20 @@ Result<void> SipiIOJ2k::write(SipiImage *img, const OutputSink &sink, const Sipi
       false,// want_fastest [NO]
       env_ref);
 
-    // int *stripe_heights = new int[img->getNc()];
-    int stripe_heights[5];
+    std::vector<int> stripe_heights(img->getNc());
     byte *pixel_data = img->pixels_writable().data();
     if (img->getBps() == 16) {
       kdu_int16 *buf = (kdu_int16 *)pixel_data;
       std::vector<int> precisions(img->getNc(), static_cast<int>(img->getBps()));
       std::vector<char> is_signed(img->getNc(), 0);// vector<bool> does not work -> special treatment in C++
       for (size_t i = 0; i < img->getNc(); i++) { stripe_heights[i] = img->getNy(); }
-      compressor.push_stripe(
-        buf, stripe_heights, nullptr, nullptr, nullptr, precisions.data(), reinterpret_cast<bool *>(is_signed.data()));
+      compressor.push_stripe(buf,
+        stripe_heights.data(),
+        nullptr,
+        nullptr,
+        nullptr,
+        precisions.data(),
+        reinterpret_cast<bool *>(is_signed.data()));
     } else if (img->getBps() == 8) {
       if (th == 0) th = img->getNy();
       const size_t nc = img->getNc();
@@ -1579,13 +1580,13 @@ Result<void> SipiIOJ2k::write(SipiImage *img, const OutputSink &sink, const Sipi
       do {
         kdu_byte *buf = pixel_data + stripe_start * nc * nx;
         for (size_t i = 0; i < nc; i++) { stripe_heights[i] = th; }
-        compressor.push_stripe(buf, stripe_heights);
+        compressor.push_stripe(buf, stripe_heights.data());
         stripe_start += th;
       } while ((ny - stripe_start) >= th);
       if ((ny - stripe_start) > 0) {
         kdu_byte *buf = pixel_data + stripe_start * nc * nx;
         for (size_t i = 0; i < nc; i++) { stripe_heights[i] = ny - stripe_start; }
-        compressor.push_stripe(buf, stripe_heights);
+        compressor.push_stripe(buf, stripe_heights.data());
         stripe_start += ny - stripe_start;
       }
     } else {
