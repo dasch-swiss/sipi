@@ -55,6 +55,7 @@ class Gauge
 
 public:
   void Set(double v) noexcept { value_.store(static_cast<std::int64_t>(v), std::memory_order_relaxed); }
+  void Increment() noexcept { value_.fetch_add(1, std::memory_order_relaxed); }
   [[nodiscard]] std::int64_t Value() const noexcept { return value_.load(std::memory_order_relaxed); }
 };
 
@@ -141,6 +142,10 @@ public:
   // the full-resolution IFD. A scalar (no label) so it rides the serve-path
   // snapshot bridge to OTLP.
   Counter tiff_pyramid_reduced_decodes_total;
+
+  // Leaked Kakadu decode threads that blew the seam deadline (DEV-7080); never
+  // decremented — a wedged thread is not reclaimable short of restart.
+  Gauge wedged_threads;
 
 private:
   Metrics() = default;

@@ -10,12 +10,16 @@
 #include <unistd.h>
 
 #include <array>
+#include <chrono>
 #include <cmath>
 #include <cstdint>
 #include <fstream>
+#include <future>
 #include <memory>
 #include <optional>
 #include <string>
+#include <thread>
+#include <type_traits>
 
 #include "image/SipiImage.h"
 #include "image/SipiImageError.h"
@@ -46,6 +50,29 @@ namespace {
   using observability::populate_from_image;
 
   constexpr const char *kCacheControl = "must-revalidate, post-check=0, pre-check=0";
+
+  // Runs `producer()` on a joinable worker thread bounded by `timeout`. Returns
+  // the producer's result if it finished in time; `std::nullopt` on timeout — in
+  // which case the worker is DETACHED (an unpatchable Kakadu decode hang keeps
+  // running until the process restarts, DEV-7080) and `wedged_threads` is
+  // incremented. `producer` must capture its inputs BY VALUE and return BY
+  // VALUE: on timeout the caller's stack unwinds while the detached worker still
+  // owns the packaged_task's shared state, so the worker only ever writes into
+  // heap it co-owns (no use-after-free).
+  template<class F> std::optional<std::invoke_result_t<F>> run_with_deadline(std::chrono::milliseconds timeout, F producer)
+  {
+    using T = std::invoke_result_t<F>;
+    auto task = std::make_shared<std::packaged_task<T()>>(std::move(producer));
+    std::future<T> fut = task->get_future();
+    std::thread worker([task] { (*task)(); });
+    if (fut.wait_for(timeout) == std::future_status::ready) {
+      worker.join();
+      return fut.get();
+    }
+    worker.detach();
+    Metrics::instance().wedged_threads.Increment();
+    return std::nullopt;
+  }
 
   // Flattens a handled image error into the seam's SipiImageErrorReport and
   // reports it through `report_error` iff non-null — the seam's "NULL =
@@ -518,9 +545,20 @@ std::expected<ServeResponse, SipiStatus>
   // memory estimate, and the cache entry.
   SipiImgInfo info;
   {
-    SipiImage probe;
     PhaseTimer phase_timer(SIPI_PHASE_SHAPE);
-    auto shape = probe.read_shape(infile);
+    auto deadline_result = run_with_deadline(std::chrono::milliseconds(eng.decode_timeout_ms), [infile] {
+      SipiImage probe;
+      return probe.read_shape(infile);
+    });
+    if (!deadline_result) {
+      ImageContext sentry_ctx;
+      sentry_ctx.input_file = infile;
+      sentry_ctx.file_size_bytes = get_file_size(infile);
+      report_image_error(
+        req.report_error, req.report_ctx, "JP2 decode deadline exceeded (read_shape)", "read", sentry_ctx);
+      return std::unexpected(SipiStatus::InternalError);
+    }
+    auto &shape = *deadline_result;
     if (!shape) {
       ImageContext sentry_ctx;
       sentry_ctx.input_file = infile;
@@ -703,11 +741,34 @@ std::expected<ServeResponse, SipiStatus>
     return std::unexpected(SipiStatus::ClientGone);
   }
 
+  // The producer's own SipiImage / decode result, carried out by value so the
+  // deadline helper's timeout path never touches this stack (see
+  // run_with_deadline's lifetime-safety note).
+  struct DecodeOutcome
+  {
+    SipiImage img;
+    Result<void> status;
+  };
+
   SipiImage img;
   try {
     PhaseTimer phase_timer(SIPI_PHASE_DECODE);
-    if (auto r = img.read(infile, region, size, quality_format.format() == SipiQualityFormat::JPG, eng.scaling_quality);
-        !r) {
+    const bool force_bps_8 = quality_format.format() == SipiQualityFormat::JPG;
+    auto deadline_result = run_with_deadline(std::chrono::milliseconds(eng.decode_timeout_ms),
+      [infile, region, size, force_bps_8, scaling_quality = eng.scaling_quality] {
+        SipiImage decoded;
+        auto status = decoded.read(infile, region, size, force_bps_8, scaling_quality);
+        return DecodeOutcome{ std::move(decoded), std::move(status) };
+      });
+    if (!deadline_result) {
+      ImageContext sentry_ctx;
+      sentry_ctx.input_file = infile;
+      sentry_ctx.file_size_bytes = get_file_size(infile);
+      report_image_error(req.report_error, req.report_ctx, "JP2 decode deadline exceeded (read)", "read", sentry_ctx);
+      return std::unexpected(SipiStatus::InternalError);
+    }
+    img = std::move(deadline_result->img);
+    if (auto &r = deadline_result->status; !r) {
       ImageContext sentry_ctx;
       sentry_ctx.input_file = infile;
       sentry_ctx.file_size_bytes = get_file_size(infile);

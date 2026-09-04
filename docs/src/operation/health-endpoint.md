@@ -39,6 +39,17 @@ healthcheck.
 
 **Design consequence**: `/health` returns healthy once initialization completes. Only return unhealthy for truly fatal conditions (deadlocks, corrupted state), not for transient load.
 
+## Wedged Decode Threads
+
+A JP2 decode that blows the seam deadline (DEV-7080) leaves its thread running —
+Kakadu offers no clean abort, so the FFI seam detaches it rather than blocking
+the request indefinitely. The leaked thread is counted by the `wedged_threads`
+gauge (`Sipi::observability::Metrics`), exported over OTLP alongside the other
+decode/memory gauges and reported by `/health`. It is never decremented — a
+wedged thread is not reclaimable short of a restart. Operators restart the
+process once `wedged_threads` reaches `nthreads - 1`: at that point the decode
+pool is one lane from total wedge, a silent outage.
+
 ## Traefik Configuration
 
 The `/health` endpoint is exposed externally via Traefik for UptimeRobot monitoring:

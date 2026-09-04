@@ -74,6 +74,7 @@ struct SipiMetricsSnapshot
   int64_t cache_files_limit;
   int64_t decode_memory_budget_bytes;
   int64_t decode_memory_used_bytes;
+  int64_t wedged_threads;
 };
 
 #ifdef __cplusplus
@@ -81,7 +82,7 @@ struct SipiMetricsSnapshot
  * src/server/rust/src/ffi.rs. Every field is 8 bytes wide (uint64_t / int64_t),
  * so there is no packing subtlety, but the guard still catches an accidental
  * field reorder or insertion on either side. LP64 on every supported target. */
-static_assert(sizeof(SipiMetricsSnapshot) == 168, "SipiMetricsSnapshot size drifted from src/server/rust/src/ffi.rs");
+static_assert(sizeof(SipiMetricsSnapshot) == 176, "SipiMetricsSnapshot size drifted from src/server/rust/src/ffi.rs");
 static_assert(offsetof(SipiMetricsSnapshot, cache_hits_total) == 0, "SipiMetricsSnapshot layout drift");
 static_assert(offsetof(SipiMetricsSnapshot, cache_misses_total) == 8, "SipiMetricsSnapshot layout drift");
 static_assert(offsetof(SipiMetricsSnapshot, cache_evictions_total) == 16, "SipiMetricsSnapshot layout drift");
@@ -103,6 +104,7 @@ static_assert(offsetof(SipiMetricsSnapshot, cache_size_limit_bytes) == 136, "Sip
 static_assert(offsetof(SipiMetricsSnapshot, cache_files_limit) == 144, "SipiMetricsSnapshot layout drift");
 static_assert(offsetof(SipiMetricsSnapshot, decode_memory_budget_bytes) == 152, "SipiMetricsSnapshot layout drift");
 static_assert(offsetof(SipiMetricsSnapshot, decode_memory_used_bytes) == 160, "SipiMetricsSnapshot layout drift");
+static_assert(offsetof(SipiMetricsSnapshot, wedged_threads) == 168, "SipiMetricsSnapshot layout drift");
 #endif
 
 #endif /* SIPI_FFI_METRICS_SNAPSHOT_H */

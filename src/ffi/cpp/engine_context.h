@@ -56,6 +56,10 @@ struct EngineContext
   ScalingQuality scaling_quality{};//!< per-format scaling method
   int port = 3333;//!< configured HTTP listen port (the config `port`); a fallback for the Rust edge's listener bind when no `--serverport`/`SIPI_SERVERPORT`/`SIPI_RS_PORT` selected one
   std::size_t max_post_size = 0;//!< max POST body size in bytes (the Rust shell caps Lua-route uploads); 0 = unlimited
+  //!< Wall-clock deadline (ms) for each seam decode call (`read_shape` / `read`).
+  //!< An unpatchable Kakadu decode hang past this deadline is abandoned (its
+  //!< thread detached) and counted in `wedged_threads` (DEV-7080).
+  std::size_t decode_timeout_ms = 120000;
 };
 
 /*! Install the engine context (copied into a file-static). Called once at

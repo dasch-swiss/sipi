@@ -263,15 +263,7 @@ jobs:
       # `.bazelrc` §Fuzzing) and that runtime prints the crash trace. Pointing
       # it at the hermetic `llvm-symbolizer` turns first-party
       # `binary+0xOFFSET` frames into `function file:line`.
-      # The j2k leg hangs on the DEV-7080 class (a Kakadu decode hang with no
-      # clean interruption), which would otherwise fail the whole nightly on
-      # every run. `continue-on-error` here keeps the nightly reporting real
-      # regressions on the other four legs; remove it once the JP2 decode
-      # watchdog (DEV-7080) lands. Caveat: `continue-on-error` makes the
-      # matrix JOB report success even when this step fails, so a reader must
-      # inspect the step annotation, not just the job status, to see a j2k hang.
       - name: Fuzz (libFuzzer, 600s)
-        continue-on-error: ${{ matrix.target == 'j2k' }}
         env:
           RUST_BACKTRACE: "1"
           UBSAN_OPTIONS: external_symbolizer_path=${{ github.workspace }}/.fuzz/llvm-symbolizer

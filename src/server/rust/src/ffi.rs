@@ -295,6 +295,7 @@ pub struct SipiMetricsSnapshot {
     pub cache_files_limit: i64,
     pub decode_memory_budget_bytes: i64,
     pub decode_memory_used_bytes: i64,
+    pub wedged_threads: i64,
 }
 
 /// The IIIF serve request — mirrors `SipiServeRequest` in `sipi_ffi.h`. All
@@ -1185,7 +1186,7 @@ mod metrics_snapshot_layout {
     fn repr_c_matches_metrics_snapshot_h() {
         assert_eq!(size_of::<usize>(), 8, "layout assumes an LP64 target");
         assert_eq!(align_of::<SipiMetricsSnapshot>(), 8);
-        assert_eq!(size_of::<SipiMetricsSnapshot>(), 168);
+        assert_eq!(size_of::<SipiMetricsSnapshot>(), 176);
 
         assert_eq!(offset_of!(SipiMetricsSnapshot, cache_hits_total), 0);
         assert_eq!(offset_of!(SipiMetricsSnapshot, cache_misses_total), 8);
@@ -1244,6 +1245,7 @@ mod metrics_snapshot_layout {
             offset_of!(SipiMetricsSnapshot, decode_memory_used_bytes),
             160
         );
+        assert_eq!(offset_of!(SipiMetricsSnapshot, wedged_threads), 168);
     }
 }
 

@@ -10,6 +10,7 @@
 
 #include "gtest/gtest.h"
 
+#include <chrono>
 #include <climits>
 #include <cstdlib>
 #include <functional>
@@ -20,6 +21,7 @@
 #include "ffi/serve_image.h"
 #include "ffi/serve_response.h"
 #include "ffi/sipi_ffi.h"
+#include "observability/metrics.h"
 #include "test_paths.h"
 
 namespace {
@@ -260,4 +262,57 @@ TEST(ReportValueError, NullCallbackIsSafeNoOp)
   Sipi::observability::ImageContext ctx;
 
   report_value_error(nullptr, nullptr, err, "read", ctx);
+}
+
+// A wedged Kakadu decode (DEV-7080) must be bounded by the seam's wall-clock
+// deadline instead of hanging the calling thread forever. Both committed
+// reproducers wedge inside read_shape, so a short deadline must trip well
+// under the 30s bound this test enforces (comfortably below the production
+// default of 120s).
+class DecodeHangWatchdog : public ::testing::TestWithParam<const char *>
+{};
+
+TEST_P(DecodeHangWatchdog, HitsDeadlineAndCountsWedgedThread)
+{
+  const std::string rel = GetParam();
+  const std::string basename = rel.substr(rel.find_last_of('/') + 1);
+  const std::string path = fixture(rel);
+  const auto params = full_params(SIPI_FORMAT_TIF);
+  auto req = make_request(path, params);
+  req.identifier = basename.c_str();
+
+  auto eng = bare_engine();
+  eng.decode_timeout_ms = 2000;
+
+  const auto before = Sipi::observability::Metrics::instance().wedged_threads.Value();
+  const auto start = std::chrono::steady_clock::now();
+  const auto result = build_image_response(req, eng, kNeverCancelled);
+  const auto elapsed = std::chrono::steady_clock::now() - start;
+
+  ASSERT_FALSE(result.has_value());
+  EXPECT_EQ(result.error(), SipiStatus::InternalError);
+  EXPECT_LT(elapsed, std::chrono::seconds(30));
+  EXPECT_EQ(Sipi::observability::Metrics::instance().wedged_threads.Value(), before + 1);
+}
+
+INSTANTIATE_TEST_SUITE_P(Jp2HangFixtures,
+  DecodeHangWatchdog,
+  ::testing::Values("/hang/dev7080_read_shape_hang.jp2", "/hang/nightly_j2k_read_shape_hang.jp2"));
+
+TEST(BuildImageResponse, GoodJp2DecodesWithinDeadline)
+{
+  const std::string path = fixture("/unit/lena512.jp2");
+  const auto params = full_params(SIPI_FORMAT_TIF);
+  auto req = make_request(path, params);
+  req.identifier = "lena512.jp2";
+
+  auto eng = bare_engine();
+  eng.decode_timeout_ms = 120000;
+
+  const auto before = Sipi::observability::Metrics::instance().wedged_threads.Value();
+  const auto result = build_image_response(req, eng, kNeverCancelled);
+
+  ASSERT_TRUE(result.has_value());
+  EXPECT_EQ(result->http_status, 200);
+  EXPECT_EQ(Sipi::observability::Metrics::instance().wedged_threads.Value(), before);
 }

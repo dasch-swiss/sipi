@@ -467,7 +467,7 @@ const COUNTERS: &[CounterRow] = &[
     ),
 ];
 
-/// The 6 live gauges: OTel name, description, unit (`""` = none), and the field.
+/// The 7 live gauges: OTel name, description, unit (`""` = none), and the field.
 /// (`waiting_connections` is omitted — transport-dead.)
 type GaugeRow = (
     &'static str,
@@ -505,6 +505,12 @@ const GAUGES: &[GaugeRow] = &[
         "Decode memory currently in use",
         "By",
         |s| s.decode_memory_used_bytes,
+    ),
+    (
+        "sipi.wedged_threads",
+        "Leaked decode threads that blew the seam deadline (restart when it reaches nthreads-1)",
+        "",
+        |s| s.wedged_threads,
     ),
 ];
 
