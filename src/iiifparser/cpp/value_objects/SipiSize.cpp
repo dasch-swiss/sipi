@@ -300,6 +300,12 @@ SipiSize::SizeType
     w = static_cast<size_t>(ceilf(img_w * percent / 100.F));
     h = static_cast<size_t>(ceilf(img_h * percent / 100.F));
 
+    // The derived output must obey the same hard dimension cap as PIXELS
+    // requests: an upscaling percent (e.g. pct:1000000) would otherwise yield
+    // a multi-billion-pixel output.
+    if (w > limitdim) w = limitdim;
+    if (h > limitdim) h = limitdim;
+
     if (!upscaling && (w > img_w || h > img_h)) throw SipiSizeError(400, "Upscaling not allowed!");
 
     reduce_p = 0;
