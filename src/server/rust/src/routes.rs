@@ -84,6 +84,14 @@ pub struct AppState {
     /// reflect-any-origin behaviour via [`cors_allow`]. Non-empty switches the
     /// instance into allowlist mode.
     allowed_origins: Vec<String>,
+    /// Public host allowlist (`SIPI_PUBLIC_HOSTS`, S2-17). Empty (the default)
+    /// is opt-out: [`forwarded`] returns the `X-Forwarded-Host`/`Host` header
+    /// verbatim, today's behaviour. Non-empty switches the instance into
+    /// allowlist mode: a header host on the list passes through, any other
+    /// host is replaced by the first allowlisted host — closing the
+    /// canonical-`@id`/`Location`/`Link`/cache-key/`server.host` spoofing
+    /// lever a hostile header would otherwise open.
+    public_hosts: Vec<String>,
 }
 
 impl AppState {
@@ -106,6 +114,10 @@ impl AppState {
     /// `allowed_origins` is the `SIPI_ALLOWED_ORIGINS` CORS allowlist (DEV-6061,
     /// [`crate::config::allowed_origins_from_env`]); empty = opt-out (every CORS
     /// site reflects any Origin, today's behaviour).
+    ///
+    /// `public_hosts` is the `SIPI_PUBLIC_HOSTS` host allowlist (S2-17,
+    /// [`crate::config::public_hosts_from_env`]); empty = opt-out (`forwarded`
+    /// trusts `X-Forwarded-Host`/`Host` verbatim, today's behaviour).
     // Startup glue with one parameter per serve knob (like `serve()` in
     // lib.rs); a config struct would just relocate the list.
     #[allow(clippy::too_many_arguments)]
@@ -120,6 +132,7 @@ impl AppState {
         preflight_cache_ttl: Option<u32>,
         preflight_cache_slots: Option<u64>,
         allowed_origins: Vec<String>,
+        public_hosts: Vec<String>,
     ) -> Result<Self, AdmissionError> {
         // The thread-pool knobs are Rust-owned serve args. `nthreads` (unset or
         // 0 = auto) sizes the global pool from host parallelism; `max_waiting`
@@ -185,6 +198,7 @@ impl AppState {
                     wwwroute: ffi::wwwroute().unwrap_or_default(),
                     preflight_cache,
                     allowed_origins,
+                    public_hosts,
                 },
                 _ => Self {
                     ready: false,
@@ -201,6 +215,7 @@ impl AppState {
                     wwwroute: String::new(),
                     preflight_cache,
                     allowed_origins,
+                    public_hosts,
                 },
             },
         )
@@ -283,7 +298,7 @@ pub async fn iiif(
 
     // Redirect is cheap and engine-free — answer it on the async path.
     if parsed.kind == RequestKind::Redirect {
-        return redirect(&headers, &parsed);
+        return redirect(&headers, &parsed, &state.public_hosts);
     }
 
     // Everything else drives the blocking C++ engine (the per-call preflight VM,
@@ -468,13 +483,21 @@ fn dispatch_engine(
                 *method == Method::HEAD,
                 &access,
                 &state.admission,
+                &state.public_hosts,
                 outcome_tx,
                 body_tx,
             );
         }
         RequestKind::InfoJson => complete(
             outcome_tx,
-            serve_info_json(&resolved, parsed, headers, &access, state.has_preflight),
+            serve_info_json(
+                &resolved,
+                parsed,
+                headers,
+                &access,
+                &state.public_hosts,
+                state.has_preflight,
+            ),
         ),
         RequestKind::KnoraJson => complete(
             outcome_tx,
@@ -484,6 +507,7 @@ fn dispatch_engine(
                 headers,
                 &access,
                 &state.allowed_origins,
+                &state.public_hosts,
                 state.has_preflight,
             ),
         ),
@@ -572,7 +596,7 @@ fn iiif_access(
         // hook's dsp-api call nests under this span.
         let reply = {
             let _span = tracing::info_span!("sipi.preflight").entered();
-            let req = build_request_data(method, uri, headers);
+            let req = build_request_data(method, uri, headers, &state.public_hosts);
             lua.preflight(req, &parsed.prefix, &parsed.identifier)
         };
         let outcome = match reply {
@@ -651,7 +675,7 @@ fn file_access(
     // traceparent rides on the request data (host-side injection, ADR-0017).
     let reply = {
         let _span = tracing::info_span!("sipi.file_preflight").entered();
-        let req = build_request_data(method, uri, headers);
+        let req = build_request_data(method, uri, headers, &state.public_hosts);
         lua.file_preflight(req, &built)
     };
     let outcome = match reply {
@@ -703,6 +727,7 @@ fn build_request_data(
     method: &Method,
     uri: &Uri,
     headers: &HeaderMap,
+    public_hosts: &[String],
 ) -> scripting::bindings::RequestData {
     let header_vec: Vec<(String, String)> = headers
         .iter()
@@ -713,7 +738,7 @@ fn build_request_data(
         })
         .collect();
     let cookies = parse_cookies(headers);
-    let (_scheme, host) = forwarded(headers);
+    let (_scheme, host) = forwarded(headers, public_hosts);
     // The preflight view is deliberately query- and body-free: `get_params`,
     // `post_params`, `request_params`, `uploads`, and `content` are always
     // empty, and `uri` carries the path only (never the query). The
@@ -779,6 +804,7 @@ fn serve_image(
     is_head: bool,
     access: &Access,
     admission: &Admission,
+    public_hosts: &[String],
     outcome_tx: oneshot::Sender<Outcome>,
     body_tx: mpsc::Sender<sink::BodyItem>,
 ) {
@@ -786,7 +812,7 @@ fn serve_image(
         .params
         .expect("an Iiif request always carries parsed params")
         .into();
-    let (scheme, host) = forwarded(headers);
+    let (scheme, host) = forwarded(headers, public_hosts);
 
     // Every C string must outlive the synchronous sipi_serve_image call.
     let (c_resolved, c_prefix, c_identifier) = match (
@@ -1042,7 +1068,7 @@ async fn serve_lua_script(
     let content_type = header_str(&headers, header::CONTENT_TYPE.as_str()).unwrap_or_default();
 
     // Request fields, owned so they can move onto the blocking thread.
-    let (_scheme, host) = forwarded(&headers);
+    let (_scheme, host) = forwarded(&headers, &state.public_hosts);
     let client_ip = client_ip(&headers);
     let header_vec: Vec<(String, String)> = headers
         .iter()
@@ -1863,9 +1889,10 @@ fn serve_info_json(
     parsed: &ParsedRequest,
     headers: &HeaderMap,
     access: &Access,
+    public_hosts: &[String],
     hook_configured: bool,
 ) -> Response {
-    let (scheme, host) = forwarded(headers);
+    let (scheme, host) = forwarded(headers, public_hosts);
     let id = canonical_id(&scheme, &host, &parsed.prefix, &parsed.identifier);
 
     let mime = match ffi::mimetype(resolved) {
@@ -1938,9 +1965,10 @@ fn serve_knora_json(
     headers: &HeaderMap,
     access: &Access,
     allowed_origins: &[String],
+    public_hosts: &[String],
     hook_configured: bool,
 ) -> Response {
-    let (scheme, host) = forwarded(headers);
+    let (scheme, host) = forwarded(headers, public_hosts);
     let id = canonical_id(&scheme, &host, &parsed.prefix, &parsed.identifier);
 
     let mime = match ffi::mimetype(resolved) {
@@ -2005,8 +2033,8 @@ fn serve_knora_json(
 
 /// 303 redirect from a bare identifier to its canonical info.json
 ///.
-fn redirect(headers: &HeaderMap, parsed: &ParsedRequest) -> Response {
-    let (scheme, host) = forwarded(headers);
+fn redirect(headers: &HeaderMap, parsed: &ParsedRequest, public_hosts: &[String]) -> Response {
+    let (scheme, host) = forwarded(headers, public_hosts);
     let target = if parsed.prefix.is_empty() {
         format!("{scheme}://{host}/{}/info.json", parsed.identifier)
     } else {
@@ -2207,16 +2235,28 @@ fn json_response(
 /// Synthesise the request scheme + host from the forwarded headers (SIPI runs
 /// plain HTTP behind Traefik, so the real scheme is in `X-Forwarded-Proto`). Host
 /// falls back from `X-Forwarded-Host` to `Host`.
-fn forwarded(headers: &HeaderMap) -> (String, String) {
+///
+/// The host is validated against `public_hosts` (`SIPI_PUBLIC_HOSTS`, S2-17)
+/// before it reaches the canonical `@id`, the 303 `Location`, the `Link`
+/// header, the cache key, or the Lua `server.host`: an empty allowlist is the
+/// opt-out sentinel (the candidate host is returned verbatim, today's
+/// behaviour); a non-empty allowlist returns the candidate unchanged when it
+/// is on the list, else substitutes the first allowlisted host.
+fn forwarded(headers: &HeaderMap, public_hosts: &[String]) -> (String, String) {
     let scheme = if header_str(headers, "x-forwarded-proto").as_deref() == Some("https") {
         "https"
     } else {
         "http"
     }
     .to_owned();
-    let host = header_str(headers, "x-forwarded-host")
+    let candidate = header_str(headers, "x-forwarded-host")
         .or_else(|| header_str(headers, header::HOST.as_str()))
         .unwrap_or_default();
+    let host = if public_hosts.is_empty() || public_hosts.iter().any(|h| h == &candidate) {
+        candidate
+    } else {
+        public_hosts[0].clone()
+    };
     (scheme, host)
 }
 
@@ -2330,7 +2370,7 @@ mod tests {
             ("cookie", "session=abc"),
             ("authorization", "Bearer token"),
         ]);
-        let data = build_request_data(&Method::GET, &uri, &h);
+        let data = build_request_data(&Method::GET, &uri, &h, &[]);
 
         assert_eq!(data.uri, "/prefix/identifier/full/0/default.jpg");
         assert!(data.get_params.is_empty());
@@ -2347,7 +2387,10 @@ mod tests {
     #[test]
     fn forwarded_synthesises_https_scheme() {
         let h = headers(&[("x-forwarded-proto", "https"), ("host", "iiif.example.org")]);
-        assert_eq!(forwarded(&h), ("https".into(), "iiif.example.org".into()));
+        assert_eq!(
+            forwarded(&h, &[]),
+            ("https".into(), "iiif.example.org".into())
+        );
     }
 
     #[test]
@@ -2356,7 +2399,36 @@ mod tests {
             ("host", "internal:1024"),
             ("x-forwarded-host", "iiif.example.org"),
         ]);
-        assert_eq!(forwarded(&h), ("http".into(), "iiif.example.org".into()));
+        assert_eq!(
+            forwarded(&h, &[]),
+            ("http".into(), "iiif.example.org".into())
+        );
+    }
+
+    #[test]
+    fn forwarded_substitutes_first_allowlisted_host_for_hostile_header() {
+        let h = headers(&[("x-forwarded-host", "evil.example.org")]);
+        let allowlist = vec![
+            "iiif.example.org".to_owned(),
+            "iiif2.example.org".to_owned(),
+        ];
+        assert_eq!(
+            forwarded(&h, &allowlist),
+            ("http".into(), "iiif.example.org".into())
+        );
+    }
+
+    #[test]
+    fn forwarded_passes_through_allowlisted_host() {
+        let h = headers(&[("x-forwarded-host", "iiif2.example.org")]);
+        let allowlist = vec![
+            "iiif.example.org".to_owned(),
+            "iiif2.example.org".to_owned(),
+        ];
+        assert_eq!(
+            forwarded(&h, &allowlist),
+            ("http".into(), "iiif2.example.org".into())
+        );
     }
 
     #[test]

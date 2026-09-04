@@ -1,6 +1,6 @@
 mod common;
 
-use common::{client, server};
+use common::{client, client_no_redirect, server};
 use serde_json::json;
 use sipi_e2e::jwt::{alg_none_token, create_jwt, tamper_payload};
 use sipi_e2e::{http_client, test_data_dir, SipiServer};
@@ -420,4 +420,72 @@ fn knora_json_allowed_path_still_succeeds() {
     let json: serde_json::Value = resp.json().expect("allowed knora.json must be JSON");
     assert_eq!(json["width"], 512);
     assert_eq!(json["height"], 512);
+}
+
+/// S2-17: with `SIPI_PUBLIC_HOSTS` configured, a hostile `X-Forwarded-Host` is
+/// substituted with the first allowlisted host in both the 303 redirect
+/// `Location` and the info.json `id` (the canonical IIIF service id) — never
+/// reflected verbatim. A host that is on the allowlist passes through
+/// unchanged.
+#[test]
+fn public_hosts_allowlist_substitutes_hostile_forwarded_host() {
+    let srv = SipiServer::start_env(
+        "config/sipi.e2e-test-config.lua",
+        &test_data_dir(),
+        &[],
+        &[("SIPI_PUBLIC_HOSTS", "iiif.example.org,iiif2.example.org")],
+    );
+
+    let redirect_resp = client_no_redirect()
+        .get(format!("{}/unit/lena512.jp2", srv.base_url))
+        .header("X-Forwarded-Host", "evil.example.org")
+        .send()
+        .expect("GET base URI with hostile X-Forwarded-Host");
+    assert_eq!(redirect_resp.status().as_u16(), 303);
+    let location = redirect_resp
+        .headers()
+        .get("location")
+        .expect("missing Location header on redirect")
+        .to_str()
+        .unwrap();
+    assert!(
+        location.starts_with("http://iiif.example.org/"),
+        "SECURITY: Location must carry the configured host, not the hostile one, got: {}",
+        location
+    );
+
+    let info_resp = http_client()
+        .get(format!("{}/unit/lena512.jp2/info.json", srv.base_url))
+        .header("X-Forwarded-Host", "evil.example.org")
+        .send()
+        .expect("GET info.json with hostile X-Forwarded-Host");
+    assert_eq!(info_resp.status().as_u16(), 200);
+    let id = info_resp
+        .json::<serde_json::Value>()
+        .expect("info.json body")["id"]
+        .as_str()
+        .expect("id field")
+        .to_owned();
+    assert!(
+        id.starts_with("http://iiif.example.org/"),
+        "SECURITY: @id must carry the configured host, not the hostile one, got: {}",
+        id
+    );
+
+    let allowed_resp = http_client()
+        .get(format!("{}/unit/lena512.jp2/info.json", srv.base_url))
+        .header("X-Forwarded-Host", "iiif2.example.org")
+        .send()
+        .expect("GET info.json with allowlisted host");
+    let allowed_id = allowed_resp
+        .json::<serde_json::Value>()
+        .expect("info.json body")["id"]
+        .as_str()
+        .expect("id field")
+        .to_owned();
+    assert!(
+        allowed_id.starts_with("http://iiif2.example.org/"),
+        "an allowlisted host should pass through unchanged, got: {}",
+        allowed_id
+    );
 }

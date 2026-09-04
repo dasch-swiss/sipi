@@ -349,6 +349,7 @@ flags.
 | `SIPI_SSLKEY` | `--sslkey` | `./certificate/key.pem` | SSL key. Parse-only: accepted for compatibility, unread |
 | `SIPI_JWTKEY` | `--jwtkey` | | JWT secret |
 | `SIPI_ALLOWED_ORIGINS` | *(none)* | | Comma-separated browser Origins allowed to make credentialed cross-origin (CORS) requests; empty/unset = reflect any Origin (default, backward-compatible); set = restrict to the listed origins |
+| `SIPI_PUBLIC_HOSTS` | *(none)* | | Comma-separated hosts allowed in the canonical `@id`, the 303 `Location`, the `Link` header, the cache key, and Lua `server.host`; empty/unset = trust `X-Forwarded-Host`/`Host` verbatim (default, backward-compatible); set = a header host on the list passes through, any other host is replaced by the first listed host |
 | `SIPI_JPEGQUALITY` | `--quality` | `60` | JPEG quality |
 | `SIPI_LOGLEVEL` | `--loglevel` | `DEBUG` | Sets the engine log level; applied via `set_log_level` |
 | `SIPI_SENTRY_DSN` | | | Sentry DSN (no CLI flag) |
