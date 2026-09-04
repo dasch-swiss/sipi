@@ -123,7 +123,7 @@ The seven valid permission-type strings a preflight script may return:
 | **clickthrough** | Require an explicit user gesture (e.g. terms acceptance), then serve. |
 | **kiosk** | Unauthenticated public-terminal mode. |
 | **external** | Defer authorization to an external service. |
-| **restrict** | Serve a degraded representation (size cap and/or watermark) instead of the requested one. |
+| **restrict** | Serve a degraded representation (size cap and/or watermark) instead of the requested one. The size cap bounds the effective sampling factor of any region request, not just the full-image output box, so it composes across region requests instead of being bypassable by tiling. |
 | **deny** | Refuse the request (HTTP 401/403). |
 
 ## Throttling

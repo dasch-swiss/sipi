@@ -12,6 +12,7 @@
 //! `/admin/files/{shortcode}/{file}` with the permission JSON the closure
 //! expects, selected by filename.
 
+use image::GenericImageView;
 use serde_json::json;
 use sipi_e2e::jwt::create_jwt;
 use sipi_e2e::{http_client, test_data_dir, SipiServer};
@@ -127,6 +128,35 @@ fn permission_code_1_restricts_the_size() {
     assert!(
         restricted_len < full_len,
         "restricted render ({restricted_len}B) must be smaller than full ({full_len}B)"
+    );
+}
+
+/// Restricted view (code 1) must cap the effective sampling factor of a
+/// REGION request too, not just a full-image request — otherwise a client
+/// reconstructs full resolution by tiling native-scale regions instead of
+/// requesting `full/max` (each region's absolute output stays below the
+/// restricted full-image box, so a box-only check never fires). perm1file.jp2
+/// is 512x512 with `size='!128,128'` (a 0.25 sampling factor); a 256x256
+/// region must be capped to at most 64x64, the same factor applied to the
+/// region's own extent.
+#[test]
+fn permission_code_1_restricts_the_size_of_a_region_request() {
+    let resp = http_client()
+        .get(format!(
+            "{}/0801/perm1file.jp2/0,0,256,256/max/0/default.jpg",
+            server().base_url
+        ))
+        .send()
+        .expect("GET perm1 region");
+    assert_eq!(resp.status().as_u16(), 200);
+    let bytes = resp.bytes().expect("read body");
+    let img = image::load_from_memory(&bytes).expect("decode restricted region");
+    let (w, h) = img.dimensions();
+    assert!(
+        w <= 64 && h <= 64,
+        "restricted region should be capped to the profile's sampling factor (<=64x64), got {}x{}",
+        w,
+        h
     );
 }
 
