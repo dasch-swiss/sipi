@@ -142,6 +142,51 @@ TEST(MalformedTiff, PlanarSeparateRoiNearBottomEdgeDecodesCorrectly)
   EXPECT_EQ(img.getPixel(3, 5, 2), 192);
 }
 
+// S2-06: a TILED, PLANARCONFIG_SEPARATE RGBA TIFF must not read `nc` planes
+// out of a one-plane tile buffer. Before the fix, `read_tiled_data()` read a
+// single (sample-0) plane per tile via `TIFFReadTile(..., /*sample=*/0)` into
+// a `tile_size`-sized buffer, then handed that one-plane buffer to
+// `separateToContig()` as if it held `nc` interleaved planes — reading
+// `(nc - 1) * tile_size` bytes of adjacent heap into the decoded image. This
+// is a heap-buffer-overflow read (heap disclosure), observable as an ASan
+// over-read on the CI asan-ubsan leg (local ASan is broken on this
+// toolchain). `tiff_tiled_planar_separate_rgba.tif` is a 32x32, 16x16-tiled,
+// 4-sample (RGBA) fixture spanning a 2x2 tile grid with a deterministic
+// per-channel gradient (R = x*7 mod 256, G = y*5 mod 256,
+// B = (x+y)*3 mod 256, A = 255 - (x*y mod 256)); this test asserts the
+// post-fix decode is pixel-correct at the origin, at a tile-interior pixel,
+// at a pixel immediately across a tile boundary, and at the far corner —
+// proving no adjacent-heap bytes leak into any of the four tiles.
+TEST(MalformedTiff, TiledPlanarSeparateRgbaDecodesCorrectly)
+{
+  Sipi::SipiImage img;
+  const auto r = img.read(malformed_path("tiff_tiled_planar_separate_rgba.tif"));
+  ASSERT_TRUE(r.has_value());
+  EXPECT_EQ(img.getNx(), 32U);
+  EXPECT_EQ(img.getNy(), 32U);
+  EXPECT_EQ(img.getNc(), 4U);
+  // (0, 0): R=0, G=0, B=0, A=255
+  EXPECT_EQ(img.getPixel(0, 0, 0), 0);
+  EXPECT_EQ(img.getPixel(0, 0, 1), 0);
+  EXPECT_EQ(img.getPixel(0, 0, 2), 0);
+  EXPECT_EQ(img.getPixel(0, 0, 3), 255);
+  // (15, 15): last pixel of the top-left tile. R=105, G=75, B=90, A=30
+  EXPECT_EQ(img.getPixel(15, 15, 0), 105);
+  EXPECT_EQ(img.getPixel(15, 15, 1), 75);
+  EXPECT_EQ(img.getPixel(15, 15, 2), 90);
+  EXPECT_EQ(img.getPixel(15, 15, 3), 30);
+  // (16, 16): first pixel of the bottom-right tile. R=112, G=80, B=96, A=255
+  EXPECT_EQ(img.getPixel(16, 16, 0), 112);
+  EXPECT_EQ(img.getPixel(16, 16, 1), 80);
+  EXPECT_EQ(img.getPixel(16, 16, 2), 96);
+  EXPECT_EQ(img.getPixel(16, 16, 3), 255);
+  // (31, 31): far corner. R=217, G=155, B=186, A=62
+  EXPECT_EQ(img.getPixel(31, 31, 0), 217);
+  EXPECT_EQ(img.getPixel(31, 31, 1), 155);
+  EXPECT_EQ(img.getPixel(31, 31, 2), 186);
+  EXPECT_EQ(img.getPixel(31, 31, 3), 62);
+}
+
 // S2-08: a TIFF whose corrupted IFD makes libtiff's own `TIFFScanlineSize()`
 // smaller than SIPI's independently-computed per-scanline byte count
 // (`nx * SamplesPerPixel * BitsPerSample / 8`) must be rejected before
