@@ -594,6 +594,18 @@ std::expected<ServeResponse, SipiStatus>
   } catch (Sipi::SipiError &) {
     return std::unexpected(SipiStatus::BadRequest);
   }
+  // A restrict decision that does not reduce resolution and adds no watermark
+  // is not a restriction — refuse it rather than pass the original through at
+  // full fidelity (S2-09). Catches size=max, size=pct:100, ^pct:200 (upscale).
+  // `req.restricted_size` (not `restricted_size->undefined()`) is the signal
+  // that a size was actually requested: "max" parses to the same `undefined()`
+  // shape as "no restriction", but still resolves rest_w/rest_h to the full
+  // image extent above. (A bare {type='restrict'} with no size and no
+  // watermark arrives with a null restricted_size and is refused on the Rust
+  // edge before the seam.)
+  if (req.restricted_size != nullptr && rest_w >= img_w && rest_h >= img_h && watermark.empty()) {
+    return std::unexpected(SipiStatus::Forbidden);
+  }
   if (!restricted_size->undefined()) {
     // The restricted-size cap must bound the effective SAMPLING FACTOR of ANY
     // region, not the full-image output box: comparing full-image boxes (the

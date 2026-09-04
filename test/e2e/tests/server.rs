@@ -824,6 +824,52 @@ fn restrict_plus_watermark() {
     );
 }
 
+// A restrict decision that neither shrinks resolution nor adds a watermark is
+// not a restriction — the engine must refuse it (403) rather than serve the
+// original at full fidelity (S2-09).
+
+#[test]
+fn restrict_size_max_is_refused() {
+    let srv = server();
+
+    // Request via test_restrict_max prefix — pre-flight returns
+    // {type = 'restrict', size = 'max'}, which resolves to full resolution.
+    let resp = client()
+        .get(format!(
+            "{}/test_restrict_max/lena512.jp2/full/max/0/default.jpg",
+            srv.base_url
+        ))
+        .send()
+        .expect("GET restrict size=max image failed");
+
+    assert_eq!(
+        resp.status().as_u16(),
+        403,
+        "restrict with size=max does not restrict and must be refused"
+    );
+}
+
+#[test]
+fn restrict_bare_decision_is_refused() {
+    let srv = server();
+
+    // Request via test_restrict_bare prefix — pre-flight returns a bare
+    // {type = 'restrict'} with neither size nor watermark.
+    let resp = client()
+        .get(format!(
+            "{}/test_restrict_bare/lena512.jp2/full/max/0/default.jpg",
+            srv.base_url
+        ))
+        .send()
+        .expect("GET bare restrict image failed");
+
+    assert_eq!(
+        resp.status().as_u16(),
+        403,
+        "a bare restrict decision (no size, no watermark) must be refused"
+    );
+}
+
 #[test]
 fn iiif_auth_api() {
     let srv = server();
