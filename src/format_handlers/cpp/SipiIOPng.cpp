@@ -257,6 +257,12 @@ Result<bool> SipiIOPng::read(SipiImage *img,
       "Error reading PNG file \"" + filepath + "\": Could not allocate memory for png_infop !" });
   }
 
+  // Bound per-chunk decompression and the number of cached ancillary chunks
+  // (zTXt/iTXt/etc.) — without these, a hostile file can decompression-bomb
+  // the chunk cache before any pixel data is read.
+  png_set_chunk_malloc_max(png_ptr, png_alloc_size_t(16) << 20);
+  png_set_chunk_cache_max(png_ptr, 1000);
+
   // Declared before the setjmp so that their destructors run on the normal
   // C++ path out of the landing block — a longjmp skips the destructors of
   // anything constructed inside the risk window (they are resized inside the
@@ -500,6 +506,12 @@ Result<SipiImgInfo> SipiIOPng::read_shape(const std::string &filepath)
     return std::unexpected(SipiValueError{ ErrorCode::kShapeProbeFailed,
       "Error reading PNG file \"" + filepath + "\": Could not allocate memory for png_infop !" });
   }
+
+  // Bound per-chunk decompression and the number of cached ancillary chunks
+  // (zTXt/iTXt/etc.) — without these, a hostile file can decompression-bomb
+  // the chunk cache before any pixel data is read.
+  png_set_chunk_malloc_max(png_ptr, png_alloc_size_t(16) << 20);
+  png_set_chunk_cache_max(png_ptr, 1000);
 
   // setjmp error recovery for read_shape
   if (setjmp(png_jmpbuf(png_ptr))) {

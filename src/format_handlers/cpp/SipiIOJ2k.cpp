@@ -991,6 +991,16 @@ Result<SipiImgInfo> SipiIOJ2k::read_shape(const std::string &filepath)
               // codestream creation entirely. Partial population (one but not
               // the other) → fall through to slow path.
               if (f.img_w != 0 && f.img_h != 0) {
+                // Reject an Essentials packet that claims malformed shape before trusting
+                // its fields for the fast path (malformed metadata is fatal, not logged).
+                if (auto r = validate_decode_dims(static_cast<std::size_t>(f.img_w),
+                      static_cast<std::size_t>(f.img_h),
+                      static_cast<std::size_t>(f.nc),
+                      static_cast<int>(f.bps),
+                      filepath);
+                    !r) {
+                  return std::unexpected(std::move(r).error());
+                }
                 info.width = static_cast<int>(f.img_w);
                 info.height = static_cast<int>(f.img_h);
                 info.tile_width = static_cast<int>(f.tile_w);
@@ -1424,16 +1434,44 @@ Result<void> SipiIOJ2k::write(SipiImage *img, const OutputSink &sink, const Sipi
     std::shared_ptr<Icc> image_icc = img->getIcc();
     if (image_icc != nullptr) {
       PredefinedProfiles icc_type = image_icc->getProfileType();
+      // An empty or unparseable ICC profile can't seed jp2_colour::init(kdu_byte*)
+      // (it reads a profile header from the pointer), so both the empty-buffer
+      // sites below and the exception handlers fall back to a colorspace guess
+      // derived from the channel count.
+      auto guess_colour_by_nc = [&]() {
+        switch (img->getNc() - img->getEs().size()) {
+        case 1: {
+          jp2_family_colour.init(JP2_sLUM_SPACE);
+          break;
+        }
+        case 3: {
+          jp2_family_colour.init(JP2_sRGB_SPACE);
+          break;
+        }
+        case 4: {
+          jp2_family_colour.init(JP2_CMYK_SPACE);
+          break;
+        }
+        }
+      };
       try {
         switch (icc_type) {
         case icc_undefined: {
           std::vector<unsigned char> icc_buf = image_icc->iccBytes();
-          jp2_family_colour.init(reinterpret_cast<kdu_byte *>(icc_buf.data()));
+          if (!icc_buf.empty()) {
+            jp2_family_colour.init(reinterpret_cast<kdu_byte *>(icc_buf.data()));
+          } else {
+            guess_colour_by_nc();
+          }
           break;
         }
         case icc_unknown: {
           std::vector<unsigned char> icc_buf = image_icc->iccBytes();
-          jp2_family_colour.init(reinterpret_cast<kdu_byte *>(icc_buf.data()));
+          if (!icc_buf.empty()) {
+            jp2_family_colour.init(reinterpret_cast<kdu_byte *>(icc_buf.data()));
+          } else {
+            guess_colour_by_nc();
+          }
           break;
         }
         case icc_sRGB: {
@@ -1447,12 +1485,20 @@ Result<void> SipiIOJ2k::write(SipiImage *img, const OutputSink &sink, const Sipi
         }
         case icc_AdobeRGB: {
           std::vector<unsigned char> icc_buf = image_icc->iccBytes();
-          jp2_family_colour.init(reinterpret_cast<kdu_byte *>(icc_buf.data()));
+          if (!icc_buf.empty()) {
+            jp2_family_colour.init(reinterpret_cast<kdu_byte *>(icc_buf.data()));
+          } else {
+            guess_colour_by_nc();
+          }
           break;
         }
         case icc_RGB: {// TODO: DOES NOT WORK AS EXPECTED!!!!! Fallback below
           std::vector<unsigned char> icc_buf = image_icc->iccBytes();
-          jp2_family_colour.init(reinterpret_cast<kdu_byte *>(icc_buf.data()));
+          if (!icc_buf.empty()) {
+            jp2_family_colour.init(reinterpret_cast<kdu_byte *>(icc_buf.data()));
+          } else {
+            guess_colour_by_nc();
+          }
           break;
         }
         case icc_CMYK_standard: {
@@ -1461,7 +1507,11 @@ Result<void> SipiIOJ2k::write(SipiImage *img, const OutputSink &sink, const Sipi
         }
         case icc_GRAY_D50: {
           std::vector<unsigned char> icc_buf = image_icc->iccBytes();
-          jp2_family_colour.init(reinterpret_cast<kdu_byte *>(icc_buf.data()));// TODO: DOES NOT WORK AS EXPECTED!!!!! Fallback below
+          if (!icc_buf.empty()) {
+            jp2_family_colour.init(reinterpret_cast<kdu_byte *>(icc_buf.data()));// TODO: DOES NOT WORK AS EXPECTED!!!!! Fallback below
+          } else {
+            guess_colour_by_nc();
+          }
           break;
         }
         case icc_LUM_D65: {
@@ -1487,25 +1537,21 @@ Result<void> SipiIOJ2k::write(SipiImage *img, const OutputSink &sink, const Sipi
         };
         default: {
           std::vector<unsigned char> icc_buf = image_icc->iccBytes();
-          jp2_family_colour.init(reinterpret_cast<kdu_byte *>(icc_buf.data()));
+          if (!icc_buf.empty()) {
+            jp2_family_colour.init(reinterpret_cast<kdu_byte *>(icc_buf.data()));
+          } else {
+            guess_colour_by_nc();
+          }
         }
         }
       } catch (kdu_exception e) {
         if (es.is_set()) es.fields_mut().use_icc = true;
-        switch (img->getNc() - img->getEs().size()) {
-        case 1: {
-          jp2_family_colour.init(JP2_sLUM_SPACE);
-          break;
-        }
-        case 3: {
-          jp2_family_colour.init(JP2_sRGB_SPACE);
-          break;
-        }
-        case 4: {
-          jp2_family_colour.init(JP2_CMYK_SPACE);
-          break;
-        }
-        }
+        guess_colour_by_nc();
+      } catch (const SipiError &e) {
+        // iccBytes() is not noexcept and throws SipiError on a
+        // cmsSaveProfileToMem failure; treat it the same as an unusable profile.
+        if (es.is_set()) es.fields_mut().use_icc = true;
+        guess_colour_by_nc();
       }
     } else {
       switch (img->getNc() - img->getEs().size()) {
