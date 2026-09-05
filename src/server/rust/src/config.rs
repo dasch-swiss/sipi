@@ -845,3 +845,21 @@ mod body_read_timeout_tests {
         assert_eq!(got, Duration::from_secs(DEFAULT_BODY_READ_TIMEOUT_SECS));
     }
 }
+
+/// Shipped-defaults regression (S2-33): the other half of "shipped defaults
+/// are safe" — the finite-mapping behavior of `max_post_size` itself is
+/// covered by the S2-19 body-limit e2e; this just pins the constant so a
+/// future edit can't silently make the shipped default unbounded again.
+#[cfg(test)]
+mod tests {
+    use super::DEFAULT_MAX_POST_SIZE;
+
+    #[test]
+    fn default_max_post_size_is_finite() {
+        // black_box defeats clippy's assertions_on_constants lint (the
+        // comparison would otherwise be evaluated at compile time and
+        // flagged as always-true) — this still catches a future edit that
+        // sets the constant to 0.
+        assert!(std::hint::black_box(DEFAULT_MAX_POST_SIZE) > 0);
+    }
+}

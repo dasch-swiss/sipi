@@ -62,7 +62,7 @@ private:
   std::string adminuser;
   std::string password;
   size_t memory_limit{ 0 };                       //!< total RAM envelope; 0 = auto (detect available RAM)
-  std::string admission_mode_str{ "basic" };    //!< "basic", "advanced"
+  std::string admission_mode_str{ "advanced" };   //!< "basic", "advanced" (shipped default: advanced)
   double tiles_memory_ratio{ 0.25 };              //!< fraction of the envelope reserved for tiles + non-decode floor; the full lane gets envelope × (1 − ratio)
 
 public:

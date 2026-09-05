@@ -278,7 +278,7 @@ These options are accepted by the `server` subcommand. Usage:
 | `--max-waiting <n>` | | `SIPI_MAX_WAITING` | `2×nthreads` | Max requests that may wait for a worker before HTTP 503 (`0` = no queue, shed immediately; `Retry-After: 1`) |
 | `--queue-timeout <sec>` | | `SIPI_QUEUE_TIMEOUT` | `5` | Max seconds a request waits in queue before 503 |
 | `--memory-limit <size>` | | `SIPI_MEMORY_LIMIT` | `0` (auto) | Total decode-memory envelope (`0` = auto-detect available RAM; `8G`, `500M`); the full partition's budget is envelope × (1 − tiles-memory-ratio) |
-| `--admission-mode <mode>` | | `SIPI_ADMISSION_MODE` | `basic` | `basic` (enforce the basic tier only; advanced tier observe-only) or `advanced` (also enforce the memory budget + 503/413) |
+| `--admission-mode <mode>` | | `SIPI_ADMISSION_MODE` | `advanced` | `basic` (enforce the basic tier only; advanced tier observe-only) or `advanced` (also enforce the memory budget + 503/413) |
 | `--tiles-memory-ratio <r>` | | `SIPI_TILES_MEMORY_RATIO` | `0.25` | Fraction of the envelope reserved for tiles + non-decode floor (0..1) |
 | `--large-decode-threshold-bytes <n>` | | `SIPI_LARGE_DECODE_THRESHOLD_BYTES` | `33554432` (32 MiB) | Estimated peak-memory at/above which a decode is charged to the full partition; below it bypasses as a tile |
 | `--preflight-cache-ttl <sec>` | | `SIPI_PREFLIGHT_CACHE_TTL` | `0` (disabled) | Seconds a `pre_flight` access decision is cached per `(prefix, identifier, credential)`. Opt-in; enable (`>0`) only if the hook decides purely on prefix/identifier/Cookie/Authorization (see the Preflight access-cache section in the Lua scripting guide) |
@@ -358,7 +358,7 @@ flags.
 | `SIPI_SENTRY_RELEASE` | | | Sentry release (no CLI flag) |
 | `SIPI_SENTRY_ENVIRONMENT` | | | Sentry environment (no CLI flag) |
 | `SIPI_MEMORY_LIMIT` | `--memory-limit` | `0` (auto) | Total RAM envelope (`0`=auto-detect available RAM, `8G`, `500M`); the full lane gets envelope × (1 − `tiles_memory_ratio`) |
-| `SIPI_ADMISSION_MODE` | `--admission-mode` | `basic` | Admission mode: `basic` (enforce basic tier only), `advanced` (also enforce the advanced tier) |
+| `SIPI_ADMISSION_MODE` | `--admission-mode` | `advanced` | Admission mode: `basic` (enforce basic tier only), `advanced` (also enforce the advanced tier) |
 | `SIPI_TILES_MEMORY_RATIO` | `--tiles-memory-ratio` | `0.25` | Fraction of the envelope reserved for tiles + non-decode floor (range 0..1) |
 | `SIPI_LARGE_DECODE_THRESHOLD_BYTES` | `--large-decode-threshold-bytes` | `33554432` (32 MiB) | Estimated peak-memory at/above which a decode is charged to the full lane; below it bypasses as a tile |
 

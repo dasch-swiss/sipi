@@ -16,6 +16,7 @@
 #include <cstdlib>
 #include <string>
 
+#include "ffi/SipiConf.h"
 #include "ffi/engine_context.h"
 #include "ffi/sipi_ffi.h"
 #include "test_paths.h"
@@ -217,6 +218,16 @@ TEST(SeamProbe, ImageNewRefusedWhenDecodeExceedsAdvancedBudget)
   SipiImageHandle *handle = sipi_image_new(path.c_str(), nullptr, nullptr, 0, 0, nullptr, collect_str, &err_msg);
   EXPECT_EQ(handle, nullptr);
   EXPECT_FALSE(err_msg.empty());
+}
+
+// Shipped-defaults regression (S2-33): the SipiConf default must be the
+// enforcing "advanced" mode, not the shadow-counting "basic" mode, so a
+// generic deployment that never sets admission_mode still enforces the
+// memory budget.
+TEST(SeamProbe, ShippedAdmissionModeDefaultIsAdvanced)
+{
+  Sipi::SipiConf conf;
+  EXPECT_EQ(conf.getAdmissionMode(), "advanced");
 }
 
 TEST(SeamProbe, ImageNewSucceedsWhenBudgetDisabled)
