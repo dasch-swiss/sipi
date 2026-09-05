@@ -170,7 +170,7 @@ jobs:
       group: ${{ github.workflow }}-${{ github.ref }}-${{ matrix.target }}
       cancel-in-progress: false
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
         with:
           fetch-depth: 0
           lfs: true
@@ -310,7 +310,7 @@ jobs:
       # each needs its own chain.
       - name: Upload minimized corpus (chains into the next nightly)
         if: ${{ !cancelled() }}
-        uses: actions/upload-artifact@v7
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
         with:
           name: fuzz-corpus-${{ matrix.target }}
           path: .fuzz/merged
@@ -358,7 +358,7 @@ jobs:
       # and artifact names must be unique within it.
       - name: Upload build event JSON (cache-hit-rate analysis)
         if: always()
-        uses: actions/upload-artifact@v7
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
         with:
           name: bep-fuzz-${{ matrix.target }}
           path: bep-fuzz*.json
@@ -370,7 +370,7 @@ jobs:
       # uniqueness reason as the BEP upload.
       - name: Upload crash reproducers + libFuzzer logs
         if: failure()
-        uses: actions/upload-artifact@v7
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
         with:
           name: fuzz-crashes-${{ matrix.target }}
           path: |
@@ -384,7 +384,7 @@ jobs:
       # save for ci-setup's restore-only cache step (rationale there).
       - name: Save Bazel repository cache
         if: ${{ !cancelled() && steps.setup.outputs.repo-cache-hit != 'true' }}
-        uses: actions/cache/save@v4
+        uses: actions/cache/save@0057852bfaa89a56745cba8c7296529d2fc39830 # v4
         with:
           path: ~/.cache/bazel-repo
           key: ${{ steps.setup.outputs.repo-cache-key }}

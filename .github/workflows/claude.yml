@@ -47,11 +47,11 @@ jobs:
       id-token: write
       actions: read
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
         with:
           fetch-depth: 1
 
-      - uses: anthropics/claude-code-action@v1
+      - uses: anthropics/claude-code-action@d75b94d5ad426cb8546e6628b6f5f19b84e5cce1 # v1
         with:
           anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
           track_progress: "true"
@@ -168,9 +168,9 @@ jobs:
   # Job 2: General Claude assistant (flexible), triggered by '@claude <PROMPT>' on PRs, issues etc.
   # The negated clause is exactly job 1's condition, so the two jobs are mutually exclusive by
   # construction, while '@claude review' on a plain issue — where job 1 cannot run — still lands
-  # here. Deliberately keeps the write permissions, the full-history checkout and an unrestricted
-  # tool set: this is the arm people use to change code, and none of the benchmark's findings
-  # are about it. Only the model is updated.
+  # here. Deliberately keeps the full-history checkout and an unrestricted tool set: this is the
+  # arm people use to change code, and none of the benchmark's findings are about it. Only the
+  # model is updated. 'contents: write' was dropped (see the permissions block below).
   claude-general:
     # The allowlist check sits inside each trigger arm: issue_comment payloads also carry
     # issue.author_association, so a single AND-ed check across the arms would pass a
@@ -191,18 +191,21 @@ jobs:
         (contains(github.event.comment.body, '@claude review') || contains(github.event.review.body, '@claude review'))
       )
     runs-on: ubuntu-latest
+    # 'contents: write' dropped (S2-41): a member pasting attacker-crafted text into a
+    # prompt could otherwise turn that into a push. The assistant can still comment on
+    # issues/PRs and read the full history; it cannot write repository contents.
     permissions:
-      contents: write
+      contents: read
       pull-requests: write
       issues: write
       id-token: write
       actions: read
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
         with:
           fetch-depth: 0
 
-      - uses: anthropics/claude-code-action@v1
+      - uses: anthropics/claude-code-action@d75b94d5ad426cb8546e6628b6f5f19b84e5cce1 # v1
         with:
           anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
           claude_args: "--model claude-opus-5"
