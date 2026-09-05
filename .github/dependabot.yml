@@ -3,6 +3,17 @@
 # Please see the documentation for all configuration options:
 # https://docs.github.com/github/administering-a-repository/configuration-options-for-dependency-updates
 
+# Coverage gap: production Rust crates (declared via `crate.spec()` / resolved
+# by `crate.from_specs()` in MODULE.bazel — no Cargo.toml/Cargo.lock for
+# Dependabot to parse) and native-dep `http_archive` pins (libtiff, exiv2,
+# lcms2, jansson, jbigkit, Kakadu; see CLAUDE.md's Dependencies table) are NOT
+# covered by any `cargo` or `bazel` entry below. The `cargo` entry only
+# reaches `/test/e2e`'s own manifest. Vulnerability coverage for the
+# production `@crates` hub comes from `just audit` (cargo-audit + OSV-Scanner
+# over the checked-in `Cargo.Bazel.lock`, CI job `dependency-audit` in
+# ci.yml). Native-dep pins have no automated advisory feed — see the
+# "Quarterly native-pin review" checklist in
+# docs/src/development/ci.md.
 version: 2
 updates:
   - package-ecosystem: "github-actions"

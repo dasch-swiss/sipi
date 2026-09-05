@@ -596,7 +596,12 @@ crate.spec(package = "jsonwebtoken", version = "10", default_features = False, f
 crate.spec(package = "base64", version = "0.22")
 crate.spec(package = "proptest", version = "1")
 crate.spec(package = "rand", version = "0.9")
-crate.from_specs()
+
+# `cargo_lockfile` materializes a Cargo-format lock alongside the Bazel-native
+# resolution — cargo-audit/OSV-Scanner read Cargo.lock syntax, not
+# MODULE.bazel.lock's JSON. Repin with:
+#   CARGO_BAZEL_REPIN=1 bazel build //src/server/rust:lib
+crate.from_specs(cargo_lockfile = "//:Cargo.Bazel.lock")
 use_repo(crate, "crates")
 
 # ── Kakadu (proprietary, GitHub-release-gated) ─────────────────────────────

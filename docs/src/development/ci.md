@@ -99,6 +99,13 @@ runfile under `--config=asan` and points `ASAN_SYMBOLIZER_PATH` at — so the
 tests (unit + e2e) execute on the RBE worker, symbolizer included, rather
 than on the runner.
 
+### Dependency advisory scan
+
+A `dependency-audit` job runs `just audit` against the checked-in
+Cargo-format lockfile — see "Dependency advisory scanning" below for
+what it covers. Self-contained (no Bazel/RBE setup); not currently a
+required branch-protection check.
+
 ### CI environment provisioning
 
 Every Bazel-invoking job in `ci.yml` (and in `publish.yml`,
@@ -160,6 +167,69 @@ shows up immediately after merge instead. To restore PR-scoped
 signal selectively, add a `pull_request: paths: ['src/**']` trigger
 to this workflow.
 
+## Dependency advisory scanning
+
+Workflow: `.github/workflows/ci.yml`, job `dependency-audit`. Runs `just
+audit` — `cargo-audit` and `osv-scanner` (installed in-job; neither is in the
+Nix dev shell) scanning `Cargo.Bazel.lock`, the checked-in Cargo-format
+lockfile materialized by `crate.from_specs(cargo_lockfile = ...)` in
+`MODULE.bazel` (`crate_universe`'s own `MODULE.bazel.lock` is JSON, which
+neither tool reads). Repin with
+`CARGO_BAZEL_REPIN=1 bazel build //src/server/rust:lib` after any
+`crate.spec()` change. Covers the production `@crates` hub
+(server/cli/scripting); `/test/e2e`'s own `Cargo.toml`/`Cargo.lock` is
+covered separately by Dependabot's `cargo` entry.
+
+This closes one gap, not the whole dependency surface: neither Dependabot nor
+`dependency-audit` sees the native `http_archive` / `cc_library` pins below —
+they have no lockfile-based advisory feed. Docker Scout (`ci.yml`'s PR-time
+CVE scan and `publish.yml`'s release-time Critical gate) covers OS/runtime
+packages in the *image layers*, which also does not reach these
+statically-linked libraries.
+
+### Quarterly native-pin review
+
+Manually check each project's release page against the pinned version in
+`MODULE.bazel` and CVE feeds (NVD, GitHub Advisory Database) for the pinned
+version. Bump via a normal version-pin PR (update `sha256`/`strip_prefix`/`url`
+or the BCR module version) when a fix is available.
+
+**Native `cc_library` (`http_archive`, hand-pinned — see
+[ADR-0015](../../adr/0015-native-cc_library-over-foreign_cc.md)):**
+
+| Dependency | Pinned via | Releases |
+|---|---|---|
+| libtiff | `tiff` `http_archive` | <https://github.com/libsdl-org/libtiff/releases> |
+| exiv2 | `exiv2` `http_archive` | <https://github.com/Exiv2/exiv2/releases> |
+| lcms2 | `lcms2` `http_archive` | <https://github.com/mm2/Little-CMS/releases> |
+| jansson | `jansson` `http_archive` | <https://github.com/akheron/jansson/releases> |
+| jbigkit | `jbigkit` `http_archive` | no GitHub releases; upstream page: <https://www.cl.cam.ac.uk/~mgk25/jbigkit/> |
+| mimalloc | `mimalloc` `http_archive` | <https://github.com/microsoft/mimalloc/releases> |
+| tracy | `tracy` `http_archive` (dev-only, `--config=tracy`-gated) | <https://github.com/wolfpld/tracy/releases> |
+| Kakadu | `kakadu_extension` (proprietary, license-gated) | <https://github.com/dasch-swiss/dsp-ci-assets/releases> (private, org-restricted) |
+
+**BCR `bazel_dep` drop-ins** (image codec / parsing surface — see
+CLAUDE.md's Dependencies table for the full BCR list; excludes pure
+build-tooling deps like `rules_cc`/`rules_rust`/`rules_python`):
+
+| Dependency | Releases |
+|---|---|
+| libpng | <https://github.com/pnggroup/libpng/releases> |
+| libjpeg_turbo | <https://github.com/libjpeg-turbo/libjpeg-turbo/releases> |
+| libwebp | <https://github.com/webmproject/libwebp/releases> |
+| libdeflate | <https://github.com/ebiggers/libdeflate/releases> |
+| zlib | <https://github.com/madler/zlib/releases> |
+| bzip2 | no GitHub releases; upstream page: <https://sourceware.org/bzip2/> |
+| xz | <https://github.com/tukaani-project/xz/releases> |
+| zstd | <https://github.com/facebook/zstd/releases> |
+| sqlite3 | no GitHub release notes; changelog: <https://www.sqlite.org/changes.html> |
+| libexpat | <https://github.com/libexpat/libexpat/releases> |
+| libmagic | <https://github.com/file/file/releases> |
+| Lua | no GitHub releases; upstream page: <https://www.lua.org/versions.html> |
+| curl | <https://github.com/curl/curl/releases> |
+| OpenSSL | <https://github.com/openssl/openssl/releases> |
+| protobuf | <https://github.com/protocolbuffers/protobuf/releases> |
+
 ## Tag release CI/CD
 
 Workflow: `.github/workflows/publish.yml`. Trigger: tag push
@@ -179,7 +249,11 @@ Gate model:
    - `publish-docker / {amd64, arm64}` — rebuilds the per-arch
      image, extracts the `.debug` file via
      `just bazel-docker-extract-debug ${arch}`, pushes via
-     `just bazel-docker-push-${arch}`, uploads SBOM, pushes debug
+     `just bazel-docker-push-${arch}`, records the image with Docker
+     Scout, runs a Docker Scout CVE gate (`only-severities: critical`,
+     `exit-code: true` — fails the job on any Critical finding in the
+     image layers; see "Dependency advisory scanning" above for what
+     this does and doesn't cover), uploads SBOM, pushes debug
      symbols to Sentry. It does not repeat the smoke test —
      `validate-docker` already validated the same commit.
    - `manifest` — needs `publish-docker`; runs

@@ -183,6 +183,20 @@ jobs:
           environment: production
           organization: daschswiss
 
+      # Scout sees image layers only — it cannot see codecs statically linked
+      # into the `sipi` binary (Kakadu, libtiff, exiv2, lcms2, etc; see
+      # CLAUDE.md's Dependencies table), so this catches vulnerable OS/runtime
+      # packages in the layer graph, not the linked C/C++ dependency tree.
+      # `exit-code: true` fails this step (and the job) on any Critical CVE.
+      - name: Docker Scout — CVE gate (fail on Critical)
+        uses: docker/scout-action@bacf462e8d090c09660de30a6ccc718035f961e3 # v1
+        with:
+          command: cves
+          image: registry://daschswiss/sipi:${{ github.ref_name }}-${{ matrix.arch }}
+          only-severities: critical
+          exit-code: true
+          organization: daschswiss
+
       - name: Docker Scout — generate SBOM
         uses: docker/scout-action@bacf462e8d090c09660de30a6ccc718035f961e3 # v1
         with:

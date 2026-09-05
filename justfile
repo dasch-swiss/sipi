@@ -148,6 +148,27 @@ bazel-rustfmt-check *FLAGS='':
 bazel-clippy-check *FLAGS='':
     bazel build //src/iiifparser/... //src/scripting/rust/... //src/throttling/rust/... //src/server/rust/... //src/cli/rust/... //test/e2e/... --aspects=@rules_rust//rust:defs.bzl%rust_clippy_aspect --output_groups=clippy_checks --@rules_rust//rust/settings:clippy_flags=-Dwarnings {{FLAGS}}
 
+# Advisory scan over the checked-in Cargo-format lockfile (`Cargo.Bazel.lock`,
+# materialized from `crate.from_specs(cargo_lockfile = ...)` in MODULE.bazel —
+# cargo-audit/OSV-Scanner read Cargo.lock syntax, not MODULE.bazel.lock's
+# JSON). Covers the production `@crates` hub (server/cli/scripting); the
+# `/test/e2e` cargo manifest is covered separately by Dependabot.
+#
+# Neither tool exposes a CLI severity threshold (RustSec advisories and OSV
+# entries don't uniformly carry a Critical/High label), so both fail on any
+# matched advisory — a conservative superset of "Critical/High", never a
+# silent under-fail. `cargo-audit` and `osv-scanner` are not in the Nix dev
+# shell — CI installs them (see `.github/workflows/ci.yml`); run locally after
+# `cargo install cargo-audit` / installing osv-scanner from its release page.
+# RUSTSEC-2023-0071 (`rsa` Marvin timing side-channel) has no fixed upstream
+# release. `rsa` is transitive via `jsonwebtoken` (pulled for RS256/PS256); SIPI
+# pins JWT to HS256, so no RSA private-key operation runs and the side-channel is
+# unreachable. Ignored in both tools until an upstream fix ships (rationale also
+# in `osv-scanner.toml`). Revisit when `rsa` cuts a fixed release.
+audit:
+    cargo audit --file Cargo.Bazel.lock --ignore RUSTSEC-2023-0071
+    osv-scanner scan source --lockfile=Cargo.lock:Cargo.Bazel.lock --config=osv-scanner.toml
+
 # Lint commit messages with commitlint-rs — the CI `commit-lint` gate. Enforces
 # the type allowlist + mandatory scope from `.commitlintrc.yml` on every commit in
 # `<from>..HEAD` (`from` defaults to origin/main). `commitlint` is in the Nix dev
