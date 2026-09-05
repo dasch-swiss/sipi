@@ -1939,6 +1939,16 @@ fn serve_info_json(
     };
 
     let (mut value, link_context) = if IMAGE_MIMES.contains(&mime.as_str()) {
+        // A restrict decision that supplies neither a size cap nor a watermark
+        // arrives here indistinguishable from `allow` — refuse it rather than
+        // disclose the native dims and tile grid, matching the image-serve
+        // path (routes.rs `serve_image`) and `/file` (S2-09).
+        if access.permission == SipiPermType::Restrict
+            && access_kv_str(access, "size").is_none()
+            && access_kv_str(access, "watermark").is_none()
+        {
+            return sink::error_response(StatusCode::FORBIDDEN);
+        }
         let dims = match ffi::image_dims(resolved) {
             Ok(d) => d,
             Err(_) => return sink::error_response(StatusCode::INTERNAL_SERVER_ERROR),
@@ -2016,6 +2026,17 @@ fn serve_knora_json(
     let sidecar = read_sidecar(resolved);
 
     let value = if IMAGE_MIMES.contains(&mime.as_str()) {
+        // A restrict decision that supplies neither a size cap nor a watermark
+        // arrives here indistinguishable from `allow` — refuse it (hiding
+        // existence, per knora.json's deny convention) rather than disclose
+        // the native dims and tile grid, matching the image-serve path
+        // (routes.rs `serve_image`) and `/file` (S2-09).
+        if access.permission == SipiPermType::Restrict
+            && access_kv_str(access, "size").is_none()
+            && access_kv_str(access, "watermark").is_none()
+        {
+            return sink::error_response(StatusCode::NOT_FOUND);
+        }
         let (dims, essentials) = match ffi::image_dims_and_essentials(resolved) {
             Ok(result) => result,
             Err(_) => return sink::error_response(StatusCode::INTERNAL_SERVER_ERROR),
