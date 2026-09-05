@@ -213,6 +213,41 @@ fn missing_route_script_is_a_404() {
     assert_eq!(status, 404);
 }
 
+/// `server.sendCookie` without options defaults to Secure + HttpOnly +
+/// SameSite=Lax, and multiple cookies each survive as their own `Set-Cookie`
+/// header (S2-24).
+#[test]
+fn cookies_default_secure_and_all_survive() {
+    let resp = http_client()
+        .get(format!("{}/hardening/cookies", server().base_url))
+        .send()
+        .expect("GET failed");
+    assert_eq!(resp.status().as_u16(), 200);
+    let cookies: Vec<String> = resp
+        .headers()
+        .get_all(reqwest::header::SET_COOKIE)
+        .iter()
+        .map(|v| v.to_str().expect("ascii header value").to_string())
+        .collect();
+    assert_eq!(
+        cookies.len(),
+        2,
+        "both Set-Cookie headers must survive, found: {cookies:?}"
+    );
+    for cookie in &cookies {
+        assert!(
+            cookie.contains("HttpOnly"),
+            "cookie missing default HttpOnly: {cookie}"
+        );
+        assert!(
+            cookie.contains("SameSite=Lax"),
+            "cookie missing default SameSite=Lax: {cookie}"
+        );
+    }
+    let body = resp.text().expect("read body");
+    assert_eq!(body.trim(), "COOKIES_OK");
+}
+
 // ── Init-script lifecycle ────────────────────────────────────────────────────
 
 /// A minimal config whose `initscript` points at `init`, with the shared

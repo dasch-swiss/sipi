@@ -316,12 +316,14 @@ pub fn direct_response(status: u16, headers: Vec<(String, String)>, body: Vec<u8
 }
 
 fn apply_headers(mut builder: Builder, headers: &[(String, String)]) -> Builder {
-    // Last-write-wins per header name (even Set-Cookie is keyed by name): a route that
-    // sets the same header twice — e.g. a Lua script that sends `Content-Type:
-    // text/html` and then `application/json` via `send_response.lua` — must emit a
-    // single value, not both. `HeaderMap::insert` replaces any prior value under
-    // that name, giving the map semantics natively (unlike `Builder::header`,
-    // which appends).
+    // Last-write-wins per header name: a route that sets the same header
+    // twice — e.g. a Lua script that sends `Content-Type: text/html` and then
+    // `application/json` via `send_response.lua` — must emit a single value,
+    // not both. `HeaderMap::insert` replaces any prior value under that name,
+    // giving the map semantics natively (unlike `Builder::header`, which
+    // appends). `Set-Cookie` is the one exception: each cookie is its own
+    // header instance, so it uses `HeaderMap::append` to let multiple cookies
+    // survive.
     if let Some(map) = builder.headers_mut() {
         for (name, value) in headers {
             match (
@@ -329,7 +331,11 @@ fn apply_headers(mut builder: Builder, headers: &[(String, String)]) -> Builder 
                 HeaderValue::from_str(value),
             ) {
                 (Ok(n), Ok(v)) => {
-                    map.insert(n, v);
+                    if n == axum::http::header::SET_COOKIE {
+                        map.append(n, v);
+                    } else {
+                        map.insert(n, v);
+                    }
                 }
                 // A header http rejects (control chars etc.) is dropped rather
                 // than failing the whole response; the engine sanitises at the

@@ -181,7 +181,10 @@ fn response_head_commits_on_first_print() {
         .find(|(n, _)| n == "Set-Cookie")
         .map(|(_, v)| v.clone())
         .expect("Set-Cookie rendered");
-    assert_eq!(set_cookie, "sid=s3cr3t; Path=/; Secure; HttpOnly");
+    assert_eq!(
+        set_cookie,
+        "sid=s3cr3t; Path=/; Secure; HttpOnly; SameSite=Lax"
+    );
     assert_eq!(body.borrow().as_slice(), b"hello 42");
 }
 

@@ -763,6 +763,11 @@ table containing the following keys:
 -   `expires` (value in seconds)
 -   `secure` (boolean)
 -   `http_only` (boolean)
+-   `same_site` (string)
+
+Response cookies default to `Secure; HttpOnly; SameSite=Lax`. The `http_only`
+and `same_site` options can override those defaults (e.g. `same_site = ""`
+clears `SameSite`); `secure` only ever turns the flag on.
 
 #### server.sendStatus
 

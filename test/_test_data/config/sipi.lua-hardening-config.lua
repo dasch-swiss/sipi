@@ -84,5 +84,10 @@ routes = {
         method = 'GET',
         route = '/hardening/missing',
         script = 'hardening_missing_script.lua'
+    },
+    {
+        method = 'GET',
+        route = '/hardening/cookies',
+        script = 'hardening_cookies.lua'
     }
 }

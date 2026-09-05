@@ -74,8 +74,9 @@ pub struct RequestData {
 }
 
 /// A cookie set by `server.sendCookie`, rendered to `Set-Cookie` at commit.
-/// Defaults mirror the C++ `ResponseCookie` (secure by default, not
-/// http-only; the boolean options only ever turn a flag *on* — pinned quirk).
+/// Cookies default to Secure + HttpOnly + SameSite=Lax; the `secure` option
+/// only ever turns the flag *on* — pinned quirk — while `http_only` and
+/// `same_site` can override the secure defaults.
 #[derive(Debug, Clone)]
 pub struct ResponseCookie {
     pub name: String,
@@ -85,6 +86,7 @@ pub struct ResponseCookie {
     pub expires_seconds: Option<i64>,
     pub secure: bool,
     pub http_only: bool,
+    pub same_site: String,
 }
 
 impl ResponseCookie {
@@ -96,7 +98,8 @@ impl ResponseCookie {
             domain: String::new(),
             expires_seconds: None,
             secure: true,
-            http_only: false,
+            http_only: true,
+            same_site: "Lax".to_string(),
         }
     }
 
@@ -126,6 +129,10 @@ impl ResponseCookie {
         }
         if self.http_only {
             s.push_str("; HttpOnly");
+        }
+        if !self.same_site.is_empty() {
+            s.push_str("; SameSite=");
+            s.push_str(&self.same_site);
         }
         s
     }
