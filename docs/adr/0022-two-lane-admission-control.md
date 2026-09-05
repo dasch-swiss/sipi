@@ -10,6 +10,17 @@ deployments now get memory enforcement by default. To observe shadow counters
 before enforcing, an operator sets `SIPI_ADMISSION_MODE=basic` explicitly,
 then removes the override to return to `advanced`.
 
+**Amendment (2026-09-05, security hardening wave 2 / DEV-7140):** per-client
+fairness — one client holding every permit or filling the wait queue, the
+incident shape that motivated the original per-IP rate limiter — is handled
+operator-side by a Traefik `inFlightReq` middleware keyed on client IP, with
+no SIPI code. This keeps the seam clean: admission stays cost-based and
+per-partition, not per-client, so no spoofable `X-Forwarded-For` client
+identity is reintroduced as a security input to this crate; the `client_ip`
+field was consequently removed from the `SipiServeRequest` FFI seam (S2-44).
+The Traefik middleware diff is carried operator-side (ops-deploy), not in
+this repo.
+
 SIPI's decode cost is bimodal. On `vre-prod-01` a 13-hour histogram of ~19,600
 decodes split 68 % under 10 MB (viewer tiles) against 27 % at 100–500 MB each
 (full-image downloads, overwhelmingly distributed crawler bots). With a
@@ -148,3 +159,5 @@ like the pre-existing pool knobs.
 - The regression net is subject-only (e2e + approval + proptest + unit); the C++
   oracle and its differential gate were removed ([ADR-0020](0020-oracle-removal.md)),
   so advanced-mode 503/413 is covered by dedicated e2e, not a diff.
+- Per-client fairness is enforced at the Traefik edge (`inFlightReq` keyed on
+  client IP), not in SIPI's admission crate.
