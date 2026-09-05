@@ -59,8 +59,6 @@ private:
   std::string docroot;
   std::string wwwroute;
   std::string jwt_secret;
-  std::string adminuser;
-  std::string password;
   size_t memory_limit{ 0 };                       //!< total RAM envelope; 0 = auto (detect available RAM)
   std::string admission_mode_str{ "advanced" };   //!< "basic", "advanced" (shipped default: advanced)
   double tiles_memory_ratio{ 0.25 };              //!< fraction of the envelope reserved for tiles + non-decode floor; the full lane gets envelope × (1 − ratio)
@@ -135,12 +133,6 @@ public:
 
   std::string getJwtSecret() { return jwt_secret; }
   void setJwtSecret(const std::string &str) { jwt_secret = str; }
-
-  std::string getAdminUser() { return adminuser; }
-  void setAdminUser(const std::string &str) { adminuser = str; }
-
-  std::string getPassword() { return password; }
-  inline void setPasswort(const std::string &str) { password = str; }
 
   size_t getMemoryLimit() const { return memory_limit; }
   void setMemoryLimit(size_t v) { memory_limit = v; }

@@ -84,8 +84,6 @@ impl From<&ServerArgs> for ServerOverrides {
             sslcert: _,
             sslkey: _,
             jwtkey,
-            adminuser,
-            adminpasswd,
         } = tls_auth;
         let KnoraArgs {
             knorapath,
@@ -115,8 +113,6 @@ impl From<&ServerArgs> for ServerOverrides {
             wwwroute: wwwroute.clone(),
             pathprefix: *pathprefix,
             jwtkey: jwtkey.clone(),
-            adminuser: adminuser.clone(),
-            adminpasswd: adminpasswd.clone(),
             cache_dir: cache_dir.clone().or_else(|| cachedir.clone()),
             cache_size: cache_size.clone().or_else(|| cachesize.clone()),
             cache_nfiles: cache_nfiles.or(*cachenfiles),

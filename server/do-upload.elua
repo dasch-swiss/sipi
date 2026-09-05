@@ -5,10 +5,6 @@ This is a sample script that shows how an upload function for images can be impl
 using the lua interface of SIPI.
 
 ]]
-success,token = authorize_page('admin.sipi.org', 'administrator', config.adminuser, config.password)
-if not success then
-    return
-end
 </lua>
 <html>
     <head>

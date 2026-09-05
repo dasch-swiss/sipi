@@ -110,7 +110,7 @@ extern "C" int sipi_init(const SipiServerConfig *overrides)
 
     // Apply the present values onto the default-constructed SipiConf BEFORE
     // the cache / memory-budget services below are built from `conf`.
-    // Setter names are SipiConf's verbatim (incl. the `setPasswort` typo). Sized
+    // Setter names are SipiConf's verbatim. Sized
     // strings (cache_size/maxpost/memory_limit) carry the raw "300M" text;
     // parseSizeString expands the suffix engine-side. A negative maxpost /
     // memory-limit clamps to 0 (matching the SipiConf ctor) so
@@ -130,8 +130,6 @@ extern "C" int sipi_init(const SipiServerConfig *overrides)
       if (o.initscript != nullptr) conf.setInitScript(o.initscript);
       if (o.tmpdir != nullptr) conf.setTmpDir(o.tmpdir);
       if (o.jwtkey != nullptr) conf.setJwtSecret(o.jwtkey);
-      if (o.adminuser != nullptr) conf.setAdminUser(o.adminuser);
-      if (o.adminpasswd != nullptr) conf.setPasswort(o.adminpasswd);// `setPasswort` is the real (typo'd) setter
       if (o.cache_dir != nullptr) conf.setCacheDir(o.cache_dir);
       if (o.cache_size != nullptr) conf.setCacheSize(Sipi::parseSizeString(o.cache_size));
       if (o.maxpost != nullptr) {

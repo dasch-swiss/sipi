@@ -4,11 +4,6 @@
     else
         protocol = 'http://'
     end
-
-    success,token = authorize_page('admin.sipi.org', 'administrator', config.adminuser, config.password)
-    if not success then
-        return
-    end
 </lua>
 <html>
 <head>

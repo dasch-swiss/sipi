@@ -49,8 +49,6 @@ TLS & Auth:
       --sslcert <FILE>        Path to the SSL certificate (parse-only: TLS at Traefik) [env: SIPI_SSLCERTIFICATE=]
       --sslkey <FILE>         Path to the SSL key (parse-only: TLS at Traefik) [env: SIPI_SSLKEY=]
       --jwtkey <SECRET>       Secret for generating JWTs (exactly 42 characters) [env: SIPI_JWTKEY=]
-      --adminuser <USER>      SIPI admin username [env: SIPI_ADMINUSER=]
-      --adminpasswd <PASSWD>  Admin password [env: SIPI_ADMINPASSWD=]
 
 Knora:
       --knorapath <HOST>  Knora server host [env: SIPI_KNORAPATH=]
