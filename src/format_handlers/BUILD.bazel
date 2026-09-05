@@ -76,7 +76,7 @@ cc_library(
         "@highway//:hwy",
         "@jansson//:jansson",
         "@kakadu//:kdu",
-        "@libexpat",
+        "@libexpat//:expat",
         "@libjpeg_turbo//:jpeg",
         "@libmagic//:lib",
         "@libpng//:png",

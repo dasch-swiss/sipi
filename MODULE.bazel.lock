@@ -133,8 +133,6 @@
     "https://bcr.bazel.build/modules/jsoncpp/1.9.6/MODULE.bazel": "2f8d20d3b7d54143213c4dfc3d98225c42de7d666011528dc8fe91591e2e17b0",
     "https://bcr.bazel.build/modules/libdeflate/1.25/MODULE.bazel": "0ea179178f6ba27d1067c1a9e2adec816909626d4305464c49b7c6a640deaab7",
     "https://bcr.bazel.build/modules/libdeflate/1.25/source.json": "baf7b8e3b92a3a527d00dc9bec5d05b01e109fafe332e8200630fd61259df17b",
-    "https://bcr.bazel.build/modules/libexpat/2.7.1.bcr.1/MODULE.bazel": "ad0933e7da133de74cc535911cab2f1b2f224b340898656748d2c1f48d031e70",
-    "https://bcr.bazel.build/modules/libexpat/2.7.1.bcr.1/source.json": "8e120a44b11853250a501634148058edad44c4a6fabb1c494cbf9ebc2cc3d6dd",
     "https://bcr.bazel.build/modules/libjpeg_turbo/3.1.3.bcr.5/MODULE.bazel": "3ff34cfe01aef1288188200ce5ac6dfa3d08502390c35d76c7a80408dc8f9d07",
     "https://bcr.bazel.build/modules/libjpeg_turbo/3.1.3.bcr.5/source.json": "1389535090a8ee89a2e16a86cb71e73f68bbad85ae76978a7ed8b0ce5150ce14",
     "https://bcr.bazel.build/modules/libmagic/5.47/MODULE.bazel": "351b3f5b0b3e0670a1f823c170364a63d6c41428514133362170949ec0610417",
