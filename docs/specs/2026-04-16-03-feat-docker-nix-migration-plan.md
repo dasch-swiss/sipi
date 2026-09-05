@@ -4,7 +4,7 @@ type: feat
 date: 2026-04-22
 author: "Ivan Subotic"
 status: superseded
-superseded_by: "specs/2026-04-29-sipi-bazel-migration/01-refactor-sipi-bazel-migration-plan.md"
+superseded_by: "docs/specs/2026-04-29-01-refactor-sipi-bazel-migration-plan.md"
 linear: DEV-5939
 repositories:
   - sipi
@@ -16,7 +16,7 @@ implemented_at: 2026-04-28
 > ([sipi#582](https://github.com/dasch-swiss/sipi/pull/582)) with
 > Sipi's Docker image built by Nix `dockerTools`. That implementation
 > was then replaced by Bazel `rules_oci` under
-> [the Sipi Bazel migration](../2026-04-29-sipi-bazel-migration/01-refactor-sipi-bazel-migration-plan.md)
+> [the Sipi Bazel migration](2026-04-29-01-refactor-sipi-bazel-migration-plan.md)
 > (DEV-6341), specifically PR Y+4 (DEV-6346). The image's runtime
 > contract (distroless base, OCI labels, multi-arch manifest) is
 > preserved verbatim; only the producer changed.

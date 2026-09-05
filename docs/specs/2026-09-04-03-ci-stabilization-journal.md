@@ -9,7 +9,7 @@ status: draft
 
 This journal covers work done in the **interactive (Fable) session** AFTER the
 orchestrator + adversarial-review rounds recorded in
-[`01-...-journal.md`](01-fix-sipi-security-hardening-wave-2-journal.md). Scope:
+[`01-...-journal.md`](2026-09-04-01-fix-sipi-security-hardening-wave-2-journal.md). Scope:
 resolving the one review blocker (T1) and driving **PR #800** to fully-green CI.
 All wave-2 code (Phases 1–10 + S2-39 + T1) is code-complete; this phase is CI
 stabilization + history cleanup only.

@@ -4,7 +4,7 @@ type: feat
 date: 2026-04-20
 author: "Ivan Subotic"
 status: superseded
-superseded_by: "specs/2026-04-29-sipi-bazel-migration/01-refactor-sipi-bazel-migration-plan.md"
+superseded_by: "docs/specs/2026-04-29-01-refactor-sipi-bazel-migration-plan.md"
 linear: DEV-6280
 repositories:
   - sipi
@@ -12,7 +12,7 @@ repositories:
 
 > **Superseded.** The `just nix-*` recipe-unification this plan
 > proposed is obsolete: Sipi's build orchestrator moved from Nix to
-> Bazel under [the Sipi Bazel migration](../2026-04-29-sipi-bazel-migration/01-refactor-sipi-bazel-migration-plan.md)
+> Bazel under [the Sipi Bazel migration](2026-04-29-01-refactor-sipi-bazel-migration-plan.md)
 > (DEV-6341). After that migration's PR Y+6 (DEV-6348) every CI step
 > invokes `just bazel-*` recipes; PR Y+7 (DEV-6349) removed the last
 > `just nix-*` build recipes. The "single source of truth" goal is
