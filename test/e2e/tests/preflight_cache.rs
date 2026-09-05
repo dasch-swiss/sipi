@@ -14,7 +14,7 @@ use sipi_e2e::{http_client, test_data_dir, SipiServer};
 
 /// Matches the `jwt_key` in `config/sipi.e2e-test-config.lua` (shared with
 /// `security.rs`); the `auth` prefix validates the HS256 signature against it.
-const JWT_SECRET: &str = "UP 4888, nice 4-8-4 steam engine";
+const JWT_SECRET: &str = "dev-only-insecure-jwt-secret-change-me";
 
 /// Start a server with the preflight access-cache enabled (2s TTL). The default is
 /// disabled, so the cache is turned on explicitly here — otherwise these tests

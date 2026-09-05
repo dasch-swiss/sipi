@@ -77,7 +77,7 @@ fn sample_request() -> RequestData {
         }],
         content: b"raw-body".to_vec(),
         content_type: "application/octet-stream".into(),
-        jwt_secret: "UP 4888, nice 4-8-4 steam engine".into(),
+        jwt_secret: "dev-only-insecure-jwt-secret-change-me".into(),
         docroot: None,
         traceparent: None,
     }
@@ -350,7 +350,7 @@ fn jwt_round_trip_and_hardened_validation() {
 
     // Golden tokens (HS256, secret = the test config secret) — expired,
     // no-exp, wrong-alg — all rejected by the hardened validation.
-    let secret = "UP 4888, nice 4-8-4 steam engine";
+    let secret = "dev-only-insecure-jwt-secret-change-me";
     let key = jsonwebtoken::EncodingKey::from_secret(secret.as_bytes());
     let expired = jsonwebtoken::encode(
         &jsonwebtoken::Header::default(),

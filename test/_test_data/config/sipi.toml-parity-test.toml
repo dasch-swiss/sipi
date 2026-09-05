@@ -20,6 +20,9 @@ thumb_size = "!128,128"
 [image]
 jpeg_quality = 60
 
+[tls_auth]
+jwt_secret = "dev-only-insecure-jwt-secret-change-me"
+
 [logging]
 level = "INFO"
 

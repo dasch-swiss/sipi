@@ -74,7 +74,7 @@ fn start_server_with_cache_config(cache_size: &str, cache_nfiles: u32) -> (SipiS
     max_temp_file_age = 86400,
     knora_path = 'localhost',
     knora_port = '3434',
-    jwt_secret = 'UP 4888, nice 4-8-4 steam engine',
+    jwt_secret = 'dev-only-insecure-jwt-secret-change-me',
 }}
 
 admin = {{

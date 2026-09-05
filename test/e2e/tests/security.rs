@@ -3,12 +3,13 @@ mod common;
 use common::{client, client_no_redirect, server};
 use serde_json::json;
 use sipi_e2e::jwt::{alg_none_token, create_jwt, tamper_payload};
-use sipi_e2e::{http_client, test_data_dir, SipiServer};
+use sipi_e2e::{allocate_ports, http_client, sipi_bin_path, test_data_dir, SipiServer};
 use std::io::{Read as _, Write as _};
 use std::net::TcpStream;
+use std::process::Command;
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
-const JWT_SECRET: &str = "UP 4888, nice 4-8-4 steam engine";
+const JWT_SECRET: &str = "dev-only-insecure-jwt-secret-change-me";
 
 // =============================================================================
 // JWT Security Tests (using the 'auth' prefix which checks JWT tokens)
@@ -119,12 +120,11 @@ fn jwt_tampered_payload() {
 }
 
 #[test]
-fn config_empty_jwt_secret() {
-    // Start sipi with empty jwt_secret, verify JWT-authenticated endpoints
-    // behave correctly (reject or accept-without-auth).
+fn config_empty_jwt_secret_refuses_startup() {
+    // An empty jwt_secret is unsafe (S2-11): startup must be refused (fail
+    // closed) instead of serving with a forgeable/absent secret.
     let test_data = test_data_dir();
 
-    // Create a config with empty jwt_secret
     let config_content = r#"sipi = {
     port = 1024,
     nthreads = 4,
@@ -146,11 +146,6 @@ fn config_empty_jwt_secret() {
     jwt_secret = '',
 }
 
-admin = {
-    user = 'admin',
-    password = 'Sipi-Admin'
-}
-
 fileserver = {
     docroot = './server',
     wwwroute = '/server'
@@ -162,25 +157,25 @@ routes = {}
     let config_path = test_data.join("config/sipi.empty-jwt.lua");
     std::fs::write(&config_path, config_content).expect("write empty jwt config");
 
-    let srv = SipiServer::start("config/sipi.empty-jwt.lua", &test_data);
-    let c = http_client();
-
-    // Basic IIIF should still work (no auth required for unit prefix)
-    let resp = c
-        .get(format!(
-            "{}/unit/lena512.jp2/full/max/0/default.jpg",
-            srv.base_url
-        ))
-        .send()
-        .expect("basic IIIF request failed with empty jwt_secret");
-
-    assert_eq!(
-        resp.status().as_u16(),
-        200,
-        "basic IIIF should work even with empty jwt_secret"
-    );
+    let (http_port, _) = allocate_ports();
+    let output = Command::new(sipi_bin_path())
+        .arg("server")
+        .arg("--config")
+        .arg("config/sipi.empty-jwt.lua")
+        .arg("--serverport")
+        .arg(http_port.to_string())
+        .current_dir(&test_data)
+        .output()
+        .expect("spawn sipi");
 
     let _ = std::fs::remove_file(&config_path);
+
+    assert!(
+        !output.status.success(),
+        "an empty jwt_secret must refuse startup, got: {:?}\nstderr:\n{}",
+        output.status,
+        String::from_utf8_lossy(&output.stderr)
+    );
 }
 
 #[test]

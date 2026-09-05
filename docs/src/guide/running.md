@@ -40,6 +40,33 @@ sipi compare file1.tif file2.jpg
 sipi server --config config/sipi.config.lua
 ```
 
+### JWT secret (`SIPI_JWTKEY`)
+
+Any Lua-configured deployment (a `--config`/`SIPI_CONFIGFILE` pointing at a
+`.lua` file) must supply a jwt_secret of at least 32 bytes via the
+`SIPI_JWTKEY` environment variable (or the equivalent `--jwtkey` flag /
+`jwt_secret` config key). There is no shipped default — an empty, too-short,
+or shipped-literal secret refuses startup (fail closed), since it would let a
+deployment that inherited a known secret forge JWTs.
+
+Example (documentation only — generate your own secret, never reuse this
+value):
+
+```bash
+export SIPI_JWTKEY='a randomly generated secret, at least 32 bytes long'
+```
+
+The old Lua `admin = { user = '…', password = '…' }` block that used to ship
+alongside `jwt_secret` in `config/sipi.config.lua` is documented for
+reference only:
+
+```lua
+admin = {
+    user = 'admin',
+    password = 'Sipi-Admin'
+}
+```
+
 ### Configuration file format (`.lua` or `.toml`)
 
 `--config` accepts either a Lua file (`.lua`) or a TOML file (`.toml`),
@@ -297,7 +324,7 @@ These options are accepted by the `server` subcommand. Usage:
 | `--thumbsize <size>` | | `SIPI_THUMBSIZE` | `!128,128` | Default thumbnail size (IIIF syntax) |
 | `--sslcert <path>` | | `SIPI_SSLCERTIFICATE` | `./certificate/certificate.pem` | SSL certificate path. Parse-only: accepted for compatibility, unread |
 | `--sslkey <path>` | | `SIPI_SSLKEY` | `./certificate/key.pem` | SSL key file path. Parse-only: accepted for compatibility, unread |
-| `--jwtkey <string>` | | `SIPI_JWTKEY` | | JWT shared secret (42 chars) |
+| `--jwtkey <string>` | | `SIPI_JWTKEY` | | JWT shared secret, required for any Lua-configured deployment (at least 32 bytes; the shipped default is rejected) |
 | `--loglevel <level>` | | `SIPI_LOGLEVEL` | `DEBUG` | Sets the engine log level (`DEBUG`/`INFO`/…, see Logging section); applied via `set_log_level` |
 
 ### Sentry Error Reporting
@@ -347,7 +374,7 @@ flags.
 | `SIPI_THUMBSIZE` | `--thumbsize` | `!128,128` | Thumbnail size |
 | `SIPI_SSLCERTIFICATE` | `--sslcert` | `./certificate/certificate.pem` | SSL certificate. Parse-only: accepted for compatibility, unread |
 | `SIPI_SSLKEY` | `--sslkey` | `./certificate/key.pem` | SSL key. Parse-only: accepted for compatibility, unread |
-| `SIPI_JWTKEY` | `--jwtkey` | | JWT secret |
+| `SIPI_JWTKEY` | `--jwtkey` | | JWT secret, required for any Lua-configured deployment (at least 32 bytes; the shipped default is rejected) |
 | `SIPI_ALLOWED_ORIGINS` | *(none)* | | Comma-separated browser Origins allowed to make credentialed cross-origin (CORS) requests; empty/unset = reflect any Origin (default, backward-compatible); set = restrict to the listed origins |
 | `SIPI_PUBLIC_HOSTS` | *(none)* | | Comma-separated hosts allowed in the canonical `@id`, the 303 `Location`, the `Link` header, the cache key, and Lua `server.host`; empty/unset = trust `X-Forwarded-Host`/`Host` verbatim (default, backward-compatible); set = a header host on the list passes through, any other host is replaced by the first listed host |
 | `SIPI_REQUEST_TIMEOUT` | *(none)* | `60` | Handler wall-clock timeout in seconds; a request whose handler exceeds it answers 408 (`0`/unset/unparseable falls back to the default) |

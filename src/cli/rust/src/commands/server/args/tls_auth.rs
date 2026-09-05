@@ -14,7 +14,8 @@ pub struct TlsAuthArgs {
     /// Path to the SSL key (parse-only: TLS at Traefik).
     #[arg(long, env = "SIPI_SSLKEY", value_name = "FILE")]
     pub sslkey: Option<String>,
-    /// Secret for generating JWTs (exactly 42 characters).
+    /// Secret for generating JWTs (required for any Lua-configured deployment;
+    /// at least 32 bytes; the shipped default is rejected).
     #[arg(long, env = "SIPI_JWTKEY", value_name = "SECRET")]
     pub jwtkey: Option<String>,
     /// SIPI admin username.

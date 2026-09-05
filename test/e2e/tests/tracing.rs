@@ -102,7 +102,7 @@ fn preflight_propagates_traceparent_to_outbound_http() {
     max_temp_file_age = 86400,
     knora_path = '127.0.0.1',
     knora_port = '{mock_port}',
-    jwt_secret = '',
+    jwt_secret = 'dev-only-insecure-jwt-secret-change-me',
 }}
 
 fileserver = {{ docroot = './server', wwwroute = '/server' }}

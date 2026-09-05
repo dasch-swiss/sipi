@@ -23,7 +23,7 @@ sipi = {
     tmpdir = '/tmp',
     initscript = './config/sipi.init.lua',
     scriptdir = './scripts',
-    jwt_secret = 'UP 4888, nice 4-8-4 steam engine',
+    jwt_secret = 'dev-only-insecure-jwt-secret-change-me',
 }
 admin = { user = 'admin', password = 'Sipi-Admin' }
 fileserver = { docroot = './server', wwwroute = '/server' }
