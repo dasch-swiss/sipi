@@ -306,7 +306,6 @@ pub struct SipiServeRequest {
     pub resolved_path: *const c_char,
     pub prefix: *const c_char,
     pub identifier: *const c_char,
-    pub client_ip: *const c_char,
     pub params: SipiIiifParams,
     pub restricted_size: *const c_char,
     pub watermark_path: *const c_char,
@@ -1417,22 +1416,21 @@ mod serve_request_layout {
     fn repr_c_matches_sipi_ffi_h() {
         assert_eq!(size_of::<usize>(), 8, "layout assumes an LP64 target");
         assert_eq!(align_of::<SipiServeRequest>(), 8);
-        assert_eq!(size_of::<SipiServeRequest>(), 168);
+        assert_eq!(size_of::<SipiServeRequest>(), 160);
         assert_eq!(offset_of!(SipiServeRequest, resolved_path), 0);
         assert_eq!(offset_of!(SipiServeRequest, prefix), 8);
         assert_eq!(offset_of!(SipiServeRequest, identifier), 16);
-        assert_eq!(offset_of!(SipiServeRequest, client_ip), 24);
         // `params` (SipiIiifParams, size 72) is guarded field-by-field by
         // `iiif_params_layout`; here we pin only where it sits in the request.
-        assert_eq!(offset_of!(SipiServeRequest, params), 32);
-        assert_eq!(offset_of!(SipiServeRequest, restricted_size), 104);
-        assert_eq!(offset_of!(SipiServeRequest, watermark_path), 112);
-        assert_eq!(offset_of!(SipiServeRequest, forwarded_proto), 120);
-        assert_eq!(offset_of!(SipiServeRequest, forwarded_host), 128);
-        assert_eq!(offset_of!(SipiServeRequest, request_uri), 136);
-        assert_eq!(offset_of!(SipiServeRequest, is_head), 144);
-        assert_eq!(offset_of!(SipiServeRequest, report_error), 152);
-        assert_eq!(offset_of!(SipiServeRequest, report_ctx), 160);
+        assert_eq!(offset_of!(SipiServeRequest, params), 24);
+        assert_eq!(offset_of!(SipiServeRequest, restricted_size), 96);
+        assert_eq!(offset_of!(SipiServeRequest, watermark_path), 104);
+        assert_eq!(offset_of!(SipiServeRequest, forwarded_proto), 112);
+        assert_eq!(offset_of!(SipiServeRequest, forwarded_host), 120);
+        assert_eq!(offset_of!(SipiServeRequest, request_uri), 128);
+        assert_eq!(offset_of!(SipiServeRequest, is_head), 136);
+        assert_eq!(offset_of!(SipiServeRequest, report_error), 144);
+        assert_eq!(offset_of!(SipiServeRequest, report_ctx), 152);
     }
 }
 

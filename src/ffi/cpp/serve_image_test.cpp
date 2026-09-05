@@ -71,7 +71,6 @@ SipiServeRequest make_request(const std::string &path, const SipiIiifParams &par
   req.resolved_path = path.c_str();
   req.prefix = "unit";
   req.identifier = "lena512.tif";
-  req.client_ip = "127.0.0.1";
   req.params = params;
   req.restricted_size = nullptr;
   req.watermark_path = nullptr;

@@ -207,7 +207,6 @@ typedef struct
   const char *resolved_path; /* image-root-validated absolute path (validation owned by the Rust edge) */
   const char *prefix; /* IIIF prefix — canonical-URL + cache key */
   const char *identifier; /* IIIF identifier — canonical-URL `id` + cache key */
-  const char *client_ip; /* XFF-resolved client identity at the Rust edge */
   SipiIiifParams params; /* region/size/rotation/quality/format */
   const char *restricted_size; /* preflight `restrict` downscale, or NULL */
   const char *watermark_path; /* preflight `restrict` watermark, or NULL */
@@ -493,20 +492,19 @@ static_assert(offsetof(SipiIiifParams, quality_type) == 64, "SipiIiifParams layo
 static_assert(offsetof(SipiIiifParams, format_type) == 68, "SipiIiifParams layout drift");
 
 /* SipiServeRequest — pointers + the nested SipiIiifParams + the report channel. */
-static_assert(sizeof(SipiServeRequest) == 168, "SipiServeRequest size drifted from src/server/rust/src/ffi.rs");
+static_assert(sizeof(SipiServeRequest) == 160, "SipiServeRequest size drifted from src/server/rust/src/ffi.rs");
 static_assert(offsetof(SipiServeRequest, resolved_path) == 0, "SipiServeRequest layout drift");
 static_assert(offsetof(SipiServeRequest, prefix) == 8, "SipiServeRequest layout drift");
 static_assert(offsetof(SipiServeRequest, identifier) == 16, "SipiServeRequest layout drift");
-static_assert(offsetof(SipiServeRequest, client_ip) == 24, "SipiServeRequest layout drift");
-static_assert(offsetof(SipiServeRequest, params) == 32, "SipiServeRequest layout drift");
-static_assert(offsetof(SipiServeRequest, restricted_size) == 104, "SipiServeRequest layout drift");
-static_assert(offsetof(SipiServeRequest, watermark_path) == 112, "SipiServeRequest layout drift");
-static_assert(offsetof(SipiServeRequest, forwarded_proto) == 120, "SipiServeRequest layout drift");
-static_assert(offsetof(SipiServeRequest, forwarded_host) == 128, "SipiServeRequest layout drift");
-static_assert(offsetof(SipiServeRequest, request_uri) == 136, "SipiServeRequest layout drift");
-static_assert(offsetof(SipiServeRequest, is_head) == 144, "SipiServeRequest layout drift");
-static_assert(offsetof(SipiServeRequest, report_error) == 152, "SipiServeRequest layout drift");
-static_assert(offsetof(SipiServeRequest, report_ctx) == 160, "SipiServeRequest layout drift");
+static_assert(offsetof(SipiServeRequest, params) == 24, "SipiServeRequest layout drift");
+static_assert(offsetof(SipiServeRequest, restricted_size) == 96, "SipiServeRequest layout drift");
+static_assert(offsetof(SipiServeRequest, watermark_path) == 104, "SipiServeRequest layout drift");
+static_assert(offsetof(SipiServeRequest, forwarded_proto) == 112, "SipiServeRequest layout drift");
+static_assert(offsetof(SipiServeRequest, forwarded_host) == 120, "SipiServeRequest layout drift");
+static_assert(offsetof(SipiServeRequest, request_uri) == 128, "SipiServeRequest layout drift");
+static_assert(offsetof(SipiServeRequest, is_head) == 136, "SipiServeRequest layout drift");
+static_assert(offsetof(SipiServeRequest, report_error) == 144, "SipiServeRequest layout drift");
+static_assert(offsetof(SipiServeRequest, report_ctx) == 152, "SipiServeRequest layout drift");
 
 
 /* SipiImageDims — five uint32_t; 4-aligned, unlike the pointer-bearing structs. */
