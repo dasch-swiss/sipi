@@ -1687,7 +1687,6 @@ fn tiff_jpeg_compression_input() {
         .expect("TIFF JPEG compression request failed");
 
     let status = resp.status().as_u16();
-    let _ = std::fs::remove_file(&dst);
 
     assert_eq!(
         status, 200,
@@ -1698,4 +1697,7 @@ fn tiff_jpeg_compression_input() {
     let img = image::load_from_memory(&bytes).expect("decode returned JPEG");
     let (w, h) = img.dimensions();
     assert!(w > 0 && h > 0);
+
+    // The source fixture must outlive the streamed response, so remove it last.
+    let _ = std::fs::remove_file(&dst);
 }
