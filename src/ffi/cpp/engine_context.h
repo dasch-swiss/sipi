@@ -72,6 +72,15 @@ void set_engine_context(const EngineContext &ctx);
  *  silent all-disabled serve. */
 [[nodiscard]] const EngineContext &engine_context();
 
+/*! The installed engine context, or a default-constructed one (no cache, no
+ *  memory budget, the struct's default decode timeout) when neither
+ *  `set_engine_context` nor `sipi_init` has run. Unlike `engine_context()`,
+ *  never throws: `sipi_image_new` (the Lua `SipiImage.new()` entry point) runs
+ *  in test/dev harnesses that build a `RequestVm` directly without going
+ *  through server startup, so it must degrade to "no budget/deadline
+ *  enforcement configured" rather than hard-failing every decode. */
+[[nodiscard]] EngineContext engine_context_or_default();
+
 }// namespace Sipi::ffi
 
 #endif// SIPI_FFI_ENGINE_CONTEXT_H

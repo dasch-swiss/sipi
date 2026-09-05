@@ -125,7 +125,12 @@ extern "C" SipiImageHandle *sipi_image_new(const char *path,
       siz = std::make_shared<Sipi::SipiSize>(reduce);
     }
 
-    const auto &eng = Sipi::ffi::engine_context();
+    // Non-throwing: `SipiImage.new()` also runs in test/dev harnesses that
+    // build a `RequestVm` directly without `sipi_init` having installed the
+    // engine context, so it must degrade to "no budget/deadline enforcement"
+    // rather than hard-failing every decode (contrast the IIIF serve path,
+    // which requires the install and lets a miss surface as a 500).
+    const auto eng = Sipi::ffi::engine_context_or_default();
 
     // Full-lane memory-budget charge + wall-clock decode deadline, through the
     // same shared helper the IIIF serve path uses (ffi/decode_guard.h): a
