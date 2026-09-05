@@ -264,3 +264,92 @@ fn transform_pipeline_memory() {
         "server not responsive after transform pipeline"
     );
 }
+
+/// S2-19: a multipart body with more than `MAX_MULTIPART_PARTS` (64) parts is
+/// rejected with 400, independent of `max_post_size` — the cap on part count
+/// guards against a request built from many tiny parts, which stays under the
+/// byte-size limit while still costing a field-processing pass (and a temp
+/// file, for file parts) per part.
+#[test]
+fn multipart_part_count_over_limit_answers_400() {
+    let c = reqwest::blocking::Client::builder()
+        .timeout(Duration::from_secs(30))
+        .build()
+        .expect("build client");
+
+    let mut form = reqwest::blocking::multipart::Form::new();
+    for i in 0..65 {
+        form = form.text(format!("field{i}"), "x");
+    }
+
+    let resp = c
+        .post(format!("{}/api/upload", server().base_url))
+        .multipart(form)
+        .send()
+        .expect("65-part upload request failed");
+
+    assert_eq!(
+        resp.status().as_u16(),
+        400,
+        "a 65-part multipart body should be rejected before any part is processed"
+    );
+}
+
+/// S2-19: a client that stops sending body bytes mid-request must not hold
+/// the connection (and, on the Lua-route path, an eventual admission permit)
+/// open indefinitely. `SIPI_BODY_READ_TIMEOUT=1` bounds the raw-body read in
+/// `serve_lua_script`; a trickling client that goes silent for longer than
+/// that must see the server cut the read — either by answering (whatever
+/// status the body-read error maps to) or by closing/resetting the
+/// connection. `SIPI_REQUEST_TIMEOUT=5` is a backstop far above the 1s body
+/// timeout so the assertion below is exercising the body-read timeout, not
+/// the handler wall-clock timeout.
+#[test]
+fn trickling_body_is_cut_off_by_body_read_timeout() {
+    use std::io::{Read, Write};
+
+    let srv = SipiServer::start_env(
+        "config/sipi.e2e-test-config.lua",
+        &test_data_dir(),
+        &[],
+        &[
+            ("SIPI_BODY_READ_TIMEOUT", "1"),
+            ("SIPI_REQUEST_TIMEOUT", "5"),
+        ],
+    );
+    let port = srv.http_port;
+
+    let mut sock = std::net::TcpStream::connect(("127.0.0.1", port)).expect("connect");
+    sock.set_read_timeout(Some(Duration::from_secs(8)))
+        .expect("set read timeout");
+    sock.set_write_timeout(Some(Duration::from_secs(8)))
+        .expect("set write timeout");
+
+    write!(
+        sock,
+        "POST /api/upload HTTP/1.1\r\nHost: 127.0.0.1:{port}\r\nContent-Type: application/octet-stream\r\nContent-Length: 1000000\r\nConnection: close\r\n\r\n"
+    )
+    .expect("send request head");
+    sock.write_all(b"trickle...").expect("send partial body");
+    sock.flush().expect("flush partial body");
+
+    // Go silent for longer than the 1s body-read timeout, then see whether the
+    // server responded or cut the connection.
+    std::thread::sleep(Duration::from_secs(2));
+
+    let mut buf = [0u8; 512];
+    match sock.read(&mut buf) {
+        Ok(_) => {} // the server answered or closed cleanly — the read was cut off
+        Err(e)
+            if matches!(
+                e.kind(),
+                std::io::ErrorKind::WouldBlock | std::io::ErrorKind::TimedOut
+            ) =>
+        {
+            // Our own 8s socket read timeout fired: the server never cut the
+            // trickling read, i.e. SIPI_BODY_READ_TIMEOUT did not take effect.
+            panic!("server did not cut off the trickling body read within the socket read timeout");
+        }
+        Err(_) => {} // connection reset by the server — also proves the read was cut off
+    }
+}

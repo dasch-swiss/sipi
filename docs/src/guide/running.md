@@ -351,6 +351,7 @@ flags.
 | `SIPI_ALLOWED_ORIGINS` | *(none)* | | Comma-separated browser Origins allowed to make credentialed cross-origin (CORS) requests; empty/unset = reflect any Origin (default, backward-compatible); set = restrict to the listed origins |
 | `SIPI_PUBLIC_HOSTS` | *(none)* | | Comma-separated hosts allowed in the canonical `@id`, the 303 `Location`, the `Link` header, the cache key, and Lua `server.host`; empty/unset = trust `X-Forwarded-Host`/`Host` verbatim (default, backward-compatible); set = a header host on the list passes through, any other host is replaced by the first listed host |
 | `SIPI_REQUEST_TIMEOUT` | *(none)* | `60` | Handler wall-clock timeout in seconds; a request whose handler exceeds it answers 408 (`0`/unset/unparseable falls back to the default) |
+| `SIPI_BODY_READ_TIMEOUT` | *(none)* | `10` | Lua-route/docroot request-body-read timeout in seconds; a body that takes longer to read is cut off before admission (`0`/unset/unparseable falls back to the default) |
 | `SIPI_JPEGQUALITY` | `--quality` | `60` | JPEG quality |
 | `SIPI_LOGLEVEL` | `--loglevel` | `DEBUG` | Sets the engine log level; applied via `set_log_level` |
 | `SIPI_SENTRY_DSN` | | | Sentry DSN (no CLI flag) |
