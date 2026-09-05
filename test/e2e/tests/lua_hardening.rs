@@ -327,6 +327,65 @@ fn broken_init_script_refuses_startup() {
     );
 }
 
+/// S2-46: the `/server` docroot fileserver executes `.lua`/`.elua` scripts, so
+/// an overlap between `docroot` and any writable root (imgroot here) would
+/// turn an uploaded/planted file into remote code execution. Startup must
+/// refuse — the only unsafe config value here is the overlap itself (a valid
+/// jwt_secret is set so that isn't the reason it fails).
+#[test]
+fn docroot_overlapping_imgroot_refuses_startup() {
+    let test_data = test_data_dir();
+    let config_rel = "config/sipi.hardening-docroot-overlap-config.lua";
+    let _cleanup = Cleanup(vec![test_data.join(config_rel)]);
+    std::fs::write(
+        test_data.join(config_rel),
+        r#"sipi = {
+    port = 1024,
+    jpeg_quality = 60,
+    scaling_quality = { jpeg = "medium", tiff = "high", png = "high", j2k = "high" },
+    max_post_size = '300M',
+    imgroot = './images',
+    prefix_as_path = true,
+    initscript = '.',
+    cache_dir = './cache',
+    cache_size = '20M',
+    cache_nfiles = 8,
+    scriptdir = './scripts',
+    thumb_size = '!128,128',
+    tmpdir = '/tmp',
+    max_temp_file_age = 86400,
+    knora_path = 'localhost',
+    knora_port = '3434',
+    jwt_secret = 'dev-only-insecure-jwt-secret-change-me',
+}
+fileserver = {
+    docroot = './images',
+    wwwroute = '/server',
+}
+routes = {}
+"#,
+    )
+    .expect("write config");
+
+    let (http_port, _) = allocate_ports();
+    let output = Command::new(sipi_bin_path())
+        .arg("server")
+        .arg("--config")
+        .arg(config_rel)
+        .arg("--serverport")
+        .arg(http_port.to_string())
+        .current_dir(&test_data)
+        .output()
+        .expect("spawn sipi");
+
+    assert!(
+        !output.status.success(),
+        "docroot overlapping imgroot must refuse startup, got: {:?}\nstderr:\n{}",
+        output.status,
+        String::from_utf8_lossy(&output.stderr)
+    );
+}
+
 /// Hook probes are boot-frozen; a post-boot edit that breaks the init script
 /// surfaces as a request-time 500 (fail closed), not a silent allow.
 #[test]

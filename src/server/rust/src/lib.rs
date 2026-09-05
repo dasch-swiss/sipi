@@ -55,6 +55,49 @@ fn jwtkey_is_unsafe(key: &str) -> bool {
     key.is_empty() || key.len() < 32 || key == SHIPPED_JWT_SECRET
 }
 
+/// Lexically normalize `p`: canonicalize when the path exists (resolves
+/// symlinks too), else fall back to a purely lexical `.`/`..` collapse so a
+/// not-yet-created directory (e.g. a `cache_dir` sipi will `mkdir -p` on
+/// first use) can still be compared.
+fn normalize_path(p: &std::path::Path) -> std::path::PathBuf {
+    if let Ok(canon) = std::fs::canonicalize(p) {
+        return canon;
+    }
+    let mut result = std::path::PathBuf::new();
+    for component in p.components() {
+        match component {
+            std::path::Component::CurDir => {}
+            std::path::Component::ParentDir => {
+                result.pop();
+            }
+            other => result.push(other.as_os_str()),
+        }
+    }
+    result
+}
+
+/// True when `a` and `b` name the same directory, or one is an ancestor of the
+/// other. The docroot fileserver executes `.lua`/`.elua` scripts, so overlap
+/// with any root a request can write to (or the script dir) turns an
+/// uploaded/planted file into remote code execution.
+fn paths_overlap(a: &std::path::Path, b: &std::path::Path) -> bool {
+    let a = normalize_path(a);
+    let b = normalize_path(b);
+    a == b || a.starts_with(&b) || b.starts_with(&a)
+}
+
+/// Returns the name of the first root in `roots` that overlaps `docroot`, or
+/// `None` if none do.
+fn docroot_overlap<'a>(
+    docroot: &std::path::Path,
+    roots: &[(&'a str, &std::path::Path)],
+) -> Option<&'a str> {
+    roots
+        .iter()
+        .find(|(_, root)| paths_overlap(docroot, root))
+        .map(|(name, _)| *name)
+}
+
 /// Process start time, for the `/health` uptime field. Set once at server
 /// startup; the handler reads `elapsed()`.
 static START: OnceLock<Instant> = OnceLock::new();
@@ -253,6 +296,42 @@ async fn server_main(
                 (overrides, None)
             }
         };
+
+    // The docroot fileserver executes `.lua`/`.elua` scripts, so if it overlaps
+    // any root a request can write to (imgroot, tmpdir, cache_dir) or the
+    // script dir, an uploaded/planted file becomes remote code execution.
+    // Refuse startup rather than trust operator config. Resolved with the same
+    // defaults `lua_config_values` uses, so the comparison matches what the
+    // engine actually serves from.
+    if let Some(docroot) = effective.docroot.as_deref().filter(|d| !d.is_empty()) {
+        let docroot_path = std::path::Path::new(docroot);
+        let imgroot = effective.imgroot.clone().unwrap_or_else(|| ".".into());
+        let tmpdir = effective.tmpdir.clone().unwrap_or_else(|| "/tmp".into());
+        let scriptdir = effective
+            .scriptdir
+            .clone()
+            .unwrap_or_else(|| "./scripts".into());
+        let cache_dir = effective
+            .cache_dir
+            .clone()
+            .unwrap_or_else(|| "./cache".into());
+        let roots: [(&str, &std::path::Path); 4] = [
+            ("imgroot", std::path::Path::new(&imgroot)),
+            ("tmpdir", std::path::Path::new(&tmpdir)),
+            ("scriptdir", std::path::Path::new(&scriptdir)),
+            ("cache_dir", std::path::Path::new(&cache_dir)),
+        ];
+        if let Some(offending) = docroot_overlap(docroot_path, &roots) {
+            tracing::error!(
+                docroot = %docroot,
+                overlaps = offending,
+                "refusing startup — docroot overlaps {offending}; the docroot fileserver executes \
+                 .lua/.elua scripts, so overlap with a writable root is remote code execution"
+            );
+            flush_telemetry(otel).await;
+            return ExitCode::FAILURE;
+        }
+    }
 
     // The Rust-hosted Lua environment: hardened runtime + init script + the
     // config-table values, built from the resolved config. The boot probe runs
@@ -748,5 +827,56 @@ mod jwtkey_tests {
     #[test]
     fn distinct_long_key_is_safe() {
         assert!(!jwtkey_is_unsafe("a".repeat(38).as_str()));
+    }
+}
+
+#[cfg(test)]
+mod docroot_overlap_tests {
+    use super::*;
+    use std::path::Path;
+
+    #[test]
+    fn equal_paths_overlap() {
+        assert!(paths_overlap(
+            Path::new("/data/www"),
+            Path::new("/data/www")
+        ));
+    }
+
+    #[test]
+    fn nested_paths_overlap_docroot_inside_other() {
+        assert!(paths_overlap(
+            Path::new("/data/images/public"),
+            Path::new("/data/images")
+        ));
+    }
+
+    #[test]
+    fn nested_paths_overlap_other_inside_docroot() {
+        assert!(paths_overlap(
+            Path::new("/data/www"),
+            Path::new("/data/www/scripts")
+        ));
+    }
+
+    #[test]
+    fn disjoint_siblings_do_not_overlap() {
+        assert!(!paths_overlap(
+            Path::new("/data/www"),
+            Path::new("/data/images")
+        ));
+    }
+
+    #[test]
+    fn docroot_overlap_reports_first_offending_root_name() {
+        let roots: [(&str, &Path); 2] = [
+            ("imgroot", Path::new("/data/images")),
+            ("tmpdir", Path::new("/tmp")),
+        ];
+        assert_eq!(
+            docroot_overlap(Path::new("/data/images"), &roots),
+            Some("imgroot")
+        );
+        assert_eq!(docroot_overlap(Path::new("/data/www"), &roots), None);
     }
 }
