@@ -27,12 +27,13 @@ Read these before reasoning about names, boundaries, or architectural decisions:
 
 ## Specs
 
-SIPI specs (PRDs, implementation plans, design docs) live in [`docs/specs/`](docs/specs/), one date-prefixed folder per feature/initiative. Platform-wide specs that span several repos stay in [`dasch-specs`](https://github.com/dasch-swiss/dasch-specs); a spec whose primary subject is SIPI belongs here even when it touches deploy config or another repo.
+SIPI specs (PRDs, implementation plans, design docs) live directly in [`docs/specs/`](docs/specs/) as flat, date-prefixed files. Platform-wide specs that span several repos stay in [`dasch-specs`](https://github.com/dasch-swiss/dasch-specs); a spec whose primary subject is SIPI belongs here even when it touches deploy config or another repo.
 
-- **Folder:** `docs/specs/YYYY-MM-DD-{title-slug}/` — date = creation date of the folder's first artifact; slug lowercase, alphanumeric + hyphens, max 60 chars.
-- **Files:** sequential per-folder numbering shared across all file types (`max(nn) + 1`): `{nn}-{topic}-PRD.md`, `{nn}-{type}-{topic}-plan.md` (`{type}` ∈ `feat`/`fix`/`refactor`), `{nn}-{topic}-design.md`.
-- **Assets:** images go in an `assets/` subdirectory of the spec folder, referenced relatively (`![…](assets/file.png)`).
+- **File:** each spec is a flat file directly in `docs/specs/`, named `YYYY-MM-DD-NN-{topic}-{type}.md` — `NN` a 2-digit daily sequence (`01`, `02`, … so more than one spec can share a date), `{topic}` lowercase alphanumeric + hyphens (≤60 chars), `{type}` ∈ `PRD` / `plan` / `design` / `journal`. The artifacts of one piece of work share the same `YYYY-MM-DD-NN-{topic}-` stem (e.g. `…-plan.md` alongside its `…-journal.md`).
+- **Assets:** any images go in a sibling `docs/specs/YYYY-MM-DD-NN-{topic}-assets/` directory, referenced relatively (`![…](YYYY-MM-DD-NN-{topic}-assets/file.png)`).
+- **Existing subfolders:** older `docs/specs/YYYY-MM-DD-{slug}/` folders predate this convention and stay as-is; only new specs are flat.
 - **Frontmatter** (YAML, all spec files): `title`, `date`, `author`, `status: draft | reviewed | approved | implemented`, and `repositories:` listing the *other* code repos the feature modifies — never list `sipi` itself (the spec's home repo carries no signal).
+- **Reference direction is one-way — specs are a sink.** A spec may reference *out* (code, docs, ADRs, `UBIQUITOUS_LANGUAGE.md`), but **nothing outside `docs/specs/` may reference into a spec**, and a new spec should reference durable artifacts (an ADR, code, the glossary), not another spec. This is what lets any spec be renamed, flattened, or deleted without breaking the tree — the flatten test: a `grep -rn "docs/specs/"` over everything except `docs/specs/` itself returns nothing. *Enforcement: `review`* (promotable to a `static-analysis` grep gate). Pre-existing cross-spec links in historical plans are tolerated; do not add new ones.
 - `docs/specs/` is outside the mkdocs site (`docs_dir: src`); specs are repo context, not published documentation.
 
 ## Build System and Common Commands

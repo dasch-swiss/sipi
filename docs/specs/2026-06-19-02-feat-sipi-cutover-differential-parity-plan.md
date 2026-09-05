@@ -20,7 +20,7 @@ repositories:
 
 # SIPI Phase C cutover: differential parity → deploy after C + T + Docs
 
-This is the **active execution plan** for the remainder of the SIPI C++→Rust strangler cutover (Phase C). It splits out of [`01-feat-sipi-rust-strangler-plan.md`](01-feat-sipi-rust-strangler-plan.md), which had grown to ~720 lines. **`01` remains the foundational record** — the strangler strategy, the central finding, the locked architectural decisions, the completed phases (0 / A / B / B-L + the Phase C foundation), and the full session history. **`02` (this file) is the forward plan** for closing parity and reaching the deploy gate.
+This is the **active execution plan** for the remainder of the SIPI C++→Rust strangler cutover (Phase C). It splits out of [`01-feat-sipi-rust-strangler-plan.md`](2026-06-19-01-feat-sipi-rust-strangler-plan.md), which had grown to ~720 lines. **`01` remains the foundational record** — the strangler strategy, the central finding, the locked architectural decisions, the completed phases (0 / A / B / B-L + the Phase C foundation), and the full session history. **`02` (this file) is the forward plan** for closing parity and reaching the deploy gate.
 
 Read `01` first for *why* the seam is shaped the way it is. Read this file for *what remains* and *in what order*.
 
@@ -746,6 +746,6 @@ This is a **multi-year, later-stage exploration** — **not** a deploy prerequis
 
 ## 11. Cross-references
 
-- [`01-feat-sipi-rust-strangler-plan.md`](01-feat-sipi-rust-strangler-plan.md) — strategy, central finding, locked architectural decisions (#1–#9), completed Phases 0/A/B/B-L + C foundation, the seam ABI (`sipi_ffi.h`), the four-item cutover breakdown, the Crash & error-reporting spec (Item 3), the metrics-bridge spec (Item 4), Phase Docs, and the full session history (incl. the now-superseded Phase T trait direction — see §10 / ADR-0017).
+- [`01-feat-sipi-rust-strangler-plan.md`](2026-06-19-01-feat-sipi-rust-strangler-plan.md) — strategy, central finding, locked architectural decisions (#1–#9), completed Phases 0/A/B/B-L + C foundation, the seam ABI (`sipi_ffi.h`), the four-item cutover breakdown, the Crash & error-reporting spec (Item 3), the metrics-bridge spec (Item 4), Phase Docs, and the full session history (incl. the now-superseded Phase T trait direction — see §10 / ADR-0017).
 - Linear: **DEV-6659** (Phase C), DEV-6670 (T), DEV-6671 (Docs), DEV-6104 (metrics bridge / cluster B), DEV-6061 (CORS / cluster H), DEV-6062 (error mapping), DEV-6759 (step 11.5 — crate_universe `from_cargo`→`from_specs`).
 - ADRs: 0013 (shttps-as-internal-module / the seam), 0017 (extensibility — **amended 2026-07-17: runtime scripting for request-shaping, no compile-time toolchain; Lua today, evaluate a more approachable language (Roc first candidate) to succeed it; the Rust-trait/native-first direction is dropped** — see §10), 0006 (OutputSink), 0002 (ICC determinism — why image bodies aren't byte-exact off the approval path).

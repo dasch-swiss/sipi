@@ -3,7 +3,7 @@ title: "Sipi Nix Unified Build"
 date: 2026-04-16
 author: "Ivan Subotic"
 status: superseded
-superseded_by: "specs/2026-04-29-sipi-bazel-migration/01-refactor-sipi-bazel-migration-plan.md"
+superseded_by: "docs/specs/2026-04-29-01-refactor-sipi-bazel-migration-plan.md"
 linear: DEV-6265
 repositories:
   - sipi
@@ -13,7 +13,7 @@ repositories:
 > **Superseded.** Phase 1 of this plan landed in production (the
 > previous frontmatter status was `implemented`). The follow-on phases
 > — and the Nix-as-build-orchestrator architecture itself — are
-> obsoleted by [the Sipi Bazel migration](../2026-04-29-sipi-bazel-migration/01-refactor-sipi-bazel-migration-plan.md)
+> obsoleted by [the Sipi Bazel migration](2026-04-29-01-refactor-sipi-bazel-migration-plan.md)
 > (DEV-6341). After PR Y+7 (DEV-6349) of that migration, Nix's role
 > contracts to dev-shell provisioning only and Bazel is the single
 > build system.
