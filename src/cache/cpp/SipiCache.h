@@ -26,6 +26,16 @@ namespace Sipi {
  * If the file has already been cached, the cached version is sent (but only, if the "original"
  * is older than the cached file. In order to identify the different versions, the
  * canonocal URL according to the IIIF 2.0 standard is used.
+ *
+ * The on-disk `.sipicache` index is a fixed header (magic + version +
+ * `sizeof(FileCacheRecord)`) followed by an array of `FileCacheRecord`s keyed
+ * by a SHA-256 digest of the canonical URL (not the raw URL — a short or
+ * truncated key is a forgery/collision primitive on a restricted image), and
+ * every record is re-validated on load (bounded strings, no path separators,
+ * `fsize` recomputed from the actual cache file). See
+ * [ADR-0025](../../../docs/adr/0025-cache-index-header.md) for the header
+ * layout, the version-mismatch-means-empty rule, and the documented residual
+ * risk of a same-size, same-mtime file replacement.
  */
 class SipiCache
 {
@@ -47,7 +57,7 @@ public:
     size_t tile_w, tile_h;
     int clevels;
     int numpages;
-    char canonical[256];
+    char canonical[256];//!< hex SHA-256 digest of the canonical URL (ADR-0025), not the raw URL
     char origpath[256];
     char cachepath[256];
 #if defined(HAVE_ST_ATIMESPEC)
@@ -56,7 +66,8 @@ public:
     time_t mtime;
 #endif
     time_t access_time;//!< last access in seconds
-    off_t fsize;
+    off_t fsize;//!< size of the CACHE file, used for eviction accounting
+    off_t source_size;//!< size of the SOURCE file at cache-add time (S2-25 freshness gate)
   } FileCacheRecord;
 
   /*!
@@ -78,7 +89,8 @@ public:
     time_t mtime;
 #endif
     time_t access_time;//!< last access in seconds
-    off_t fsize;
+    off_t fsize;//!< size of the CACHE file, used for eviction accounting
+    off_t source_size;//!< size of the SOURCE file at cache-add time (S2-25 freshness gate)
   } CacheRecord;
 
   // The pre-DEV-6537 `SizeRecord` typedef + `sizetable` map cached an image's
@@ -151,6 +163,13 @@ public:
 
   /*!
    * check if a file is already in the cache and up-to-date
+   *
+   * Freshness is gated on the source file's mtime AND size (S2-25): a
+   * same-mtime replacement with a DIFFERENT size is a miss. Residual risk
+   * (see ADR-0025): a same-size replacement that preserves mtime still hits —
+   * SIPI does not hash source file bodies on every check() call. Operators
+   * replacing a Service File in place must touch(1) it or purge the cache
+   * entry.
    *
    * \param[in] origpath_p The path to the Service File
    * \param[in] canonical_p The canonical URL according to the IIIF standard

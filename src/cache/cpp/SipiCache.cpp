@@ -4,11 +4,14 @@
  */
 
 #include <cmath>
+#include <cstdint>
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
 #include <fstream>
+#include <iomanip>
 #include <iostream>
+#include <sstream>
 #include <string>
 #include <vector>
 
@@ -25,6 +28,7 @@
 #include <sys/stat.h>
 #include <unistd.h>
 
+#include <openssl/evp.h>
 
 #include "SipiCache.h"
 #include "error/SipiError.h"
@@ -36,6 +40,43 @@
 namespace Sipi {
 
 using observability::Metrics;
+
+namespace {
+
+  // Fixed on-disk index header (ADR-0025): magic + format version +
+  // `sizeof(FileCacheRecord)` at write time. A missing/mismatching header —
+  // including a `sizeof(FileCacheRecord)` mismatch, which the mtime layout
+  // difference between platforms and any future field addition both trigger —
+  // means "start empty and log once", never "parse as a stream of records".
+  struct CacheIndexHeader
+  {
+    char magic[8];
+    std::uint32_t version;
+    std::uint32_t record_size;
+  };
+
+  constexpr char kCacheIndexMagic[8] = { 'S', 'I', 'P', 'I', 'C', 'A', 'C', 'H' };
+  constexpr std::uint32_t kCacheIndexVersion = 1;
+
+  // SHA-256 hex digest of `s` (64 hex chars = 256 bits, well past the >=128-bit
+  // floor): the persisted and in-memory key for a cache entry's canonical URL
+  // (S2-26). A short/truncated key is forgeable and becomes a
+  // content-substitution primitive on a restricted image.
+  std::string sha256_hex(const std::string &s)
+  {
+    unsigned char digest[EVP_MAX_MD_SIZE];
+    unsigned int len = 0;
+    if (EVP_Digest(s.data(), s.size(), digest, &len, EVP_sha256(), nullptr) != 1) {
+      throw SipiError("SHA-256 digest of cache canonical key failed");
+    }
+    std::ostringstream oss;
+    for (unsigned int i = 0; i < len; ++i) {
+      oss << std::hex << std::setw(2) << std::setfill('0') << static_cast<int>(digest[i]);
+    }
+    return oss.str();
+  }
+
+}// namespace
 
 // Owns a scandir() result: frees every entry and the array itself.
 struct ScandirList
@@ -115,16 +156,31 @@ SipiCache::SipiCache(const std::string &cachedir_p,
     }
   } else {
     //
-    // .sipicache exists — validate and load
+    // .sipicache exists — validate the fixed header, then load
     //
     cachefile.seekg(0, cachefile.end);
     std::streampos length = cachefile.tellg();
     cachefile.seekg(0, cachefile.beg);
 
-    // Check for corrupted index (size not divisible by record size)
-    if (length > 0 && (static_cast<size_t>(length) % sizeof(SipiCache::FileCacheRecord) != 0)) {
-      log_warn("Cache index corrupted (size %lld not divisible by record size %zu) — clearing cache",
-        static_cast<long long>(length), sizeof(SipiCache::FileCacheRecord));
+    bool header_valid = length >= 0 && static_cast<size_t>(length) >= sizeof(CacheIndexHeader);
+    CacheIndexHeader header{};
+
+    if (header_valid) {
+      cachefile.read(reinterpret_cast<char *>(&header), sizeof(header));
+      header_valid = std::memcmp(header.magic, kCacheIndexMagic, sizeof(kCacheIndexMagic)) == 0
+                      && header.version == kCacheIndexVersion
+                      && header.record_size == sizeof(SipiCache::FileCacheRecord);
+    }
+
+    size_t body_length = header_valid ? static_cast<size_t>(length) - sizeof(CacheIndexHeader) : 0;
+    if (header_valid && (body_length % sizeof(SipiCache::FileCacheRecord) != 0)) { header_valid = false; }
+
+    // Missing header, mismatched magic/version/record-size, or a body length
+    // that isn't a whole number of records: never parse as a stream of
+    // records — start empty and log once (ADR-0025).
+    if (!header_valid) {
+      log_warn("Cache index missing/invalid header or corrupted (size %lld) — clearing cache",
+        static_cast<long long>(length));
       cachefile.close();
 
       // Clear all files in cache dir
@@ -132,15 +188,43 @@ SipiCache::SipiCache(const std::string &cachedir_p,
       // Remove the corrupted index file itself
       ::remove(cachefilename.c_str());
     } else {
-      int nrecords = static_cast<int>(length / sizeof(SipiCache::FileCacheRecord));
+      int nrecords = static_cast<int>(body_length / sizeof(SipiCache::FileCacheRecord));
 
       for (int i = 0; i < nrecords; i++) {
         SipiCache::FileCacheRecord fr;
         cachefile.read((char *)&fr, sizeof(SipiCache::FileCacheRecord));
-        std::string accesspath = _cachedir + "/" + fr.cachepath;
 
-        if (access(accesspath.c_str(), R_OK) != 0) {
-          log_debug("Cache file \"%s\" not on disk, skipping", fr.cachepath);
+        // Bound every char[] field before constructing a std::string — a
+        // record without a NUL within its field is corrupt, not "long".
+        size_t canonical_len = strnlen(fr.canonical, sizeof(fr.canonical));
+        size_t origpath_len = strnlen(fr.origpath, sizeof(fr.origpath));
+        size_t cachepath_len = strnlen(fr.cachepath, sizeof(fr.cachepath));
+        if (canonical_len == sizeof(fr.canonical) || origpath_len == sizeof(fr.origpath)
+            || cachepath_len == sizeof(fr.cachepath)) {
+          log_debug("Cache index record %d has an unterminated field, skipping", i);
+          skipped++;
+          continue;
+        }
+
+        std::string canonical(fr.canonical, canonical_len);
+        std::string origpath(fr.origpath, origpath_len);
+        std::string cachepath(fr.cachepath, cachepath_len);
+
+        // Reject forged records: an empty key, or a cachepath escaping the
+        // cache directory (a path separator has no business in a basename
+        // produced by getNewCacheFileName()).
+        if (canonical.empty() || cachepath.find('/') != std::string::npos) {
+          log_debug("Cache index record %d has an invalid canonical/cachepath, skipping", i);
+          skipped++;
+          continue;
+        }
+
+        std::string accesspath = _cachedir + "/" + cachepath;
+        struct stat cache_stat{};
+        // lstat (not stat): a symlinked "cache file" is rejected outright,
+        // not followed.
+        if (lstat(accesspath.c_str(), &cache_stat) != 0 || !S_ISREG(cache_stat.st_mode)) {
+          log_debug("Cache file \"%s\" not on disk, skipping", cachepath.c_str());
           skipped++;
           continue;
         }
@@ -152,14 +236,17 @@ SipiCache::SipiCache(const std::string &cachedir_p,
         cr.tile_h = fr.tile_h;
         cr.clevels = fr.clevels;
         cr.numpages = fr.numpages;
-        cr.origpath = fr.origpath;
-        cr.cachepath = fr.cachepath;
+        cr.origpath = origpath;
+        cr.cachepath = cachepath;
         cr.mtime = fr.mtime;
         cr.access_time = fr.access_time;
-        cr.fsize = fr.fsize;
-        cache_used_bytes += fr.fsize;
+        // Recomputed from the actual cache file, never trusted from the
+        // index: a forged fsize would otherwise thrash eviction / fill disk.
+        cr.fsize = cache_stat.st_size;
+        cr.source_size = fr.source_size;
+        cache_used_bytes += cr.fsize;
         nfiles++;
-        cachetable[fr.canonical] = cr;
+        cachetable[canonical] = cr;
         log_debug("Cache loaded file \"%s\"", cr.cachepath.c_str());
       }
 
@@ -217,6 +304,12 @@ SipiCache::~SipiCache()
   std::ofstream cachefile(cachefilename, std::ofstream::out | std::ofstream::binary | std::ofstream::trunc);
 
   if (!cachefile.fail()) {
+    CacheIndexHeader header{};
+    std::memcpy(header.magic, kCacheIndexMagic, sizeof(kCacheIndexMagic));
+    header.version = kCacheIndexVersion;
+    header.record_size = static_cast<std::uint32_t>(sizeof(SipiCache::FileCacheRecord));
+    cachefile.write(reinterpret_cast<const char *>(&header), sizeof(header));
+
     for (const auto &ele : cachetable) {
       SipiCache::FileCacheRecord fr;
       fr.img_w = ele.second.img_w;
@@ -225,11 +318,14 @@ SipiCache::~SipiCache()
       fr.tile_h = ele.second.tile_h;
       fr.clevels = ele.second.clevels;
       fr.numpages = ele.second.numpages;
+      // ele.first is already the SHA-256 digest (S2-26): computed once by
+      // check()/add() on the raw canonical URL, never re-hashed here.
       (void)snprintf(fr.canonical, 256, "%s", ele.first.c_str());
       (void)snprintf(fr.origpath, 256, "%s", ele.second.origpath.c_str());
       (void)snprintf(fr.cachepath, 256, "%s", ele.second.cachepath.c_str());
       fr.mtime = ele.second.mtime;
       fr.fsize = ele.second.fsize;
+      fr.source_size = ele.second.source_size;
       fr.access_time = ele.second.access_time;
       cachefile.write((char *)&fr, sizeof(SipiCache::FileCacheRecord));
       log_debug("Writing \"%s\" to cache file...", ele.second.cachepath.c_str());
@@ -392,11 +488,13 @@ std::string SipiCache::check(const std::string &origpath_p, const std::string &c
 #else
   time_t mtime = fileinfo.st_mtime;
 #endif
+  const off_t source_size = fileinfo.st_size;
 
   std::string res;
+  const std::string digest = sha256_hex(canonical_p);
 
   std::lock_guard<std::mutex> locking_mutex_guard(locking);
-  auto it = cachetable.find(canonical_p);
+  auto it = cachetable.find(digest);
   if (it == cachetable.end()) {
     Metrics::instance().cache_misses_total.Increment();
     return res;// return empty string, because we didn't find the file in cache
@@ -410,8 +508,12 @@ std::string SipiCache::check(const std::string &origpath_p, const std::string &c
   time(&at);
   it->second.access_time = at;// update the access time!
 
-  if (tcompare(mtime, fr.mtime) > 0) {
-    // original file is newer than cache, we have to replace it...
+  // Freshness gate (S2-25): mtime alone is not sufficient replacement
+  // evidence — a same-mtime replacement with a DIFFERENT size is still a
+  // miss. Residual (ADR-0025): a same-size replacement that also preserves
+  // mtime still hits; SIPI does not hash source file bodies on every check().
+  if (tcompare(mtime, fr.mtime) > 0 || source_size != fr.source_size) {
+    // original file is newer than cache, or its size changed — replace it...
     Metrics::instance().cache_misses_total.Increment();
     return res;// return empty string, means "replace the file in the cache!"
   } else {
@@ -495,6 +597,14 @@ void SipiCache::add(const std::string &origpath_p,
   fr.mtime = fileinfo.st_mtime;
 #endif
 
+  // Source file size (S2-25 freshness gate), distinct from fr.fsize below
+  // (the CACHE file's size, used for eviction).
+  struct stat origstat;
+  if (stat(origpath_p.c_str(), &origstat) != 0) {
+    throw SipiError("Couldn't stat file \"" + origpath_p + "\"!", errno);
+  }
+  fr.source_size = origstat.st_size;
+
   //
   // get the current time (seconds since Epoch)
   //
@@ -503,12 +613,14 @@ void SipiCache::add(const std::string &origpath_p,
   fr.access_time = at;
   fr.fsize = fileinfo.st_size;
 
+  const std::string digest = sha256_hex(canonical_p);
+
   //
   // we check if there is already a file with the same canonical name. If so,
   // we remove it
   //
   std::lock_guard<std::mutex> locking_mutex_guard(locking);
-  auto existing = cachetable.find(canonical_p);
+  auto existing = cachetable.find(digest);
   if (existing != cachetable.end()) {
     std::string toremove = _cachedir + "/" + existing->second.cachepath;
     ::unlink(toremove.c_str());
@@ -525,7 +637,7 @@ void SipiCache::add(const std::string &origpath_p,
     return;
   }
 
-  cachetable[canonical_p] = fr;
+  cachetable[digest] = fr;
   cache_used_bytes += fr.fsize;
 
   ++nfiles;
@@ -541,7 +653,7 @@ bool SipiCache::remove(const std::string &canonical_p)
 {
   std::lock_guard<std::mutex> locking_mutex_guard(locking);
 
-  auto it = cachetable.find(canonical_p);
+  auto it = cachetable.find(sha256_hex(canonical_p));
   if (it == cachetable.end()) {
     log_warn("Couldn't remove cache for %s: not existing!", canonical_p.c_str());
     return false;

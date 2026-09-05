@@ -8,12 +8,16 @@
 #include "cache/SipiCache.h"
 #include "error/SipiError.h"
 
+#include <cstdint>
 #include <cstdio>
 #include <cstring>
+#include <ctime>
 #include <dirent.h>
 #include <fstream>
 #include <sys/stat.h>
 #include <unistd.h>
+#include <utime.h>
+#include <vector>
 
 namespace {
 
@@ -63,6 +67,30 @@ std::string createOrigFile(const std::string &dir, const std::string &name, size
   std::string path = dir + "/" + name;
   createDummyFile(path, size);
   return path;
+}
+
+// Mirrors SipiCache.cpp's private CacheIndexHeader (magic/version/record_size).
+// Not exposed via SipiCache.h — the on-disk header shape is verified here by
+// hand-crafting index files the same way an attacker (or bit rot) would.
+struct TestCacheIndexHeader
+{
+  char magic[8];
+  std::uint32_t version;
+  std::uint32_t record_size;
+};
+
+constexpr char kValidMagic[8] = { 'S', 'I', 'P', 'I', 'C', 'A', 'C', 'H' };
+constexpr std::uint32_t kValidVersion = 1;
+
+// Helper: write a `.sipicache` index consisting of the given header followed
+// by zero or more raw FileCacheRecord byte blobs.
+void writeIndexFile(const std::string &cachedir,
+  const TestCacheIndexHeader &header,
+  const std::vector<Sipi::SipiCache::FileCacheRecord> &records)
+{
+  std::ofstream f(cachedir + "/.sipicache", std::ios::binary);
+  f.write(reinterpret_cast<const char *>(&header), sizeof(header));
+  for (const auto &fr : records) { f.write(reinterpret_cast<const char *>(&fr), sizeof(fr)); }
 }
 
 // Helper: count non-hidden files in a directory
@@ -492,6 +520,154 @@ TEST_F(SipiCacheTest, StartupEvictsOverLimit)
     Sipi::SipiCache cache(cachedir, -1, 5);
     // Constructor should evict down to 80% of 5 = 4
     EXPECT_LE(cache.getNfiles(), 4u);
+  }
+}
+
+// -------------------------------------------------------------------
+// S2-25: size-aware freshness gate
+// -------------------------------------------------------------------
+
+TEST_F(SipiCacheTest, ReplacedSourceOlderOrEqualMtimeDifferentSizeIsMiss)
+{
+  std::string origpath = createOrigFile(origdir, "img.tif", 100);
+
+  // Backdate the source's mtime well before "now" so the cache mtime
+  // (recorded at add() time) is always newer — isolates the SIZE gate from
+  // the pre-existing mtime gate. On main (mtime-only), this test is red: the
+  // replacement below has an unchanged, older mtime and would still hit.
+  struct utimbuf old_time{ 1000000000, 1000000000 };
+  ASSERT_EQ(utime(origpath.c_str(), &old_time), 0);
+
+  Sipi::SipiCache cache(cachedir, 10 * 1024 * 1024, 100);
+  std::string canonical = "/iiif/img/full/max/0/default.jpg";
+
+  std::string cachefile = cache.getNewCacheFileName();
+  createDummyFile(cachefile, 500);
+  cache.add(origpath, canonical, cachefile, 100, 100);
+  ASSERT_FALSE(cache.check(origpath, canonical).empty());
+
+  // Replace with a DIFFERENT size, keeping the SAME (still older) mtime.
+  createDummyFile(origpath, 250);
+  ASSERT_EQ(utime(origpath.c_str(), &old_time), 0);
+
+  EXPECT_TRUE(cache.check(origpath, canonical).empty());
+}
+
+TEST_F(SipiCacheTest, SameSizeSameMtimeReplacementIsHit)
+{
+  // Pins the documented residual (ADR-0025): a same-size, same-mtime
+  // replacement is indistinguishable from the original without hashing file
+  // bodies on every check(), which SIPI deliberately does not do.
+  std::string origpath = createOrigFile(origdir, "img.tif", 100);
+  struct utimbuf old_time{ 1000000000, 1000000000 };
+  ASSERT_EQ(utime(origpath.c_str(), &old_time), 0);
+
+  Sipi::SipiCache cache(cachedir, 10 * 1024 * 1024, 100);
+  std::string canonical = "/iiif/img/full/max/0/default.jpg";
+  std::string cachefile = cache.getNewCacheFileName();
+  createDummyFile(cachefile, 500);
+  cache.add(origpath, canonical, cachefile, 100, 100);
+
+  // Replace with SAME size (different content) and SAME mtime.
+  createDummyFile(origpath, 100);
+  ASSERT_EQ(utime(origpath.c_str(), &old_time), 0);
+
+  EXPECT_FALSE(cache.check(origpath, canonical).empty());
+}
+
+
+// -------------------------------------------------------------------
+// S2-26: forged index rejection
+// -------------------------------------------------------------------
+
+TEST_F(SipiCacheTest, ForgedIndexBadMagicStartsEmpty)
+{
+  TestCacheIndexHeader header{};
+  std::memcpy(header.magic, "XXXXXXXX", sizeof(header.magic));
+  header.version = kValidVersion;
+  header.record_size = sizeof(Sipi::SipiCache::FileCacheRecord);
+  writeIndexFile(cachedir, header, {});
+
+  Sipi::SipiCache cache(cachedir, 1024 * 1024, 100);
+  EXPECT_EQ(cache.getNfiles(), 0u);
+}
+
+TEST_F(SipiCacheTest, ForgedIndexWrongRecordSizeStartsEmpty)
+{
+  TestCacheIndexHeader header{};
+  std::memcpy(header.magic, kValidMagic, sizeof(header.magic));
+  header.version = kValidVersion;
+  // A record_size that doesn't match this binary's FileCacheRecord layout
+  // (e.g. the cross-platform timespec/time_t divergence, or a future field
+  // addition) must never be parsed as a stream of records.
+  header.record_size = sizeof(Sipi::SipiCache::FileCacheRecord) + 8;
+  writeIndexFile(cachedir, header, {});
+
+  Sipi::SipiCache cache(cachedir, 1024 * 1024, 100);
+  EXPECT_EQ(cache.getNfiles(), 0u);
+}
+
+TEST_F(SipiCacheTest, ForgedRecordCachepathWithSlashIsRejected)
+{
+  TestCacheIndexHeader header{};
+  std::memcpy(header.magic, kValidMagic, sizeof(header.magic));
+  header.version = kValidVersion;
+  header.record_size = sizeof(Sipi::SipiCache::FileCacheRecord);
+
+  Sipi::SipiCache::FileCacheRecord fr{};
+  fr.img_w = 100;
+  fr.img_h = 100;
+  std::snprintf(fr.canonical, sizeof(fr.canonical), "%s", "deadbeef");
+  std::snprintf(fr.origpath, sizeof(fr.origpath), "%s", "/tmp/orig.tif");
+  // A legitimate cachepath is always a getNewCacheFileName() basename with
+  // no directory component — this one tries to escape the cache directory.
+  std::snprintf(fr.cachepath, sizeof(fr.cachepath), "%s", "../escaped_cachefile");
+  fr.access_time = time(nullptr);
+  fr.fsize = 100;
+  fr.source_size = 100;
+  writeIndexFile(cachedir, header, { fr });
+
+  Sipi::SipiCache cache(cachedir, 1024 * 1024, 100);
+  EXPECT_EQ(cache.getNfiles(), 0u);
+}
+
+
+// -------------------------------------------------------------------
+// S2-26: long canonical keys don't collide (SHA-256, not truncation)
+// -------------------------------------------------------------------
+
+TEST_F(SipiCacheTest, LongCanonicalKeysRoundTripWithoutCollision)
+{
+  std::string origpath1 = createOrigFile(origdir, "img1.tif", 100);
+  std::string origpath2 = createOrigFile(origdir, "img2.tif", 100);
+
+  // Two canonicals sharing a prefix well past the old 255-byte truncation
+  // boundary, differing only past it — these used to collide once persisted
+  // through the raw-truncation `canonical[256]` field.
+  std::string shared_prefix(280, 'a');
+  std::string canonical1 = "/iiif/" + shared_prefix + "/suffix-one/full/max/0/default.jpg";
+  std::string canonical2 = "/iiif/" + shared_prefix + "/suffix-two/full/max/0/default.jpg";
+
+  {
+    Sipi::SipiCache cache(cachedir, 10 * 1024 * 1024, 100);
+    std::string cachefile1 = cache.getNewCacheFileName();
+    createDummyFile(cachefile1, 500);
+    cache.add(origpath1, canonical1, cachefile1, 100, 100);
+
+    std::string cachefile2 = cache.getNewCacheFileName();
+    createDummyFile(cachefile2, 600);
+    cache.add(origpath2, canonical2, cachefile2, 100, 100);
+
+    EXPECT_EQ(cache.getNfiles(), 2u);
+    // destructor persists the index
+  }
+
+  // Reload: both digests round-trip losslessly and remain distinct.
+  {
+    Sipi::SipiCache cache(cachedir, 10 * 1024 * 1024, 100);
+    EXPECT_EQ(cache.getNfiles(), 2u);
+    EXPECT_FALSE(cache.check(origpath1, canonical1).empty());
+    EXPECT_FALSE(cache.check(origpath2, canonical2).empty());
   }
 }
 
