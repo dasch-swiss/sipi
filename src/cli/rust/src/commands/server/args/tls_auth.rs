@@ -1,7 +1,7 @@
 //! TLS + auth flags (the "TLS & Auth" `--help` heading).
 //!
 //! `sslcert` / `sslkey` are parse-only: TLS terminates at Traefik and the shell
-//! serves plain HTTP. `--adminuser` binds the `SIPI_ADMINUSER` env var.
+//! serves plain HTTP.
 
 use clap::Args;
 
@@ -18,10 +18,4 @@ pub struct TlsAuthArgs {
     /// at least 32 bytes; the shipped default is rejected).
     #[arg(long, env = "SIPI_JWTKEY", value_name = "SECRET")]
     pub jwtkey: Option<String>,
-    /// SIPI admin username.
-    #[arg(long, env = "SIPI_ADMINUSER", value_name = "USER")]
-    pub adminuser: Option<String>,
-    /// Admin password.
-    #[arg(long, env = "SIPI_ADMINPASSWD", value_name = "PASSWD")]
-    pub adminpasswd: Option<String>,
 }

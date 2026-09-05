@@ -146,9 +146,9 @@ fn parse_csv_list(raw: Option<&str>) -> Vec<String> {
 /// reason: the shell honors them as Rust-owned serve knobs passed straight to
 /// [`crate::run`] (like `--drain-timeout`), not layered onto the engine config.
 ///
-/// `Debug` is implemented manually: `jwtkey` and `adminpasswd` are secrets and
-/// render as `[redacted]`, so no `{:?}` of this struct (logs, Sentry
-/// breadcrumbs, panic messages) can leak them.
+/// `Debug` is implemented manually: `jwtkey` is a secret and
+/// renders as `[redacted]`, so no `{:?}` of this struct (logs, Sentry
+/// breadcrumbs, panic messages) can leak it.
 #[derive(Default, Clone)]
 pub struct ServerOverrides {
     /// HTTP listen port (`--serverport` / `SIPI_SERVERPORT`). One input to the
@@ -169,8 +169,6 @@ pub struct ServerOverrides {
 
     // Auth (TLS terminates at Traefik; only the auth knobs forward)
     pub jwtkey: Option<String>,
-    pub adminuser: Option<String>,
-    pub adminpasswd: Option<String>,
 
     // Cache
     pub cache_dir: Option<String>,
@@ -234,8 +232,6 @@ impl std::fmt::Debug for ServerOverrides {
             .field("wwwroute", &self.wwwroute)
             .field("pathprefix", &self.pathprefix)
             .field("jwtkey", &redact(&self.jwtkey))
-            .field("adminuser", &self.adminuser)
-            .field("adminpasswd", &redact(&self.adminpasswd))
             .field("cache_dir", &self.cache_dir)
             .field("cache_size", &self.cache_size)
             .field("cache_nfiles", &self.cache_nfiles)
@@ -279,8 +275,6 @@ impl ServerOverrides {
             wwwroute: Some(cfg.wwwroute.clone()),
             pathprefix: Some(cfg.prefix_as_path),
             jwtkey: Some(cfg.jwt_secret.clone()),
-            adminuser: Some(cfg.admin_user.clone()),
-            adminpasswd: Some(cfg.admin_password.clone()),
             cache_dir: Some(cfg.cache_dir.clone()),
             cache_size: Some(cfg.cache_size.clone()),
             cache_nfiles: Some(narrow(cfg.cache_nfiles, "sipi.cache_nfiles")?),
@@ -349,8 +343,6 @@ impl ServerOverrides {
             wwwroute: self.wwwroute.or(base.wwwroute),
             pathprefix: self.pathprefix.or(base.pathprefix),
             jwtkey: self.jwtkey.or(base.jwtkey),
-            adminuser: self.adminuser.or(base.adminuser),
-            adminpasswd: self.adminpasswd.or(base.adminpasswd),
             cache_dir: self.cache_dir.or(base.cache_dir),
             cache_size: self.cache_size.or(base.cache_size),
             cache_nfiles: self.cache_nfiles.or(base.cache_nfiles),
@@ -403,8 +395,6 @@ pub(crate) struct SipiServerConfig {
     pub initscript: *const c_char,
     pub tmpdir: *const c_char,
     pub jwtkey: *const c_char,
-    pub adminuser: *const c_char,
-    pub adminpasswd: *const c_char,
     pub cache_dir: *const c_char,
     pub cache_size: *const c_char, // raw "200M" — engine parses the suffix
     pub maxpost: *const c_char,    // raw "300M" — engine parses the suffix
@@ -481,8 +471,6 @@ impl OverridesHolder {
             wwwroute,
             pathprefix,
             jwtkey,
-            adminuser,
-            adminpasswd,
             cache_dir,
             cache_size,
             cache_nfiles,
@@ -511,8 +499,6 @@ impl OverridesHolder {
             initscript: intern_cstr(&mut strings, &initscript)?,
             tmpdir: intern_cstr(&mut strings, &tmpdir)?,
             jwtkey: intern_cstr(&mut strings, &jwtkey)?,
-            adminuser: intern_cstr(&mut strings, &adminuser)?,
-            adminpasswd: intern_cstr(&mut strings, &adminpasswd)?,
             cache_dir: intern_cstr(&mut strings, &cache_dir)?,
             cache_size: intern_cstr(&mut strings, &cache_size)?,
             maxpost: intern_cstr(&mut strings, &maxpost)?,
@@ -593,49 +579,47 @@ mod layout {
     fn repr_c_matches_sipi_ffi_h() {
         assert_eq!(size_of::<usize>(), 8, "layout assumes an LP64 target");
         assert_eq!(align_of::<SipiServerConfig>(), 8);
-        assert_eq!(size_of::<SipiServerConfig>(), 240);
+        assert_eq!(size_of::<SipiServerConfig>(), 224);
 
         assert_eq!(offset_of!(SipiServerConfig, imgroot), 0);
         assert_eq!(offset_of!(SipiServerConfig, scriptdir), 8);
         assert_eq!(offset_of!(SipiServerConfig, initscript), 16);
         assert_eq!(offset_of!(SipiServerConfig, tmpdir), 24);
         assert_eq!(offset_of!(SipiServerConfig, jwtkey), 32);
-        assert_eq!(offset_of!(SipiServerConfig, adminuser), 40);
-        assert_eq!(offset_of!(SipiServerConfig, adminpasswd), 48);
-        assert_eq!(offset_of!(SipiServerConfig, cache_dir), 56);
-        assert_eq!(offset_of!(SipiServerConfig, cache_size), 64);
-        assert_eq!(offset_of!(SipiServerConfig, maxpost), 72);
-        assert_eq!(offset_of!(SipiServerConfig, memory_limit), 80);
-        assert_eq!(offset_of!(SipiServerConfig, admission_mode), 88);
-        assert_eq!(offset_of!(SipiServerConfig, thumbsize), 96);
-        assert_eq!(offset_of!(SipiServerConfig, knorapath), 104);
-        assert_eq!(offset_of!(SipiServerConfig, knoraport), 112);
-        assert_eq!(offset_of!(SipiServerConfig, docroot), 120);
-        assert_eq!(offset_of!(SipiServerConfig, wwwroute), 128);
-        assert_eq!(offset_of!(SipiServerConfig, loglevel), 136);
-        assert_eq!(offset_of!(SipiServerConfig, scaling_quality_jpeg), 144);
-        assert_eq!(offset_of!(SipiServerConfig, scaling_quality_tiff), 152);
-        assert_eq!(offset_of!(SipiServerConfig, scaling_quality_png), 160);
-        assert_eq!(offset_of!(SipiServerConfig, scaling_quality_j2k), 168);
-        assert_eq!(offset_of!(SipiServerConfig, tiles_memory_ratio), 176);
+        assert_eq!(offset_of!(SipiServerConfig, cache_dir), 40);
+        assert_eq!(offset_of!(SipiServerConfig, cache_size), 48);
+        assert_eq!(offset_of!(SipiServerConfig, maxpost), 56);
+        assert_eq!(offset_of!(SipiServerConfig, memory_limit), 64);
+        assert_eq!(offset_of!(SipiServerConfig, admission_mode), 72);
+        assert_eq!(offset_of!(SipiServerConfig, thumbsize), 80);
+        assert_eq!(offset_of!(SipiServerConfig, knorapath), 88);
+        assert_eq!(offset_of!(SipiServerConfig, knoraport), 96);
+        assert_eq!(offset_of!(SipiServerConfig, docroot), 104);
+        assert_eq!(offset_of!(SipiServerConfig, wwwroute), 112);
+        assert_eq!(offset_of!(SipiServerConfig, loglevel), 120);
+        assert_eq!(offset_of!(SipiServerConfig, scaling_quality_jpeg), 128);
+        assert_eq!(offset_of!(SipiServerConfig, scaling_quality_tiff), 136);
+        assert_eq!(offset_of!(SipiServerConfig, scaling_quality_png), 144);
+        assert_eq!(offset_of!(SipiServerConfig, scaling_quality_j2k), 152);
+        assert_eq!(offset_of!(SipiServerConfig, tiles_memory_ratio), 160);
         assert_eq!(
             offset_of!(SipiServerConfig, large_decode_threshold_bytes),
-            184
+            168
         );
-        assert_eq!(offset_of!(SipiServerConfig, serverport), 192);
-        assert_eq!(offset_of!(SipiServerConfig, maxtmpage), 196);
-        assert_eq!(offset_of!(SipiServerConfig, cache_nfiles), 200);
-        assert_eq!(offset_of!(SipiServerConfig, pathprefix), 204);
-        assert_eq!(offset_of!(SipiServerConfig, jpeg_quality), 208);
-        assert_eq!(offset_of!(SipiServerConfig, has_serverport), 212);
-        assert_eq!(offset_of!(SipiServerConfig, has_maxtmpage), 216);
-        assert_eq!(offset_of!(SipiServerConfig, has_cache_nfiles), 220);
-        assert_eq!(offset_of!(SipiServerConfig, has_pathprefix), 224);
-        assert_eq!(offset_of!(SipiServerConfig, has_jpeg_quality), 228);
-        assert_eq!(offset_of!(SipiServerConfig, has_tiles_memory_ratio), 232);
+        assert_eq!(offset_of!(SipiServerConfig, serverport), 176);
+        assert_eq!(offset_of!(SipiServerConfig, maxtmpage), 180);
+        assert_eq!(offset_of!(SipiServerConfig, cache_nfiles), 184);
+        assert_eq!(offset_of!(SipiServerConfig, pathprefix), 188);
+        assert_eq!(offset_of!(SipiServerConfig, jpeg_quality), 192);
+        assert_eq!(offset_of!(SipiServerConfig, has_serverport), 196);
+        assert_eq!(offset_of!(SipiServerConfig, has_maxtmpage), 200);
+        assert_eq!(offset_of!(SipiServerConfig, has_cache_nfiles), 204);
+        assert_eq!(offset_of!(SipiServerConfig, has_pathprefix), 208);
+        assert_eq!(offset_of!(SipiServerConfig, has_jpeg_quality), 212);
+        assert_eq!(offset_of!(SipiServerConfig, has_tiles_memory_ratio), 216);
         assert_eq!(
             offset_of!(SipiServerConfig, has_large_decode_threshold_bytes),
-            236
+            220
         );
     }
 }
@@ -657,12 +641,12 @@ mod overrides_tests {
             scriptdir: Some("/base/scripts".into()), // paths (self None → base)
             maxtmpage: Some(10),
             pathprefix: Some(false),
-            adminuser: Some("base-admin".into()), // auth (self None → base)
-            cache_nfiles: Some(1),                // cache
-            maxpost: Some("100M".into()),         // limits
+            jwtkey: Some("base-jwtkey".into()), // auth (self None → base)
+            cache_nfiles: Some(1),              // cache
+            maxpost: Some("100M".into()),       // limits
             knorapath: Some("base-knora".into()), // knora (self None → base)
-            loglevel: Some("INFO".into()),        // logging
-            jpeg_quality: Some(50),               // image quality
+            loglevel: Some("INFO".into()),      // logging
+            jpeg_quality: Some(50),             // image quality
             scaling_quality: ScalingQuality {
                 jpeg: Some("low".into()),
                 tiff: Some("low".into()), // self None → base
@@ -698,7 +682,7 @@ mod overrides_tests {
         assert_eq!(merged.scaling_quality.jpeg.as_deref(), Some("high"));
         // base fills where self is None:
         assert_eq!(merged.scriptdir.as_deref(), Some("/base/scripts"));
-        assert_eq!(merged.adminuser.as_deref(), Some("base-admin"));
+        assert_eq!(merged.jwtkey.as_deref(), Some("base-jwtkey"));
         assert_eq!(merged.knorapath.as_deref(), Some("base-knora"));
         assert_eq!(merged.scaling_quality.tiff.as_deref(), Some("low"));
     }

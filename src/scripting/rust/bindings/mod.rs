@@ -8,7 +8,7 @@
 //!
 //! Deliberate divergences from the C++ bindings (ADR-0023 divergence table):
 //! `server.shutdown` and `server.fs.chdir` do not exist, `config` carries no
-//! `password`/`adminuser`, `server.cookies` is one entry per cookie with
+//! credential fields, `server.cookies` is one entry per cookie with
 //! original-case names, `decode_jwt` validates `exp` with the algorithm
 //! pinned to HS256, and `server.http` uses a total-request timeout with
 //! redirects off and the response body capped.
@@ -242,9 +242,9 @@ impl ResponseWriter {
     }
 }
 
-/// The `config` table values (the `sipiConfGlobals` inventory minus the
-/// dropped `password`/`adminuser`). Sizes are resolved bytes, as the C++
-/// table rendered them.
+/// The `config` table values (the `sipiConfGlobals` inventory minus
+/// credential fields). Sizes are resolved bytes, as the C++ table rendered
+/// them.
 #[derive(Debug, Clone, Default)]
 pub struct ConfigValues {
     pub hostname: String,

@@ -68,8 +68,6 @@ fn absent_keys_resolve_to_defaults() {
     assert_eq!(cfg.jwt_secret, "");
     assert_eq!(cfg.knora_path, "localhost");
     assert_eq!(cfg.knora_port, "3333");
-    assert_eq!(cfg.admin_user, "");
-    assert_eq!(cfg.admin_password, "");
     assert_eq!(cfg.docroot, "");
     assert_eq!(cfg.wwwroute, "");
     assert!(cfg.routes.is_empty());

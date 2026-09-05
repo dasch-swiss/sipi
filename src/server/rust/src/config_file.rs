@@ -127,8 +127,6 @@ struct ScalingQualitySection {
 #[serde(deny_unknown_fields)]
 struct TlsAuthSection {
     jwt_secret: Option<String>,
-    admin_user: Option<String>,
-    admin_password: Option<String>,
 }
 
 #[derive(Debug, Default, Deserialize)]
@@ -283,8 +281,6 @@ impl Config {
             wwwroute: self.paths.www_route.clone(),
             pathprefix: self.paths.prefix_as_path,
             jwtkey: self.tls_auth.jwt_secret.clone(),
-            adminuser: self.tls_auth.admin_user.clone(),
-            adminpasswd: self.tls_auth.admin_password.clone(),
             cache_dir: self.cache.dir.clone(),
             cache_size: self.cache.size.clone(),
             cache_nfiles: self.cache.n_files,
@@ -352,7 +348,6 @@ scaling_quality = { jpeg = "high", tiff = "medium", png = "low", j2k = "high" }
 
 [tls_auth]
 jwt_secret = "secret"
-admin_user = "root"
 
 [knora]
 path = "knora.example.org"
@@ -387,7 +382,6 @@ script = "upload.lua"
         // that slot under a legacy "jpk" key), but the value must still parse.
         assert_eq!(base.scaling_quality.j2k.as_deref(), Some("high"));
         assert_eq!(base.jwtkey.as_deref(), Some("secret"));
-        assert_eq!(base.adminuser.as_deref(), Some("root"));
         assert_eq!(base.knorapath.as_deref(), Some("knora.example.org"));
         assert_eq!(base.loglevel.as_deref(), Some("INFO"));
     }

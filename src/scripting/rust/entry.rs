@@ -1,6 +1,6 @@
 //! Runtime entry points. Currently the Lua config parse: [`parse_config_file`]
 //! evaluates a `sipi.config.lua` in the unlimited config VM
-//! ([`crate::runtime::config_vm`]) and reads the `sipi` / `admin` /
+//! ([`crate::runtime::config_vm`]) and reads the `sipi` /
 //! `fileserver` / `routes` globals into a [`LuaConfigFile`], applying the same
 //! defaults, key deprecations, and type checks the config contract defines:
 //! strings coerce from numbers, integers and booleans are strict, an absent or
@@ -64,8 +64,6 @@ pub struct LuaConfigFile {
     pub jwt_secret: String,
     pub knora_path: String,
     pub knora_port: String,
-    pub admin_user: String,
-    pub admin_password: String,
     pub docroot: String,
     pub wwwroute: String,
     /// Read and type-checked for schema parity; the shell's own
@@ -124,7 +122,6 @@ fn sanitize_lua_error(e: &mlua::Error) -> String {
 
 fn read_config(lua: &Lua) -> Result<LuaConfigFile, String> {
     let sipi = section(lua, "sipi")?;
-    let admin = section(lua, "admin")?;
     let fileserver = section(lua, "fileserver")?;
 
     // cache_dir: new key first, then the deprecated key.
@@ -209,8 +206,6 @@ fn read_config(lua: &Lua) -> Result<LuaConfigFile, String> {
         jwt_secret: cfg_string(&sipi, "sipi", "jwt_secret", "")?,
         knora_path: cfg_string(&sipi, "sipi", "knora_path", "localhost")?,
         knora_port: cfg_string(&sipi, "sipi", "knora_port", "3333")?,
-        admin_user: cfg_string(&admin, "admin", "user", "")?,
-        admin_password: cfg_string(&admin, "admin", "password", "")?,
         docroot: cfg_string(&fileserver, "fileserver", "docroot", "")?,
         wwwroute: cfg_string(&fileserver, "fileserver", "wwwroute", "")?,
         drain_timeout: {

@@ -1,8 +1,7 @@
 //! The `config` table — the resolved server config as scripts see it: the
-//! historical `sipiConfGlobals` field inventory minus the dropped
-//! `password`/`adminuser` credentials (ADR-0023 divergence: secrets are not
-//! injected into request VMs). Plain values, so no function registers through
-//! the chokepoint.
+//! historical `sipiConfGlobals` field inventory minus credential fields
+//! (ADR-0023 divergence: secrets are not injected into request VMs). Plain
+//! values, so no function registers through the chokepoint.
 
 use mlua::Table;
 
