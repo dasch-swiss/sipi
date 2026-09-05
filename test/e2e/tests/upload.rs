@@ -2,8 +2,37 @@ mod common;
 
 use common::{client, server};
 use reqwest::blocking::multipart;
+use serde_json::json;
+use sipi_e2e::jwt::create_jwt;
 use sipi_e2e::{http_client, test_data_dir, SipiServer};
 use std::path::{Path, PathBuf};
+
+/// Matches `jwt_secret` in every config `upload.rs` starts a server with.
+const JWT_SECRET: &str = "dev-only-insecure-jwt-secret-change-me";
+/// The `issuer`/`audience`/`username` `scripts/upload.lua` passes to
+/// `authorize_api` (S2-23) — a valid upload token must match all three.
+const ISSUER: &str = "https://sipi.example.org";
+const AUDIENCE: &str = "Sipi";
+const USERNAME: &str = "uploader";
+
+/// A valid Bearer token for the reference upload script's `authorize_api`
+/// check, with an `exp` far enough in the future not to flake.
+fn upload_token() -> String {
+    let exp = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .expect("clock")
+        .as_secs()
+        + 3600;
+    create_jwt(
+        &json!({
+            "iss": ISSUER,
+            "aud": AUDIENCE,
+            "user": USERNAME,
+            "exp": exp,
+        }),
+        JWT_SECRET,
+    )
+}
 
 fn test_image_path(relative: &str) -> PathBuf {
     test_data_dir().join("images").join(relative)
@@ -20,6 +49,7 @@ fn upload_file(url: &str, file_path: &Path, mime: &str) -> serde_json::Value {
 
     let resp = client()
         .post(url)
+        .header("Authorization", format!("Bearer {}", upload_token()))
         .multipart(form)
         .send()
         .expect("upload failed");
@@ -53,6 +83,7 @@ fn upload_tiff_converts_to_jp2() {
     );
     let resp = c
         .post(format!("{}/api/upload", srv.base_url))
+        .header("Authorization", format!("Bearer {}", upload_token()))
         .multipart(form)
         .send()
         .expect("upload failed");
@@ -125,6 +156,9 @@ fn upload_jpeg_with_comment_block() {
 
 #[test]
 fn upload_odd_file() {
+    // The hardened reference script (S2-23) dropped its non-image branch —
+    // it copied the tmpfile via an undefined global and was dead/broken —
+    // so a non-image upload is now a clean rejection, not a silent accept.
     let srv = server();
     let file = test_image_path("knora/test_odd.odd");
     if !file.exists() {
@@ -132,20 +166,24 @@ fn upload_odd_file() {
         return;
     }
 
-    let json = upload_file(&format!("{}/api/upload", srv.base_url), &file, "text/xml");
+    let form = multipart::Form::new().part(
+        "file",
+        multipart::Part::bytes(std::fs::read(&file).expect("read file"))
+            .file_name("test_odd.odd")
+            .mime_str("text/xml")
+            .expect("valid mime"),
+    );
 
-    let filename = json["filename"].as_str().expect("no filename");
-
-    // Verify non-image file is accessible
     let resp = client()
-        .get(format!("{}/unit/{}/knora.json", srv.base_url, filename))
+        .post(format!("{}/api/upload", srv.base_url))
+        .header("Authorization", format!("Bearer {}", upload_token()))
+        .multipart(form)
         .send()
-        .expect("GET knora.json for odd failed");
+        .expect("upload failed");
 
-    assert_eq!(resp.status().as_u16(), 200);
-
-    let knora: serde_json::Value = resp.json().expect("knora.json not JSON");
-    assert_eq!(knora["internalMimeType"], "text/xml");
+    assert_eq!(resp.status().as_u16(), 415);
+    let body: serde_json::Value = resp.json().expect("error body is JSON");
+    assert_eq!(body["message"], "Only image uploads are supported");
 }
 
 // =============================================================================
@@ -308,6 +346,7 @@ fn empty_file_upload() {
 
     let resp = c
         .post(format!("{}/api/upload", srv.base_url))
+        .header("Authorization", format!("Bearer {}", upload_token()))
         .multipart(form)
         .send()
         .expect("empty upload request failed");
@@ -354,6 +393,7 @@ fn upload_corrupt_image_reports_500_json() {
     );
     let resp = c
         .post(format!("{}/api/upload", srv.base_url))
+        .header("Authorization", format!("Bearer {}", upload_token()))
         .multipart(form)
         .send()
         .expect("upload request failed");
@@ -403,7 +443,12 @@ fn concurrent_file_uploads() {
                     .expect("valid mime"),
             );
 
-            match c.post(&url).multipart(form).send() {
+            match c
+                .post(&url)
+                .header("Authorization", format!("Bearer {}", upload_token()))
+                .multipart(form)
+                .send()
+            {
                 Ok(resp) => {
                     let status = resp.status().as_u16();
                     (i, status, resp.text().unwrap_or_default())
@@ -484,7 +529,7 @@ routes = {
     {
         method = 'POST',
         route = '/api/upload',
-        script = 'upload.lua'
+        script = '../../../scripts/upload.lua'
     }
 }
 "#;
@@ -507,6 +552,7 @@ routes = {
 
     let result = c
         .post(format!("{}/api/upload", srv.base_url))
+        .header("Authorization", format!("Bearer {}", upload_token()))
         .multipart(form)
         .send();
 
@@ -527,4 +573,29 @@ routes = {
             // by closing the connection
         }
     }
+}
+
+#[test]
+fn upload_without_token_returns_401() {
+    // Red on main: `scripts/upload.lua` had no authorization at all (S2-23).
+    // The hardened script's `authorize_api` call must refuse an upload with
+    // no Bearer token before any file I/O happens.
+    let srv = server();
+    let file = test_image_path("unit/lena512.tif");
+
+    let form = multipart::Form::new().part(
+        "file",
+        multipart::Part::bytes(std::fs::read(&file).expect("read file"))
+            .file_name("lena512.tif")
+            .mime_str("image/tiff")
+            .expect("valid mime"),
+    );
+
+    let resp = client()
+        .post(format!("{}/api/upload", srv.base_url))
+        .multipart(form)
+        .send()
+        .expect("upload request failed");
+
+    assert_eq!(resp.status().as_u16(), 401);
 }

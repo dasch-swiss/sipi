@@ -21,6 +21,50 @@
 
 require "get_knora_session"
 
+-------------------------------------------------------------------------------
+-- This function is used to authorize the sipi api
+-- @param issuer The issuer of the JWT
+-- @param audience The audience targeted by the JWT
+-- @param username The username that is used for authentification
+--
+-- The usage is as follows:
+--
+--    <lua>
+--    if not authorize_api(issuer, audience, username) then
+--       return
+--    end
+--    </lua>
+-------------------------------------------------------------------------------
+function authorize_api(issuer, audience, username)
+    local success, auth = server.requireAuth()
+    if not success then
+        server.sendStatus(500)
+        server.log(auth, server.loglevel.LOG_ERR)
+        return false
+    end
+
+    if (auth.status ~= 'BEARER') then
+        server.sendStatus(401)
+        server.sendHeader('WWW-Authenticate', 'Bearer')
+        server.print("Wrong credentials!")
+        return false
+    end
+
+    local success, jwt = server.decode_jwt(auth.token)
+    if not success then
+        server.sendStatus(500)
+        server.log(jwt, server.loglevel.LOG_ERR)
+        return false
+    end
+    if (jwt.iss ~= issuer) or (jwt.aud ~= audience) or (jwt.user ~= username) then
+        server.sendStatus(401)
+        server.sendHeader('WWW-Authenticate', 'Bearer')
+        return false
+    end
+    return true
+end
+-------------------------------------------------------------------------------
+
 function file_pre_flight(filepath, cookie)
     if filepath == "./images/unit/test2.csv" then
         return "deny", ""

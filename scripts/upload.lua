@@ -32,6 +32,14 @@ function table.contains(table, element)
   return false
 end
 
+--
+-- reject the upload up front unless the caller presents a valid Bearer
+-- token for this issuer/audience/user (authorize_api sends the 401 itself)
+--
+if not authorize_api("https://sipi.example.org", "Sipi", "uploader") then
+    return
+end
+
 myimg = {}
 newfilename = {}
 iiifurls = {}
@@ -97,10 +105,9 @@ for imgindex,imgparam in pairs(server.uploads) do
         end
 
         filename = imgparam["origname"]
-        filebody = filename:match("(.+)%..+")
-        newfilename[imgindex] = "_" .. filebody .. '.jp2'
+        newfilename[imgindex] = uuid62 .. '.jp2'
 
-        iiifurls[uuid62 .. ".jp2"] = protocol .. server.host .. '/images/' .. newfilename[imgindex]
+        iiifurls[uuid62 .. ".jp2"] = protocol .. server.host .. '/unit/' .. newfilename[imgindex]
         iiifurls["filename"] = newfilename[imgindex]
 
         --
@@ -116,7 +123,7 @@ for imgindex,imgparam in pairs(server.uploads) do
         --
         -- Create the destination path
         --
-        fullfilepath = config.imgroot .. '/' .. newfilepath
+        fullfilepath = config.imgroot .. '/unit/' .. newfilepath
 
         --
         -- write the file to the destination
@@ -137,22 +144,8 @@ for imgindex,imgparam in pairs(server.uploads) do
             server.log('Error converting image to j2k: ' .. filename .. ' ** ' .. errmsg, server.loglevel.error)
         end
     else
-        filename = imgparam["origname"]
-        --
-        -- here we add the subdirs that are necessary if Sipi is configured to use subdirs
-        --
-        success, newfilepath = helper.filename_hash(filename)
-        if not success then
-            server.log(newfilepath, server.loglevel.error)
-            send_error(500, "Could not compute destination path")
-            return false
-        end
-
-        fullfilepath = config.imgroot .. '/' .. newfilepath
-        server.copyTmpfile(index, fullfilepath)
-
-        iiifurls[filename] = protocol .. server.host .. '/images/' .. newfilepath
-        iiifurls["filename"] = filename
+        send_error(415, "Only image uploads are supported")
+        return false
     end
 
 end
