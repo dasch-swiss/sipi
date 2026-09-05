@@ -1,3 +1,7 @@
+---
+status: accepted
+---
+
 # ICC profile creation date is deterministic in tests, wall-clock in production
 
 `Icc::iccBytes()` is the single chokepoint that converts `cmsHPROFILE` to bytes for codec consumption. When `SOURCE_DATE_EPOCH` is set in the environment, it overwrites bytes 24-35 (ICC creation date) with the supplied epoch and zeros bytes 84-99 (Profile ID). When unset — the production default — it returns lcms2's wall-clock-stamped bytes verbatim.

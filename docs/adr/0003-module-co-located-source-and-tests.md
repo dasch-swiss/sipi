@@ -1,5 +1,5 @@
 ---
-status: proposed
+status: accepted
 ---
 
 # Module-co-located source, headers, and unit tests with flat-style includes
