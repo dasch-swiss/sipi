@@ -86,6 +86,40 @@ pub fn request_timeout_from_env() -> std::time::Duration {
     std::time::Duration::from_secs(secs)
 }
 
+/// The Lua-route body-admission size default (S2-19) when the Lua config
+/// leaves `max_post_size` unset (0): 256 MiB. A previous `unwrap_or(0)` treated
+/// `0` as "unlimited", which read an unbounded request body fully into RAM
+/// before admission; every Lua-route body cap is now finite.
+pub const DEFAULT_MAX_POST_SIZE: usize = 256 * 1024 * 1024;
+
+/// The Lua-route body-read-timeout default (S2-19): 10 seconds.
+pub const DEFAULT_BODY_READ_TIMEOUT_SECS: u64 = 10;
+
+/// Parses `SIPI_BODY_READ_TIMEOUT` — an integer number of seconds — into the
+/// [`std::time::Duration`] `routes.rs` hands to
+/// `tower_http::timeout::RequestBodyTimeoutLayer` on the Lua-route and docroot
+/// method routers.
+///
+/// Read directly via `std::env`, like [`request_timeout_from_env`]: the
+/// body-read timeout is a Rust-shell-only serve knob and never crosses the FFI
+/// seam.
+///
+/// Unset, unparseable, or `0` all fall back to
+/// [`DEFAULT_BODY_READ_TIMEOUT_SECS`] (S2-19) — a `0`-second timeout would
+/// fail every request body read, which is never the intent of an accidental
+/// empty/zero value. Bounding the body read by time (in addition to
+/// [`DEFAULT_MAX_POST_SIZE`]'s bound by size) means a slow/trickling client
+/// cannot hold a body-read connection open indefinitely before an admission
+/// permit is even acquired.
+pub fn body_read_timeout_from_env() -> std::time::Duration {
+    let secs = std::env::var("SIPI_BODY_READ_TIMEOUT")
+        .ok()
+        .and_then(|v| v.parse::<u64>().ok())
+        .filter(|&secs| secs != 0)
+        .unwrap_or(DEFAULT_BODY_READ_TIMEOUT_SECS);
+    std::time::Duration::from_secs(secs)
+}
+
 /// Pure parse, split out from [`allowed_origins_from_env`] / [`public_hosts_from_env`]
 /// so it is testable without mutating process-global env state.
 fn parse_csv_list(raw: Option<&str>) -> Vec<String> {
@@ -762,5 +796,52 @@ mod request_timeout_tests {
     fn zero_defaults_to_60s() {
         let got = with_env(Some("0"), request_timeout_from_env);
         assert_eq!(got, Duration::from_secs(DEFAULT_REQUEST_TIMEOUT_SECS));
+    }
+}
+
+#[cfg(test)]
+mod body_read_timeout_tests {
+    use super::{body_read_timeout_from_env, DEFAULT_BODY_READ_TIMEOUT_SECS};
+    use std::sync::Mutex;
+    use std::time::Duration;
+
+    /// Serializes every test in this module: `std::env::var` reads
+    /// process-global state, so tests that set/remove `SIPI_BODY_READ_TIMEOUT`
+    /// would otherwise race in parallel.
+    static SERIAL: Mutex<()> = Mutex::new(());
+
+    fn with_env<T>(value: Option<&str>, f: impl FnOnce() -> T) -> T {
+        let _guard = SERIAL.lock().unwrap_or_else(|e| e.into_inner());
+        match value {
+            Some(v) => std::env::set_var("SIPI_BODY_READ_TIMEOUT", v),
+            None => std::env::remove_var("SIPI_BODY_READ_TIMEOUT"),
+        }
+        let result = f();
+        std::env::remove_var("SIPI_BODY_READ_TIMEOUT");
+        result
+    }
+
+    #[test]
+    fn unset_defaults_to_10s() {
+        let got = with_env(None, body_read_timeout_from_env);
+        assert_eq!(got, Duration::from_secs(DEFAULT_BODY_READ_TIMEOUT_SECS));
+    }
+
+    #[test]
+    fn valid_value_is_honored() {
+        let got = with_env(Some("30"), body_read_timeout_from_env);
+        assert_eq!(got, Duration::from_secs(30));
+    }
+
+    #[test]
+    fn invalid_value_defaults_to_10s() {
+        let got = with_env(Some("not-a-number"), body_read_timeout_from_env);
+        assert_eq!(got, Duration::from_secs(DEFAULT_BODY_READ_TIMEOUT_SECS));
+    }
+
+    #[test]
+    fn zero_defaults_to_10s() {
+        let got = with_env(Some("0"), body_read_timeout_from_env);
+        assert_eq!(got, Duration::from_secs(DEFAULT_BODY_READ_TIMEOUT_SECS));
     }
 }

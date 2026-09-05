@@ -59,6 +59,7 @@ tracked and their disagreement is observable, so residual drift can be tuned.
 | `SIPI_ADMISSION_MODE` | `--admission-mode` | `basic` | `basic` (enforce basic tier only) or `advanced` (also enforce the advanced tier) |
 | `SIPI_LARGE_DECODE_THRESHOLD_BYTES` | `--large-decode-threshold-bytes` | `33554432` (32 MiB) | Estimated peak at/above which a decode is a full-partition decode |
 | `SIPI_REQUEST_TIMEOUT` | *(none)* | `60` (seconds) | Handler wall-clock timeout; a request whose handler exceeds it answers 408. Must exceed `SIPI_QUEUE_TIMEOUT` plus the largest expected full decode, or legitimate slow requests get 408 instead of completing |
+| `SIPI_BODY_READ_TIMEOUT` | *(none)* | `10` (seconds) | Lua-route/docroot request-body-read timeout; a slow/trickling client is cut off before it ever reaches `admission.acquire`, so it cannot hold a Full permit while still streaming its body |
 
 `ops-deploy` renders `DSP_IIIF_MEMORY_LIMIT` → `SIPI_MEMORY_LIMIT` and
 `DSP_IIIF_ADMISSION_MODE` → `SIPI_ADMISSION_MODE`. An unrecognized

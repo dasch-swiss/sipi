@@ -66,8 +66,10 @@ pub struct AppState {
     /// Configured Lua routes (method/route/script), registered as axum routes by
     /// [`crate::app`]. Empty when the engine is uninstalled.
     pub routes: Vec<ffi::RouteEntry>,
-    /// Max POST body size in bytes; 0 = unlimited. The Lua-route handler rejects
-    /// oversized bodies (413), reconstructing the transport's `Connection` cap.
+    /// Max POST body size in bytes — always finite (S2-19): a Lua config that
+    /// leaves `max_post_size` unset falls back to
+    /// [`crate::config::DEFAULT_MAX_POST_SIZE`] in [`AppState::load`]. The
+    /// Lua-route and docroot handlers reject oversized bodies (413).
     max_post_size: usize,
     /// The `/server` docroot fileserver root (raw config value; the handler
     /// canonicalises it per request). Empty = no fileserver configured.
@@ -191,7 +193,14 @@ impl AppState {
                     // TOML config supplies routes directly; a Lua config has them
                     // read back from the engine via the seam.
                     routes: configured_routes.unwrap_or_default(),
-                    max_post_size: ffi::max_post_size().unwrap_or(0),
+                    // S2-19: `0` from the engine means "unset" (Lua config never
+                    // configured `max_post_size`), not "unlimited" — fall back to
+                    // a finite default rather than reading an unbounded body into
+                    // RAM before admission.
+                    max_post_size: ffi::max_post_size()
+                        .ok()
+                        .filter(|&n| n > 0)
+                        .unwrap_or(crate::config::DEFAULT_MAX_POST_SIZE),
                     // The fileserver docroot/wwwroute (empty when not configured →
                     // no static route registered).
                     docroot: ffi::docroot().unwrap_or_default(),
@@ -210,7 +219,7 @@ impl AppState {
                     lua: None,
                     admission,
                     routes: Vec::new(),
-                    max_post_size: 0,
+                    max_post_size: crate::config::DEFAULT_MAX_POST_SIZE,
                     docroot: String::new(),
                     wwwroute: String::new(),
                     preflight_cache,
@@ -1041,14 +1050,22 @@ pub fn lua_route_method_router(
         // matching the C++ `script_handler` (only `file_handler` injects it).
         async move { serve_lua_script(state, script, None, req).await }
     });
-    // Cap the request body at max_post_size (oversized → 413), or lift axum's
-    // default 2 MiB cap when the config leaves it unlimited.
-    Some(if max_post > 0 {
-        handler.layer(DefaultBodyLimit::max(max_post))
-    } else {
-        handler.layer(DefaultBodyLimit::disable())
-    })
+    // Cap the request body at max_post_size (oversized → 413) and bound the
+    // body read by time (S2-19): a slow/trickling client is cut off before it
+    // ever reaches `serve_lua_script`'s `admission.acquire`, so it never holds
+    // a Full permit while still streaming its body.
+    let handler: MethodRouter<Arc<AppState>> = handler.layer(DefaultBodyLimit::max(max_post));
+    let handler: MethodRouter<Arc<AppState>> =
+        handler.layer(tower_http::timeout::RequestBodyTimeoutLayer::new(
+            crate::config::body_read_timeout_from_env(),
+        ));
+    Some(handler)
 }
+
+/// The maximum number of multipart parts (file or non-file fields combined)
+/// `serve_lua_script` will process in one request (S2-19); the request beyond
+/// this is rejected with 400, independent of `max_post_size`.
+const MAX_MULTIPART_PARTS: u32 = 64;
 
 /// Run a Lua script against the request: snapshot it, spool any multipart uploads
 /// to temp files, build the request data, and run the script through
@@ -1094,9 +1111,18 @@ async fn serve_lua_script(
             // 413 (over the body cap) or 400 (malformed) — the rejection's own status.
             Err(rej) => return rej.into_response(),
         };
+        let mut part_count: u32 = 0;
         loop {
             match multipart.next_field().await {
                 Ok(Some(mut field)) => {
+                    // S2-19: cap the part count independent of the body-size limit —
+                    // a request built from many tiny parts stays under
+                    // `max_post_size` while still costing a field-processing pass
+                    // (and a temp file, for file parts) per part.
+                    part_count += 1;
+                    if part_count > MAX_MULTIPART_PARTS {
+                        return sink::error_response(StatusCode::BAD_REQUEST);
+                    }
                     let fieldname = field.name().unwrap_or_default().to_owned();
                     let origname = field.file_name().unwrap_or_default().to_owned();
                     let mime = field.content_type().unwrap_or_default().to_owned();
@@ -1111,9 +1137,8 @@ async fn serve_lua_script(
                     } else {
                         // A file part: stream chunks straight to the temp file so a
                         // single upload never buffers fully in memory. The whole-request
-                        // size is still bounded by the DefaultBodyLimit layer when
-                        // max_post_size > 0 (unlimited matches the C++ transport, which
-                        // also spools uploads to disk rather than holding them in RAM).
+                        // size is still bounded by the DefaultBodyLimit layer (S2-19:
+                        // max_post_size is always finite, see config::DEFAULT_MAX_POST_SIZE).
                         let Ok(mut tf) = NamedTempFile::new() else {
                             return sink::error_response(StatusCode::INTERNAL_SERVER_ERROR);
                         };
@@ -1151,12 +1176,7 @@ async fn serve_lua_script(
             }
         }
     } else if has_request_body(&method) {
-        let limit = if state.max_post_size == 0 {
-            usize::MAX
-        } else {
-            state.max_post_size
-        };
-        let bytes = match to_bytes(req.into_body(), limit).await {
+        let bytes = match to_bytes(req.into_body(), state.max_post_size).await {
             Ok(b) => b,
             Err(_) => return sink::error_response(StatusCode::PAYLOAD_TOO_LARGE),
         };
@@ -1433,12 +1453,14 @@ pub fn docroot_method_router(state: Arc<AppState>) -> Option<MethodRouter<Arc<Ap
         },
     );
     // Cap docroot `.lua`/`.elua` POST bodies at the configured size (static GETs
-    // ignore it); an unlimited config lifts axum's default 2 MiB cap.
-    Some(if max_post > 0 {
-        handler.layer(DefaultBodyLimit::max(max_post))
-    } else {
-        handler.layer(DefaultBodyLimit::disable())
-    })
+    // ignore it) and bound the body read by time (S2-19), matching
+    // `lua_route_method_router`.
+    let handler: MethodRouter<Arc<AppState>> = handler.layer(DefaultBodyLimit::max(max_post));
+    let handler: MethodRouter<Arc<AppState>> =
+        handler.layer(tower_http::timeout::RequestBodyTimeoutLayer::new(
+            crate::config::body_read_timeout_from_env(),
+        ));
+    Some(handler)
 }
 
 /// The `/server` docroot handler: serve a static file (Range/206 + MIME) or
