@@ -692,12 +692,12 @@ http_archive(
 http_archive(
     name = "tiff",
     build_file = "//bazel:tiff.BUILD.bazel",
-    sha256 = "a3faec056a490c62b8749847317521204f8c4d9933cce834e691a74524ec38fe",
-    strip_prefix = "libtiff-4.7.1",
+    sha256 = "dd030ae5d6483033bd88d840fc97e36adc3022b844d9d896a3b5a50f2d660d6f",
+    strip_prefix = "libtiff-4.7.2",
     # libsdl-org mirror = the exact tarball the BCR libtiff/4.7.1 overlay (which
     # bazel/tiff.BUILD.bazel is vendored from) was validated against; layout
     # matches the overlay's source-file paths.
-    url = "https://github.com/libsdl-org/libtiff/archive/refs/tags/v4.7.1.tar.gz",
+    url = "https://github.com/libsdl-org/libtiff/archive/refs/tags/v4.7.2.tar.gz",
 )
 
 # Tracy — opt-in, dev-only frame/zone profiler (https://github.com/wolfpld/tracy).

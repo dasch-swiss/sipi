@@ -1,4 +1,4 @@
-"""Native `cc_library` for libtiff 4.7.1.
+"""Native `cc_library` for libtiff 4.7.2.
 
 Vendored from the BCR `libtiff/4.7.1/overlay/BUILD.bazel` and customized to
 RE-ENABLE the four ingest codecs stock BCR ships disabled. SIPI is an archive:
@@ -110,11 +110,11 @@ cmake_configure_file(
     src = "libtiff/tiffvers.h.cmake.in",
     out = "libtiff/tiffvers.h",
     defines = [
-        "LIBTIFF_VERSION=4.7.1",
-        "LIBTIFF_RELEASE_DATE=20250911",
+        "LIBTIFF_VERSION=4.7.2",
+        "LIBTIFF_RELEASE_DATE=20260627",
         "LIBTIFF_MAJOR_VERSION=4",
         "LIBTIFF_MINOR_VERSION=7",
-        "LIBTIFF_MICRO_VERSION=1",
+        "LIBTIFF_MICRO_VERSION=2",
         "VAR=",  # Appears in a comment, but cmake_configure_file requires it
     ],
 )
