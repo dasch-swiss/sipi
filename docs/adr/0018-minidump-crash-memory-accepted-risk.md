@@ -64,3 +64,22 @@ Rationale:
   resolved here.
 - If a crash minidump ever needs FADP/GDPR breach-notification treatment, this
   ADR is the record of what was known and accepted at cutover time.
+
+## Amendment (2026-09-05)
+
+The open operational item flagged above is now resolved: the production
+`SIPI_SENTRY_DSN` points at Sentry SaaS (US), not a self-hosted instance. A
+native crash's minidump — worker-thread memory that can hold decoded JWTs,
+session cookies, or in-flight restricted/unpublished image bytes — would
+therefore leave the EU on upload.
+
+**Decision: adopt recommendation (b).** Disable minidump upload in production
+until a self-hosted Sentry instance exists, while keeping panic and
+handled-error reporting (`sentry::capture_event`, including the
+`report_image_error` path) enabled — those carry only structured, non-PII
+event fields (see S2-28), not raw process memory.
+
+This ADR records the decision only. Actually disabling the minidump upload
+(via env/config on the `sentry-rust-minidump` reporter, or by pointing
+`SIPI_SENTRY_DSN` at a DSN that omits minidump ingestion) is a separate
+deployment-phase item, tracked outside this document.

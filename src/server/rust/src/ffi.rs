@@ -13,6 +13,7 @@
 
 use std::ffi::{CStr, CString};
 use std::os::raw::{c_char, c_int, c_void};
+use std::path::Path;
 
 use crate::config::{OverridesHolder, ServerOverrides, SipiServerConfig};
 
@@ -986,6 +987,118 @@ pub fn image_dims_and_essentials(
     Ok((dims, essentials))
 }
 
+/// Plain-data snapshot of a reported handled-error context, decoupled from
+/// the FFI seam's raw pointers so the Sentry event shape it drives
+/// ([`build_image_error_event`]) is unit-testable without an engine call.
+#[derive(Default)]
+struct ImageErrorEventData {
+    phase: String,
+    message: Option<String>,
+    input_file: Option<String>,
+    output_format: Option<String>,
+    colorspace: Option<String>,
+    icc_profile_type: Option<String>,
+    orientation: Option<String>,
+    request_uri: Option<String>,
+    width: u64,
+    height: u64,
+    channels: u64,
+    bps: u64,
+    file_size_bytes: u64,
+}
+
+/// Builds the `sentry::Event` for a reported handled-error context. Kept
+/// free of FFI pointers so its event shape — in particular, that
+/// `input_file` is reduced to a basename and `request_uri` lands only in the
+/// non-indexed `Image` context, never as a tag — is directly unit-testable.
+/// `input_file` and `request_uri` can carry restricted repository paths and
+/// full request paths respectively; tags are indexed/searchable, so only the
+/// basename (never the directory) and never the request URI are tagged.
+fn build_image_error_event(data: ImageErrorEventData) -> sentry::protocol::Event<'static> {
+    let ImageErrorEventData {
+        phase,
+        message,
+        input_file,
+        output_format,
+        colorspace,
+        icc_profile_type,
+        orientation,
+        request_uri,
+        width,
+        height,
+        channels,
+        bps,
+        file_size_bytes,
+    } = data;
+
+    let input_file_basename = input_file.map(|v| {
+        Path::new(&v)
+            .file_name()
+            .map(|name| name.to_string_lossy().into_owned())
+            .unwrap_or(v)
+    });
+
+    let mut tags = sentry::protocol::Map::new();
+    tags.insert("sipi.mode".to_owned(), "server".to_owned());
+    tags.insert("sipi.phase".to_owned(), phase);
+    if let Some(v) = &output_format {
+        tags.insert("sipi.output_format".to_owned(), v.clone());
+    }
+    if let Some(v) = &colorspace {
+        tags.insert("sipi.colorspace".to_owned(), v.clone());
+    }
+    if bps > 0 {
+        tags.insert("sipi.bps".to_owned(), bps.to_string());
+    }
+
+    let mut image_data = sentry::protocol::Map::new();
+    if let Some(v) = input_file_basename {
+        image_data.insert("input_file".to_owned(), v.into());
+    }
+    if let Some(v) = &output_format {
+        image_data.insert("output_format".to_owned(), v.clone().into());
+    }
+    if width > 0 || height > 0 {
+        image_data.insert("width".to_owned(), width.into());
+        image_data.insert("height".to_owned(), height.into());
+    }
+    if channels > 0 {
+        image_data.insert("channels".to_owned(), channels.into());
+    }
+    if bps > 0 {
+        image_data.insert("bps".to_owned(), bps.into());
+    }
+    if let Some(v) = colorspace {
+        image_data.insert("colorspace".to_owned(), v.into());
+    }
+    if let Some(v) = icc_profile_type {
+        image_data.insert("icc_profile_type".to_owned(), v.into());
+    }
+    if let Some(v) = orientation {
+        image_data.insert("orientation".to_owned(), v.into());
+    }
+    if file_size_bytes > 0 {
+        image_data.insert("file_size_bytes".to_owned(), file_size_bytes.into());
+    }
+    if let Some(v) = request_uri {
+        image_data.insert("request_uri".to_owned(), v.into());
+    }
+
+    let mut contexts = sentry::protocol::Map::new();
+    contexts.insert(
+        "Image".to_owned(),
+        sentry::protocol::Context::Other(image_data),
+    );
+
+    sentry::protocol::Event {
+        level: sentry::Level::Error,
+        message,
+        tags,
+        contexts,
+        ..Default::default()
+    }
+}
+
 /// Builds a `sentry::Event` from a reported handled-error context and
 /// captures it — the engine links no Sentry SDK and reports this
 /// handled-error context across the seam instead (a report is
@@ -1005,13 +1118,6 @@ pub(crate) extern "C" fn report_image_error(ctx: *mut c_void, err: *const SipiIm
             // C string valid for this call, per the seam contract.
             (!p.is_null()).then(|| unsafe { CStr::from_ptr(p) }.to_string_lossy().into_owned())
         };
-        let phase = field(err.phase).unwrap_or_default();
-        let message = field(err.message);
-        let input_file = field(err.input_file);
-        let output_format = field(err.output_format);
-        let colorspace = field(err.colorspace);
-        let icc_profile_type = field(err.icc_profile_type);
-        let orientation = field(err.orientation);
         let request_uri = (!ctx.is_null()).then(|| {
             // SAFETY: `ctx` is either null or the request-URI C string the
             // Rust edge passed as `report_ctx`, valid for this call.
@@ -1020,68 +1126,23 @@ pub(crate) extern "C" fn report_image_error(ctx: *mut c_void, err: *const SipiIm
                 .into_owned()
         });
 
-        let mut tags = sentry::protocol::Map::new();
-        tags.insert("sipi.mode".to_owned(), "server".to_owned());
-        tags.insert("sipi.phase".to_owned(), phase);
-        if let Some(v) = &output_format {
-            tags.insert("sipi.output_format".to_owned(), v.clone());
-        }
-        if let Some(v) = &colorspace {
-            tags.insert("sipi.colorspace".to_owned(), v.clone());
-        }
-        if err.bps > 0 {
-            tags.insert("sipi.bps".to_owned(), err.bps.to_string());
-        }
-        if let Some(v) = &request_uri {
-            tags.insert("sipi.request_uri".to_owned(), v.clone());
-        }
-
-        let mut image_data = sentry::protocol::Map::new();
-        if let Some(v) = input_file {
-            image_data.insert("input_file".to_owned(), v.into());
-        }
-        if let Some(v) = &output_format {
-            image_data.insert("output_format".to_owned(), v.clone().into());
-        }
-        if err.width > 0 || err.height > 0 {
-            image_data.insert("width".to_owned(), err.width.into());
-            image_data.insert("height".to_owned(), err.height.into());
-        }
-        if err.channels > 0 {
-            image_data.insert("channels".to_owned(), err.channels.into());
-        }
-        if err.bps > 0 {
-            image_data.insert("bps".to_owned(), err.bps.into());
-        }
-        if let Some(v) = colorspace {
-            image_data.insert("colorspace".to_owned(), v.into());
-        }
-        if let Some(v) = icc_profile_type {
-            image_data.insert("icc_profile_type".to_owned(), v.into());
-        }
-        if let Some(v) = orientation {
-            image_data.insert("orientation".to_owned(), v.into());
-        }
-        if err.file_size_bytes > 0 {
-            image_data.insert("file_size_bytes".to_owned(), err.file_size_bytes.into());
-        }
-        if let Some(v) = request_uri {
-            image_data.insert("request_uri".to_owned(), v.into());
-        }
-
-        let mut contexts = sentry::protocol::Map::new();
-        contexts.insert(
-            "Image".to_owned(),
-            sentry::protocol::Context::Other(image_data),
-        );
-
-        sentry::capture_event(sentry::protocol::Event {
-            level: sentry::Level::Error,
-            message,
-            tags,
-            contexts,
-            ..Default::default()
+        let event = build_image_error_event(ImageErrorEventData {
+            phase: field(err.phase).unwrap_or_default(),
+            message: field(err.message),
+            input_file: field(err.input_file),
+            output_format: field(err.output_format),
+            colorspace: field(err.colorspace),
+            icc_profile_type: field(err.icc_profile_type),
+            orientation: field(err.orientation),
+            request_uri,
+            width: err.width,
+            height: err.height,
+            channels: err.channels,
+            bps: err.bps,
+            file_size_bytes: err.file_size_bytes,
         });
+
+        sentry::capture_event(event);
     }));
 }
 
@@ -1170,6 +1231,45 @@ mod image_error_layout {
         assert_eq!(offset_of!(SipiImageErrorReport, channels), 72);
         assert_eq!(offset_of!(SipiImageErrorReport, bps), 80);
         assert_eq!(offset_of!(SipiImageErrorReport, file_size_bytes), 88);
+    }
+}
+
+#[cfg(test)]
+mod image_error_event_pii {
+    use super::{build_image_error_event, ImageErrorEventData};
+
+    #[test]
+    fn input_file_is_reduced_to_basename() {
+        let event = build_image_error_event(ImageErrorEventData {
+            input_file: Some("/sipi/images/0112/abcd.jpx".to_owned()),
+            ..Default::default()
+        });
+        let image = event.contexts.get("Image").expect("Image context present");
+        let sentry::protocol::Context::Other(map) = image else {
+            panic!("Image context is not a map");
+        };
+        let input_file = map.get("input_file").and_then(|v| v.as_str());
+        assert_eq!(input_file, Some("abcd.jpx"));
+    }
+
+    #[test]
+    fn request_uri_is_not_an_indexed_tag_but_stays_in_context() {
+        let event = build_image_error_event(ImageErrorEventData {
+            request_uri: Some("/0112/abcd.jpx/full/max/0/default.jpg".to_owned()),
+            ..Default::default()
+        });
+        assert!(
+            !event.tags.contains_key("sipi.request_uri"),
+            "request_uri must not be an indexed tag"
+        );
+        let image = event.contexts.get("Image").expect("Image context present");
+        let sentry::protocol::Context::Other(map) = image else {
+            panic!("Image context is not a map");
+        };
+        assert_eq!(
+            map.get("request_uri").and_then(|v| v.as_str()),
+            Some("/0112/abcd.jpx/full/max/0/default.jpg")
+        );
     }
 }
 
