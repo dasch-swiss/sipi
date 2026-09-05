@@ -202,7 +202,7 @@ Lua-based configuration (`src/ffi/cpp/SipiConf.h`, `src/ffi/cpp/SipiConf.cpp`):
 | **Cache** | `cache_dir`, `cache_size`, `cache_nfiles` |
 | **Request handling** | `max_post_size`, `tmpdir`, `max_temp_file_age` |
 | **Lua** | `initscript`, `scriptdir`, `thumb_size` |
-| **Authentication** | `jwt_secret` (42 chars), `admin.user`, `admin.password` |
+| **Authentication** | `jwt_secret` (≥32 bytes) |
 | **Static files** | `fileserver.docroot`, `fileserver.wwwroute` |
 | **Knora/DSP** | `knora_path`, `knora_port` |
 | **Routes** | `routes` table: `{method, route, script}` |

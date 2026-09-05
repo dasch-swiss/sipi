@@ -17,7 +17,7 @@ pub struct LimitsArgs {
     /// `--tiles-memory-ratio`.
     #[arg(long, env = "SIPI_MEMORY_LIMIT", value_name = "SIZE")]
     pub memory_limit: Option<String>,
-    /// Admission mode: basic (thread cap only; default) or advanced (also the memory + two-lane caps). Unknown values fall back to basic.
+    /// Admission mode: advanced (default; enforces the memory + two-lane caps) or basic (thread cap only). An unrecognized value falls back to basic.
     #[arg(long, env = "SIPI_ADMISSION_MODE", value_name = "MODE")]
     pub admission_mode: Option<String>,
     /// Fraction of the envelope reserved for tiles (0..1); the full lane gets

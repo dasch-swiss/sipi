@@ -147,8 +147,6 @@ The TOML key for each Lua config key:
 | `[image] jpeg_quality` | `jpeg_quality` |
 | `[image] scaling_quality.{jpeg,tiff,png,j2k}` | `scaling_quality.{…}` (the `j2k` entry is accepted but currently has no effect — the engine reads that slot under a legacy key) |
 | `[tls_auth] jwt_secret` | `jwt_secret` |
-| `[tls_auth] admin_user` | `admin.user` |
-| `[tls_auth] admin_password` | `admin.password` |
 | `[knora] path` | `knora_path` |
 | `[knora] port` | `knora_port` |
 | `[logging] level` | `loglevel` |
