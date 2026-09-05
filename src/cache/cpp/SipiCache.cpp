@@ -76,6 +76,21 @@ namespace {
     return oss.str();
   }
 
+  // Subtracts `amount` from `total` without letting the unsigned counter wrap
+  // (S2-45): a forged/oversized fsize, a double-removal, or accounting drift
+  // must clamp to 0 rather than underflow into a huge value that breaks
+  // eviction.
+  void subtractClamped(std::atomic<unsigned long long> &total, unsigned long long amount)
+  {
+    unsigned long long current = total.load();
+    if (amount > current) {
+      log_warn("Cache accounting underflow: subtracting %llu from %llu bytes used; clamping to 0", amount, current);
+      total.store(0);
+    } else {
+      total.fetch_sub(amount);
+    }
+  }
+
 }// namespace
 
 // Owns a scandir() result: frees every entry and the array itself.
@@ -447,7 +462,7 @@ int SipiCache::purge(bool use_lock)
 
     log_debug("Purging from cache \"%s\"...", ct_it->second.cachepath.c_str());
     ::unlink(delpath.c_str());
-    cache_used_bytes -= ct_it->second.fsize;
+    subtractClamped(cache_used_bytes, ct_it->second.fsize);
     --nfiles;
     ++n;
     cachetable.erase(ct_it);
@@ -624,7 +639,7 @@ void SipiCache::add(const std::string &origpath_p,
   if (existing != cachetable.end()) {
     std::string toremove = _cachedir + "/" + existing->second.cachepath;
     ::unlink(toremove.c_str());
-    cache_used_bytes -= existing->second.fsize;
+    subtractClamped(cache_used_bytes, existing->second.fsize);
     --nfiles;
   }
 
@@ -667,7 +682,7 @@ bool SipiCache::remove(const std::string &canonical_p)
   }
   log_debug("Delete from cache \"%s\"...", it->second.cachepath.c_str());
   ::remove(delpath.c_str());
-  cache_used_bytes -= it->second.fsize;
+  subtractClamped(cache_used_bytes, it->second.fsize);
   cachetable.erase(it);
   --nfiles;
 
