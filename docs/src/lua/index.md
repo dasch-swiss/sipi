@@ -70,6 +70,20 @@ Scripts run in a hardened, per-request Lua VM:
   time and size — a script edit takes effect on the next request without a
   restart. Adding a *new* preflight hook still requires a restart, since the
   hook probes are boot-frozen.
+- **Filesystem bindings are not path-confined.** `server.fs.*` and the other
+  path-taking bindings (roughly a dozen across the API) accept any path the
+  script constructs; none of them jail the result under `imgroot`,
+  `scriptdir`, or any other configured root. This makes the `docroot`
+  fileserver — which executes `.lua`/`.elua` scripts it finds under
+  `docroot` — a remote-code-execution vector if `docroot` overlaps any root a
+  request can write to. Startup refuses to start when the configured
+  `fileserver.docroot` equals or nests with `imgroot`, `tmpdir`, `scriptdir`,
+  or `cache_dir`; keep `docroot` disjoint from every writable or
+  Lua-accessible directory. There is deliberately no `confine(path)` helper
+  at the binding layer: scripts are operator-supplied, not untrusted input,
+  and the startup overlap check closes the one misconfiguration that turns a
+  script bug into RCE — adding per-call confinement across ~12 bindings would
+  be redundant defense-in-depth.
 
 ## Preflight function
 It is possible to define a LUA pre-flight function for *IIIF*-requests and independently one for *file*-requests
