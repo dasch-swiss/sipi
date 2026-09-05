@@ -417,6 +417,49 @@ fn knora_json_allowed_path_still_succeeds() {
     assert_eq!(json["height"], 512);
 }
 
+#[test]
+fn bare_restrict_info_json_is_forbidden() {
+    // `test_restrict_bare` returns `{type='restrict'}` with neither a `size`
+    // cap nor a `watermark` — indistinguishable from `allow` at the seam. If
+    // let through, info.json would disclose the native width/height and the
+    // full `scaleFactors` tiling pyramid (RUST-001). It must be refused.
+    let srv = server();
+    let resp = client()
+        .get(format!(
+            "{}/test_restrict_bare/lena512.jp2/info.json",
+            srv.base_url
+        ))
+        .send()
+        .expect("GET bare-restrict info.json failed");
+
+    assert_eq!(
+        resp.status().as_u16(),
+        403,
+        "a bare restrict decision (no size, no watermark) must be forbidden on info.json"
+    );
+}
+
+#[test]
+fn bare_restrict_knora_json_is_not_found() {
+    // Same bare-restrict decision as above; knora.json is a DSP-internal
+    // surface that hides existence rather than surfacing an auth challenge
+    // (matching the established deny convention), so it returns 404.
+    let srv = server();
+    let resp = client()
+        .get(format!(
+            "{}/test_restrict_bare/lena512.jp2/knora.json",
+            srv.base_url
+        ))
+        .send()
+        .expect("GET bare-restrict knora.json failed");
+
+    assert_eq!(
+        resp.status().as_u16(),
+        404,
+        "a bare restrict decision (no size, no watermark) must be hidden (404) on knora.json"
+    );
+}
+
 /// S2-17: with `SIPI_PUBLIC_HOSTS` configured, a hostile `X-Forwarded-Host` is
 /// substituted with the first allowlisted host in both the 303 redirect
 /// `Location` and the info.json `id` (the canonical IIIF service id) — never
