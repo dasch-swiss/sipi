@@ -50,8 +50,9 @@ full_mem = memory_limit × (1 − tiles_memory_ratio)
 `memory_limit` is the total RAM envelope; `0` auto-detects available RAM. The
 reserve `memory_limit × tiles_memory_ratio` (25% by default) is never charged to
 the full lane — it houses tile decode usage plus the non-decode floor (base heap,
-allocator retention, HTTP/encode buffers, cache). The invariant to verify in
-`basic` before switching to `advanced` is `reserve ≥ observed floor`.
+allocator retention, HTTP/encode buffers, cache). The invariant to verify while
+observing in `basic` before returning to the enforcing `advanced` default is
+`reserve ≥ observed floor`.
 
 ## Configuration
 
@@ -59,7 +60,7 @@ allocator retention, HTTP/encode buffers, cache). The invariant to verify in
 |-----------|-----------------|-------------|
 | `memory_limit` | `"0"` (auto) | Total RAM envelope. `0` = auto-detect available RAM. Accepts `M`/`G` suffixes: `"8G"`, `"500M"` |
 | `tiles_memory_ratio` | `0.25` | Fraction of the envelope reserved for tiles + non-decode floor (range 0..1); the full lane gets the rest |
-| `admission_mode` | `"basic"` | `"basic"` (advanced tier shadow-counts only) or `"advanced"` (reject over budget). There is no `"off"` — the budget is always accounted |
+| `admission_mode` | `"advanced"` | `"basic"` (advanced tier shadow-counts only) or `"advanced"` (reject over budget). There is no `"off"` — the budget is always accounted |
 | `large_decode_threshold_bytes` | `33554432` (32 MiB) | Estimated peak-memory at/above which a decode is charged to the full lane; below it bypasses as a tile |
 
 Available via (see also [Running SIPI](../guide/running.md)):
@@ -71,9 +72,10 @@ Available via (see also [Running SIPI](../guide/running.md)):
 These knobs are **not** read from the Lua config — they are set via the CLI/env/TOML
 surface above and applied over the seam at init.
 
-An unrecognized `admission_mode` (e.g. a stale `"off"` from an old template, or a
-legacy `"monitor"`/`"enforce"`) is not a startup error — SIPI silently falls back
-to the `"basic"` default.
+The DEFAULT (an unset `admission_mode`) is `"advanced"`. An UNRECOGNIZED value
+(e.g. a stale `"off"` from an old template, or a legacy `"monitor"`/`"enforce"`)
+is a different case — it is not a startup error, SIPI silently falls back to
+`"basic"`.
 
 ### Auto-Detection
 
@@ -106,9 +108,14 @@ In `advanced` mode a full-lane decode that cannot be admitted is rejected two wa
 Tile decodes are never rejected for full-lane memory pressure — they bypass the
 budget.
 
-## Basic to Advanced Workflow
+## Observing Before Enforcing
 
-1. **Deploy in basic mode** (the default):
+Generic deployments run `advanced` (enforcing) by default. To observe the
+shadow counters before enforcing — e.g. before tuning `memory_limit`/
+`tiles_memory_ratio` on a new deployment — override to `basic` explicitly:
+
+1. **Set `SIPI_ADMISSION_MODE=basic`** (or `DSP_IIIF_ADMISSION_MODE=basic` in
+   ops-deploy) and redeploy:
    - The budget is tracked and logged but requests are never rejected.
    - `sipi_decode_memory_shadow_rejected_total` shows what *would* be 503'd;
      `sipi_decode_memory_shadow_too_large_total` what *would* be 413'd.
@@ -123,8 +130,8 @@ budget.
    - If shadow rejections fire on normal full traffic, raise `memory_limit` or lower `tiles_memory_ratio`.
    - Use the histogram to understand the size distribution being served.
 
-4. **Switch to advanced**: Set `SIPI_ADMISSION_MODE=advanced` (or
-   `DSP_IIIF_ADMISSION_MODE=advanced` in ops-deploy). Redeploy.
+4. **Remove the `basic` override** (unset `SIPI_ADMISSION_MODE` /
+   `DSP_IIIF_ADMISSION_MODE`) to return to the enforcing `advanced` default.
 
 ## Prometheus Metrics
 

@@ -4,6 +4,12 @@ status: accepted
 
 # Cost-based two-lane admission control
 
+**Amendment (2026-09-05, security hardening wave 2 / DEV-7139):** shipped
+`admission_mode` default flipped from `basic` to `advanced`; generic
+deployments now get memory enforcement by default. To observe shadow counters
+before enforcing, an operator sets `SIPI_ADMISSION_MODE=basic` explicitly,
+then removes the override to return to `advanced`.
+
 SIPI's decode cost is bimodal. On `vre-prod-01` a 13-hour histogram of ~19,600
 decodes split 68 % under 10 MB (viewer tiles) against 27 % at 100–500 MB each
 (full-image downloads, overwhelmingly distributed crawler bots). With a
@@ -34,15 +40,18 @@ and CPU threads) plus two ratios and a mode:
 - **Memory.** `full_mem = memory_limit × (1 − tiles_memory_ratio)` hard-caps the
   full partition's accounted decode bytes; tiles bypass the budget. The reserve
   `memory_limit × tiles_memory_ratio` houses tile usage + the non-decode floor.
-- **Mode.** `admission_mode = basic | advanced` (no "off"; default `basic`). This
-  is a two-tier model: the **basic tier** (the global CPU/thread concurrency cap)
-  is always enforced, while the **advanced tier** (the full thread cap plus the
-  memory budget and two-lane load-shedding) is enforced only under `advanced`.
-  Under `basic` the advanced tier shadow-counts what it *would* shed, so shipping
-  the default binary changes no behavior — letting the operator size the full
-  partition before switching to `advanced`. An unrecognized value (e.g. a stale
-  `off` or a legacy `monitor`/`enforce`) is not a startup error; it falls back to
-  the `basic` default.
+- **Mode.** `admission_mode = basic | advanced` (no "off"; default `advanced`).
+  This is a two-tier model: the **basic tier** (the global CPU/thread
+  concurrency cap) is always enforced, while the **advanced tier** (the full
+  thread cap plus the memory budget and two-lane load-shedding) is enforced
+  only under `advanced`. The shipped default enforces both tiers. An operator
+  who wants to observe the advanced tier's shadow counters before enforcing
+  sets `basic` explicitly — under `basic` the advanced tier shadow-counts what
+  it *would* shed, letting the operator size the full partition before
+  returning to the enforcing `advanced` default. An unrecognized value (e.g. a
+  stale `off` or a legacy `monitor`/`enforce`) is not a startup error; it falls
+  back to `basic` — distinct from, and weaker than, the shipped `advanced`
+  default.
 
 Everything derives from four env knobs — `SIPI_MEMORY_LIMIT`, `SIPI_NTHREADS`,
 `SIPI_TILES_THREAD_RATIO` (0.5), `SIPI_TILES_MEMORY_RATIO` (0.25) — plus
@@ -123,10 +132,13 @@ like the pre-existing pool knobs.
 
 - Tiles get a guaranteed thread floor and burst; full downloads are hard-capped
   in threads and memory and shed with 503/413 when their share is exhausted.
-- The default `basic` mode enforces only the basic tier (the global-pool
-  concurrency cap); the advanced tier is observe-only, so shipping the binary is
-  safe and needs no ops-deploy change; the shadow counters + fingerprint metrics
-  size the full partition before the switch to `advanced`.
+- The shipped default (`advanced`) enforces both tiers: the basic tier (the
+  global-pool concurrency cap) and the advanced tier (the full thread cap plus
+  the memory budget and two-lane load-shedding). An operator who wants to size
+  the full partition before enforcing sets `SIPI_ADMISSION_MODE=basic`
+  explicitly; under `basic` the advanced tier is observe-only, and the shadow
+  counters + fingerprint metrics inform the return to the enforcing `advanced`
+  default.
 - `basic` preserves the pre-existing global-pool concurrency bound and the
   per-partition wait accounting fix (tiles are never shed by full-queue depth);
   only the full thread cap and the full-specific rejections (the advanced tier)
