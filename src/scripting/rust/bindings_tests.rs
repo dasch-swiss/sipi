@@ -565,6 +565,20 @@ fn log_and_systime() {
     ));
 }
 
+// ── secure_equals ────────────────────────────────────────────────────────────
+
+#[test]
+fn secure_equals_compares_constant_time() {
+    let (vm, _, _) = test_vm(sample_request());
+    assert!(eval_bool(&vm, "return server.secure_equals('abc', 'abc')"));
+    assert!(!eval_bool(&vm, "return server.secure_equals('abc', 'abd')"));
+    assert!(!eval_bool(
+        &vm,
+        "return server.secure_equals('abc', 'abcd')"
+    ));
+    assert!(eval_bool(&vm, "return server.secure_equals('', '')"));
+}
+
 // ── http (local mock; redirects + shape) ─────────────────────────────────────
 
 fn spawn_mock(response: &'static str) -> String {
