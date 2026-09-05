@@ -17,6 +17,7 @@
 
 #include <cstdint>
 #include <memory>
+#include <optional>
 #include <sstream>
 #include <string>
 #include <unordered_map>
@@ -27,10 +28,14 @@
 #include "util/Parsing.h"
 #include "util/SipiFilenameHash.h"
 
+#include "iiifparser/SipiDecodeDims.h"
 #include "image/SipiImage.h"
 #include "image/SipiImageError.h"
 #include "image_processing/processing.h"
+#include "throttling/SipiMemoryBudget.h"
+#include "throttling/SipiPeakMemory.h"
 
+#include "ffi/engine_context.h"
 #include "ffi/serve_response.h"// sipi_guard, SipiStatus
 #include "ffi/sipi_ffi.h"
 
@@ -116,6 +121,45 @@ extern "C" SipiImageHandle *sipi_image_new(const char *path,
         return nullptr;
       }
       siz = std::make_shared<Sipi::SipiSize>(reduce);
+    }
+
+    // Full-lane memory-budget charge, mirroring the IIIF serve path
+    // (serve_image.cpp's estimate_peak_memory / try_acquire block): a
+    // Lua-driven SipiImage.new() decode is otherwise unbounded and can bypass
+    // the memory envelope the serve path enforces. Charged only when the
+    // shape read below succeeds; a shape-read failure falls through to the
+    // existing read path, which reports the proper error there.
+    std::optional<Sipi::MemoryBudgetGuard> budget_guard;
+    Sipi::SipiImage shape_probe;
+    if (auto shape = shape_probe.read_shape(imgpath)) {
+      const auto &info = *shape;
+      const auto ddims = Sipi::compute_decode_dims(
+        static_cast<size_t>(info.width), static_cast<size_t>(info.height), info.clevels, reg, siz);
+      const size_t estimated = Sipi::estimate_peak_memory(ddims.width,
+        ddims.height,
+        ddims.out_w,
+        ddims.out_h,
+        info.nc,
+        info.bps,
+        /*rotation=*/0.0,
+        /*needs_icc=*/false);
+
+      const auto &eng = Sipi::ffi::engine_context();
+      if (eng.memory_budget != nullptr && estimated >= eng.large_decode_threshold_bytes) {
+        const auto result = eng.memory_budget->try_acquire(estimated);
+        if (!result.allowed) {
+          emit_str(err, err_ctx, "image decode exceeds the memory budget");
+          return nullptr;
+        }
+        if (result.over_budget) {
+          log_warn("Full-lane memory budget over limit (basic) for SipiImage.new: %zu / %zu bytes for %s",
+            result.used,
+            result.budget,
+            imgpath.c_str());
+        }
+        Sipi::SipiMemoryBudget *mb = eng.memory_budget;
+        budget_guard.emplace(*mb, estimated, result.allowed);
+      }
     }
 
     auto handle = std::make_unique<SipiImageHandle>();
