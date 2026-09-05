@@ -1,0 +1,82 @@
+"""Native `cc_library` for Expat 2.8.4.
+
+Core sources are `lib/xmlparse.c`, `lib/xmltok.c`, `lib/xmlrole.c`. `xmltok.c`
+`#include`s `xmltok_impl.c` and `xmltok_ns.c` textually (twice, with different
+macro contexts), and `xmlparse.c` textually includes `xcsinc.c` — all three
+are declared as `textual_hdrs`, never compiled as standalone translation
+units, alongside every `lib/*.h`.
+
+Expat 2.8.4's core sources (`xmlrole.c`, `xmltok.c`, `xmlparse.c`, and the
+`random_*.c` entropy backends) `#include "expat_config.h"` *unconditionally*,
+so the header must exist on the include path. Rather than replicate a full
+autotools/cmake `expat_config.h`, the required macros are supplied directly via
+`local_defines` and the header is a generated empty stub (`:expat_config_h`)
+whose only job is to satisfy that unconditional include:
+  - `XML_GE=1`, `XML_DTD`, `XML_NS` — general-entity/DTD/namespace support,
+    all mandatory (`xmlparse.c` `#error`s if `XML_GE` or `XML_CONTEXT_BYTES`
+    is undefined).
+  - `XML_CONTEXT_BYTES=1024` — upstream's own documented common default.
+  - Entropy source for expat's internal hash-flood-resistant seed (never
+    `XML_POOR_ENTROPY`, which upstream itself calls out as
+    hash-flood-vulnerable): `HAVE_ARC4RANDOM_BUF` on macOS (available since
+    10.7). The hermetic Linux toolchain links against a bundled ~2.28 glibc
+    (see docs/adr/0014-toolchain-provider-swap.md) — too old for
+    `arc4random_buf`/`arc4random` (glibc 2.36+) — so Linux uses
+    `HAVE_GETRANDOM` instead (glibc 2.25+, matches the bundled glibc). Each
+    entropy backend's `.c` file is selected to match (`random_arc4random_buf.c`
+    / `random_getrandom.c`); only one is compiled per platform.
+"""
+
+load("@rules_cc//cc:cc_library.bzl", "cc_library")
+
+package(default_visibility = [
+    "@@//src:__pkg__",
+    "@@//src/format_handlers:__pkg__",
+    "@@//src/image:__pkg__",
+    "@@+http_archive+exiv2//:__subpackages__",
+])
+
+# Expat 2.8.4's sources `#include "expat_config.h"` unconditionally; the feature
+# macros come from `local_defines` below, so this is an intentional empty stub
+# that only makes the include resolve. `includes = ["lib"]` puts the generated
+# header on the quote-include path for every `lib/*.c`.
+genrule(
+    name = "expat_config_h",
+    outs = ["lib/expat_config.h"],
+    cmd = "printf '#ifndef EXPAT_CONFIG_H\\n#define EXPAT_CONFIG_H\\n#endif\\n' > $@",
+)
+
+cc_library(
+    name = "expat",
+    srcs = [
+        "lib/xmlparse.c",
+        "lib/xmlrole.c",
+        "lib/xmltok.c",
+        ":expat_config_h",
+    ] + select({
+        "@platforms//os:macos": ["lib/random_arc4random_buf.c"],
+        "@platforms//os:linux": ["lib/random_getrandom.c"],
+    }) + glob(["lib/*.h"]),
+    hdrs = [
+        "lib/expat.h",
+        "lib/expat_external.h",
+    ],
+    # `xmltok_impl.c` / `xmltok_ns.c` are #included by xmltok.c; `xcsinc.c` is
+    # #included by xmlparse.c. None is compiled as a standalone TU.
+    textual_hdrs = [
+        "lib/xcsinc.c",
+        "lib/xmltok_impl.c",
+        "lib/xmltok_ns.c",
+    ],
+    local_defines = [
+        "XML_GE=1",
+        "XML_DTD",
+        "XML_NS",
+        "XML_CONTEXT_BYTES=1024",
+    ] + select({
+        "@platforms//os:macos": ["HAVE_ARC4RANDOM_BUF=1"],
+        "@platforms//os:linux": ["HAVE_GETRANDOM=1"],
+    }),
+    includes = ["lib"],
+    linkstatic = True,
+)

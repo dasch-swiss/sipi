@@ -21,7 +21,7 @@ C++17, and `gnu++17` keeps glibc POSIX symbols visible on Linux — strict
 `-std=c++23` hides `strerror_r`/`iconv`). Same pattern as `bazel/kakadu.BUILD.bazel`.
 Exiv2's public headers are unaffected; SIPI keeps including them under C++23.
 
-Deps are `@libexpat` (the bundled XMP SDK's ExpatAdapter) + `@zlib` (PNG-chunk
+Deps are `@libexpat//:expat` (the bundled XMP SDK's ExpatAdapter) + `@zlib` (PNG-chunk
 inflate/deflate). **No libpng** — exiv2's PNG path links zlib only (verified:
 no `<png.h>`/`png_*` references; EXIV2_ENABLE_PNG links `ZLIB::ZLIB`).
 `http.cpp` is excluded (WEBREADY off).
@@ -126,7 +126,7 @@ cc_library(
     local_defines = ["BanAllEntityUsage=1"],  # XMP SDK / expat entity-expansion guard
     visibility = ["//visibility:private"],
     deps = [
-        "@libexpat",
+        "@libexpat//:expat",
         "@zlib",
     ],
 )

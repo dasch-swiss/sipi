@@ -70,7 +70,7 @@ cc_library(
         "//src/throttling/cpp:memory_budget",
         "//src/util",
         "@exiv2//:exiv2",
-        "@libexpat",
+        "@libexpat//:expat",
         "@tiff//:tiff",
         "@libpng//:png",
         "@xz//:lzma",

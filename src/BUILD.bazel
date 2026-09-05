@@ -208,7 +208,7 @@ cc_library(
         "//src/metadata:metadata",
         "//src/observability:observability",
         "@exiv2//:exiv2",
-        "@libexpat",
+        "@libexpat//:expat",
         "@tiff//:tiff",
         "@libpng//:png",
         "@xz//:lzma",
