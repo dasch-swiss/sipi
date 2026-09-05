@@ -712,9 +712,9 @@ fn send_cookie(lua: &Lua, resp: &Resp, args: Variadic<Value>) -> mlua::Result<Mu
                         );
                     }
                 },
-                // The boolean options only ever turn a flag ON — a `false`
-                // value is a no-op (pinned quirk: `secure=false` cannot clear
-                // the secure default).
+                // `secure` only ever turns the flag ON — a `false` value is a
+                // no-op (pinned quirk: `secure=false` cannot clear the secure
+                // default).
                 "secure" => match val {
                     Value::Boolean(b) => {
                         if b {
@@ -729,15 +729,20 @@ fn send_cookie(lua: &Lua, resp: &Resp, args: Variadic<Value>) -> mlua::Result<Mu
                     }
                 },
                 "http_only" => match val {
-                    Value::Boolean(b) => {
-                        if b {
-                            cookie.http_only = true;
-                        }
-                    }
+                    Value::Boolean(b) => cookie.http_only = b,
                     _ => {
                         return fail(
                             lua,
                             "'server.sendCookie(name, value[, options])': http_only is not boolean",
+                        );
+                    }
+                },
+                "same_site" => match coerce_string(&val) {
+                    Some(s) => cookie.same_site = s,
+                    None => {
+                        return fail(
+                            lua,
+                            "'server.sendCookie(name, value[, options])': same_site is not string",
                         );
                     }
                 },
