@@ -23,7 +23,8 @@ use std::time::SystemTime;
 
 use mlua::chunk::ChunkMode;
 use mlua::{
-    Error, Function, HookTriggers, Lua, LuaOptions, MultiValue, StdLib, Table, Value, VmState,
+    Error, Function, HookTriggers, Lua, LuaOptions, MultiValue, StdLib, Table, Value, Variadic,
+    VmState,
 };
 
 use crate::limits::{kill_stats, Deadline, Kill, KillReason, LimitConfig, RuntimeError};
@@ -59,7 +60,27 @@ fn base_vm() -> mlua::Result<Lua> {
         package.set("path", "")?;
         package.set("cpath", "")?;
     }
+    install_print_shim(&lua)?;
     Ok(lua)
+}
+
+/// Redirects Lua `print` away from stdout: varargs are joined with a tab
+/// (standard `print` semantics), each coerced through the Lua global
+/// `tostring` so `__tostring` metamethods are respected, and the joined
+/// line is emitted as one `tracing::info!` event on the `sipi::lua` target
+/// — the same target `server.log` uses for script-originated log lines.
+fn install_print_shim(lua: &Lua) -> mlua::Result<()> {
+    let tostring: Function = lua.globals().get("tostring")?;
+    let print = lua.create_function(move |_, args: Variadic<Value>| {
+        let mut parts = Vec::with_capacity(args.len());
+        for arg in args.iter() {
+            let s: mlua::LuaString = tostring.call(arg.clone())?;
+            parts.push(s.to_string_lossy());
+        }
+        tracing::info!(target: "sipi::lua", "{}", parts.join("\t"));
+        Ok(())
+    })?;
+    lua.globals().set("print", print)
 }
 
 /// The startup config-parse VM: whitelist + scrub + plain `os` shim
