@@ -671,4 +671,51 @@ TEST_F(SipiCacheTest, LongCanonicalKeysRoundTripWithoutCollision)
   }
 }
 
+
+// -------------------------------------------------------------------
+// S2-45: cache_used_bytes never underflows
+// -------------------------------------------------------------------
+
+TEST_F(SipiCacheTest, DuplicateAddDuringEvictionClampsUsedBytesInsteadOfUnderflowing)
+{
+  const std::string canonicalSmall = "/iiif/small/full/max/0/default.jpg";
+  const std::string canonicalBig = "/iiif/big/full/max/0/default.jpg";
+
+  std::string origSmall = createOrigFile(origdir, "small.tif", 50);
+  std::string origBig = createOrigFile(origdir, "big.tif", 50);
+
+  // Size-limited cache (100 bytes): the first entry (90 bytes) fits under the
+  // limit and is never evicted on its own; the second entry (200 bytes) is
+  // admitted unconditionally too, since add()'s pre-insertion check only
+  // looks at the pre-existing total (90, still under 100).
+  Sipi::SipiCache cache(cachedir, 100, 0);
+
+  std::string smallCachefile = cache.getNewCacheFileName();
+  createDummyFile(smallCachefile, 90);
+  cache.add(origSmall, canonicalSmall, smallCachefile, 100, 100);
+  sleep(1);// ensure "small" keeps the older access_time for LRU ordering
+
+  std::string bigCachefile = cache.getNewCacheFileName();
+  createDummyFile(bigCachefile, 200);
+  cache.add(origBig, canonicalBig, bigCachefile, 100, 100);
+
+  // Cache is now 290 bytes, well over the 100-byte limit, uncorrected until
+  // the next add() call.
+
+  // Re-adding "small"'s canonical first subtracts its own 90 bytes as part
+  // of the duplicate-replace bookkeeping (leaving 200, still over limit),
+  // then calls purge() — whose LRU scan still finds the same
+  // not-yet-overwritten cachetable entry and subtracts its 90 bytes a SECOND
+  // time (110 remains). Purge then evicts "big" too (still over limit),
+  // subtracting its full 200 bytes from the doubly-diminished 110. Without
+  // the underflow guard this wraps cache_used_bytes to a huge value; with
+  // it, the subtraction clamps to 0 before the replacement's 15 bytes are
+  // added back.
+  std::string newSmallCachefile = cache.getNewCacheFileName();
+  createDummyFile(newSmallCachefile, 15);
+  cache.add(origSmall, canonicalSmall, newSmallCachefile, 100, 100);
+
+  EXPECT_EQ(cache.getCacheUsedBytes(), 15ull);
+}
+
 }// anonymous namespace
