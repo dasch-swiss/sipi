@@ -110,7 +110,9 @@ function authorize_page(issuer, audience, username, password)
                 --
                 -- everything OK, let's create the token for further calls and ad it to a cookie
                 --
-                if auth.username == username and auth.password == password then
+                local ok_user = server.secure_equals(auth.username, username)
+                local ok_pass = server.secure_equals(auth.password, password)
+                if ok_user and ok_pass then
                     tokendata = {
                         iss = issuer,
                         aud = audience,
@@ -159,7 +161,9 @@ function authorize_page(issuer, audience, username, password)
         -- used on private networks You can trust!!
         --
         auth = server.requireAuth()
-        if auth.username ~= username or auth.password ~= password then
+        local ok_user = server.secure_equals(auth.username, username)
+        local ok_pass = server.secure_equals(auth.password, password)
+        if not (ok_user and ok_pass) then
             server.sendStatus(401)
             server.sendHeader('WWW-Authenticate', 'Basic realm="SIPI"')
             server.print("Wrong credentials!")

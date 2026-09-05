@@ -11,7 +11,7 @@ use std::rc::Rc;
 use std::sync::OnceLock;
 use std::time::{Duration, Instant, SystemTime};
 
-use mlua::{Lua, MultiValue, Table, Value, Variadic};
+use mlua::{Lua, LuaString, MultiValue, Table, Value, Variadic};
 
 use crate::limits::Deadline;
 use crate::runtime::RequestVm;
@@ -69,6 +69,9 @@ pub fn install(vm: &RequestVm, ctx: &BindingCtx) -> mlua::Result<Table> {
     vm.register_binding("server", &server, "uuid62", uuid62)?;
     vm.register_binding("server", &server, "uuid_to_base62", uuid_to_base62)?;
     vm.register_binding("server", &server, "base62_to_uuid", base62_to_uuid)?;
+
+    // ── constant-time compare ────────────────────────────────────────────────
+    vm.register_binding("server", &server, "secure_equals", secure_equals)?;
 
     // ── response writers ────────────────────────────────────────────────────
     {
@@ -1058,6 +1061,27 @@ fn base62_to_uuid(lua: &Lua, args: Variadic<Value>) -> mlua::Result<MultiValue> 
         None => fail(lua, "'server.base62_to_uuid(uuid62)': uuid62 is not valid"),
         Some(u) => ok2(lua, Value::String(lua.create_string(u.hyphenated())?)),
     }
+}
+
+// ── constant-time compare ────────────────────────────────────────────────────
+
+/// `server.secure_equals(a, b)` — a constant-time byte comparison for credential
+/// checks (Basic-auth username/password). Deliberately does not early-return
+/// on the first mismatching byte or on a length difference: it walks the max
+/// of the two lengths, treating out-of-range bytes as 0, XOR-accumulating the
+/// per-byte diff, and only reports equal when the accumulated diff is 0 AND
+/// the lengths match.
+fn secure_equals(_lua: &Lua, (a, b): (LuaString, LuaString)) -> mlua::Result<bool> {
+    let a = a.as_bytes();
+    let b = b.as_bytes();
+    let max_len = a.len().max(b.len());
+    let mut diff: u8 = 0;
+    for i in 0..max_len {
+        let av = a.get(i).copied().unwrap_or(0);
+        let bv = b.get(i).copied().unwrap_or(0);
+        diff |= av ^ bv;
+    }
+    Ok(diff == 0 && a.len() == b.len())
 }
 
 // ── jwt ──────────────────────────────────────────────────────────────────────

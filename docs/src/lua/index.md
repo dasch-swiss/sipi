@@ -1160,6 +1160,14 @@ Writes a message to the built-in logger. Severity levels are:
 -   `server.loglevel.LOG_INFO`
 -   `server.loglevel.LOG_DEBUG`
 
+#### server.secure\_equals
+
+    equal = server.secure_equals(a, b)
+
+Constant-time string comparison for credential checks (e.g. Basic-auth
+username/password), to avoid leaking timing information through an
+early-exit `==` comparison. Returns a boolean.
+
 #### server.uuid
 
     success, uuid = server.uuid()
