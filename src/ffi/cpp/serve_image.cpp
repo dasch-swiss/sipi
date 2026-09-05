@@ -3,6 +3,7 @@
  * contributors. SPDX-License-Identifier: AGPL-3.0-or-later
  */
 
+#include "ffi/decode_guard.h"
 #include "ffi/serve_image.h"
 #include "ffi/serve_timings.h"// PhaseTimer + decode-estimate capture, read back by the shell
 
@@ -16,12 +17,9 @@
 #include <cmath>
 #include <cstdint>
 #include <fstream>
-#include <future>
 #include <memory>
 #include <optional>
 #include <string>
-#include <thread>
-#include <type_traits>
 
 #include "image/SipiImage.h"
 #include "image/SipiImageError.h"
@@ -52,29 +50,6 @@ namespace {
   using observability::populate_from_image;
 
   constexpr const char *kCacheControl = "must-revalidate, post-check=0, pre-check=0";
-
-  // Runs `producer()` on a joinable worker thread bounded by `timeout`. Returns
-  // the producer's result if it finished in time; `std::nullopt` on timeout — in
-  // which case the worker is DETACHED (an unpatchable Kakadu decode hang keeps
-  // running until the process restarts, DEV-7080) and `wedged_threads` is
-  // incremented. `producer` must capture its inputs BY VALUE and return BY
-  // VALUE: on timeout the caller's stack unwinds while the detached worker still
-  // owns the packaged_task's shared state, so the worker only ever writes into
-  // heap it co-owns (no use-after-free).
-  template<class F> std::optional<std::invoke_result_t<F>> run_with_deadline(std::chrono::milliseconds timeout, F producer)
-  {
-    using T = std::invoke_result_t<F>;
-    auto task = std::make_shared<std::packaged_task<T()>>(std::move(producer));
-    std::future<T> fut = task->get_future();
-    std::thread worker([task] { (*task)(); });
-    if (fut.wait_for(timeout) == std::future_status::ready) {
-      worker.join();
-      return fut.get();
-    }
-    worker.detach();
-    Metrics::instance().wedged_threads.Increment();
-    return std::nullopt;
-  }
 
   // Flattens a handled image error into the seam's SipiImageErrorReport and
   // reports it through `report_error` iff non-null — the seam's "NULL =
@@ -759,11 +734,15 @@ std::expected<ServeResponse, SipiStatus>
   // The full-lane memory budget accounts only full-lane decodes: those whose
   // estimated peak memory reaches the large-decode threshold. Tile decodes
   // (below the threshold) bypass the budget entirely and are never charged, so a
-  // tile is never rejected for full-lane memory pressure.
-  std::optional<MemoryBudgetGuard> budget_guard;
-  const bool is_full_lane = estimated >= eng.large_decode_threshold_bytes;
-  if (eng.memory_budget != nullptr && is_full_lane) {
-    const auto result = eng.memory_budget->try_acquire(estimated);
+  // tile is never rejected for full-lane memory pressure. `acquire_full_lane_budget`
+  // (decode_guard.h) is the single site that also gates the Lua SipiImage.new() path.
+  SipiMemoryBudget *mb = eng.memory_budget;
+  auto acquisition = acquire_full_lane_budget(mb, eng.large_decode_threshold_bytes, estimated, [mb] {
+    Metrics::instance().decode_memory_used_bytes.Set(static_cast<double>(mb->used()));
+  });
+
+  if (acquisition.consulted) {
+    const auto &result = acquisition.result;
     metrics.decode_memory_used_bytes.Set(static_cast<double>(result.used));
 
     if (result.allowed && !result.over_budget) {
@@ -801,12 +780,9 @@ std::expected<ServeResponse, SipiStatus>
     }
 
     if (result.used > result.budget - result.budget / 5) { metrics.decode_memory_near_limit_total.Increment(); }
-
-    SipiMemoryBudget *mb = eng.memory_budget;
-    budget_guard.emplace(*mb, estimated, result.allowed, [mb] {
-      Metrics::instance().decode_memory_used_bytes.Set(static_cast<double>(mb->used()));
-    });
   }
+
+  std::optional<MemoryBudgetGuard> budget_guard = std::move(acquisition.guard);
 
   if (cancelled()) {
     Metrics::instance().client_disconnected_total.Increment();
@@ -826,7 +802,11 @@ std::expected<ServeResponse, SipiStatus>
   try {
     PhaseTimer phase_timer(SIPI_PHASE_DECODE);
     const bool force_bps_8 = quality_format.format() == SipiQualityFormat::JPG;
-    auto deadline_result = run_with_deadline(std::chrono::milliseconds(eng.decode_timeout_ms),
+    // `budget_guard` is moved into the decode's worker closure (decode_guard.h):
+    // on success it comes back armed below, still charging the budget through
+    // the subsequent encode; on timeout it stays with the detached worker.
+    auto deadline_result = run_guarded_decode(std::chrono::milliseconds(eng.decode_timeout_ms),
+      std::move(budget_guard),
       [infile, region, size, force_bps_8, scaling_quality = eng.scaling_quality] {
         SipiImage decoded;
         auto status = decoded.read(infile, region, size, force_bps_8, scaling_quality);
@@ -839,8 +819,9 @@ std::expected<ServeResponse, SipiStatus>
       report_image_error(req.report_error, req.report_ctx, "JP2 decode deadline exceeded (read)", "read", sentry_ctx);
       return std::unexpected(SipiStatus::InternalError);
     }
-    img = std::move(deadline_result->img);
-    if (auto &r = deadline_result->status; !r) {
+    budget_guard = std::move(deadline_result->guard);
+    img = std::move(deadline_result->value.img);
+    if (auto &r = deadline_result->value.status; !r) {
       ImageContext sentry_ctx;
       sentry_ctx.input_file = infile;
       sentry_ctx.file_size_bytes = get_file_size(infile);
