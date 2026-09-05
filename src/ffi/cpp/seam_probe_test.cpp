@@ -19,6 +19,7 @@
 #include "ffi/engine_context.h"
 #include "ffi/sipi_ffi.h"
 #include "test_paths.h"
+#include "throttling/SipiMemoryBudget.h"
 
 namespace {
 
@@ -193,4 +194,41 @@ TEST(SeamProbe, ImageDimsEssentialsOnNonImageIsError)
   Essentials out;
   EXPECT_NE(sipi_image_dims(path.c_str(), &dims, collect_essentials, &out), 0);
   EXPECT_FALSE(out.fired);
+}
+
+// sipi_image_new's full-lane memory-budget charge (S2-20): mirrors the IIIF
+// serve path's estimate_peak_memory / try_acquire gate so a Lua-driven
+// SipiImage.new() decode cannot bypass the memory envelope the serve path
+// enforces.
+
+TEST(SeamProbe, ImageNewRefusedWhenDecodeExceedsAdvancedBudget)
+{
+  // large_decode_threshold_bytes = 1 makes any real decode full-lane; a
+  // 200-byte ADVANCED budget is far smaller than any real fixture's estimate,
+  // so try_acquire refuses it.
+  Sipi::SipiMemoryBudget budget(200, Sipi::AdmissionMode::ADVANCED);
+  Sipi::ffi::EngineContext eng;
+  eng.memory_budget = &budget;
+  eng.large_decode_threshold_bytes = 1;
+  Sipi::ffi::set_engine_context(eng);
+
+  const std::string path = fixture("/unit/lena512.tif");
+  std::string err_msg;
+  SipiImageHandle *handle = sipi_image_new(path.c_str(), nullptr, nullptr, 0, 0, nullptr, collect_str, &err_msg);
+  EXPECT_EQ(handle, nullptr);
+  EXPECT_FALSE(err_msg.empty());
+}
+
+TEST(SeamProbe, ImageNewSucceedsWhenBudgetDisabled)
+{
+  // The current default (memory_budget = nullptr): the charge only gates when
+  // a budget is installed — a positive control for the refused case above.
+  Sipi::ffi::EngineContext eng;
+  Sipi::ffi::set_engine_context(eng);
+
+  const std::string path = fixture("/unit/lena512.tif");
+  std::string err_msg;
+  SipiImageHandle *handle = sipi_image_new(path.c_str(), nullptr, nullptr, 0, 0, nullptr, collect_str, &err_msg);
+  ASSERT_NE(handle, nullptr);
+  sipi_image_free(handle);
 }
