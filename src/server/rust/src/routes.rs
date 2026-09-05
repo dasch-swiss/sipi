@@ -832,7 +832,6 @@ fn serve_image(
         (Ok(a), Ok(b), Ok(c)) => (a, b, c),
         _ => return complete(outcome_tx, sink::error_response(StatusCode::BAD_REQUEST)),
     };
-    let c_client_ip = CString::new(client_ip(headers)).unwrap_or_default();
     let c_host = CString::new(host).unwrap_or_default();
     let c_scheme = CString::new(scheme).unwrap_or_default();
     let c_uri = CString::new(request_uri).unwrap_or_default();
@@ -854,7 +853,6 @@ fn serve_image(
         resolved_path: c_resolved.as_ptr(),
         prefix: c_prefix.as_ptr(),
         identifier: c_identifier.as_ptr(),
-        client_ip: c_client_ip.as_ptr(),
         params,
         restricted_size: c_size.as_ref().map_or(std::ptr::null(), |c| c.as_ptr()),
         watermark_path: c_watermark
