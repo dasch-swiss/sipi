@@ -15,6 +15,7 @@
  * the historical script-visible shapes from one place.
  */
 
+#include <chrono>
 #include <cstdint>
 #include <memory>
 #include <optional>
@@ -35,6 +36,7 @@
 #include "throttling/SipiMemoryBudget.h"
 #include "throttling/SipiPeakMemory.h"
 
+#include "ffi/decode_guard.h"
 #include "ffi/engine_context.h"
 #include "ffi/serve_response.h"// sipi_guard, SipiStatus
 #include "ffi/sipi_ffi.h"
@@ -123,12 +125,15 @@ extern "C" SipiImageHandle *sipi_image_new(const char *path,
       siz = std::make_shared<Sipi::SipiSize>(reduce);
     }
 
-    // Full-lane memory-budget charge, mirroring the IIIF serve path
-    // (serve_image.cpp's estimate_peak_memory / try_acquire block): a
+    const auto &eng = Sipi::ffi::engine_context();
+
+    // Full-lane memory-budget charge + wall-clock decode deadline, through the
+    // same shared helper the IIIF serve path uses (ffi/decode_guard.h): a
     // Lua-driven SipiImage.new() decode is otherwise unbounded and can bypass
-    // the memory envelope the serve path enforces. Charged only when the
-    // shape read below succeeds; a shape-read failure falls through to the
-    // existing read path, which reports the proper error there.
+    // both the memory envelope AND the decode-hang watchdog (DEV-7080) the
+    // serve path enforces. The budget is charged only when the shape read
+    // below succeeds; a shape-read failure falls through to the decode below,
+    // which reports the proper error there (still bounded by the deadline).
     std::optional<Sipi::MemoryBudgetGuard> budget_guard;
     Sipi::SipiImage shape_probe;
     if (auto shape = shape_probe.read_shape(imgpath)) {
@@ -144,38 +149,53 @@ extern "C" SipiImageHandle *sipi_image_new(const char *path,
         /*rotation=*/0.0,
         /*needs_icc=*/false);
 
-      const auto &eng = Sipi::ffi::engine_context();
-      if (eng.memory_budget != nullptr && estimated >= eng.large_decode_threshold_bytes) {
-        const auto result = eng.memory_budget->try_acquire(estimated);
-        if (!result.allowed) {
-          emit_str(err, err_ctx, "image decode exceeds the memory budget");
-          return nullptr;
-        }
-        if (result.over_budget) {
-          log_warn("Full-lane memory budget over limit (basic) for SipiImage.new: %zu / %zu bytes for %s",
-            result.used,
-            result.budget,
-            imgpath.c_str());
-        }
-        Sipi::SipiMemoryBudget *mb = eng.memory_budget;
-        budget_guard.emplace(*mb, estimated, result.allowed);
+      auto acquisition =
+        Sipi::ffi::acquire_full_lane_budget(eng.memory_budget, eng.large_decode_threshold_bytes, estimated);
+      if (!acquisition.allowed) {
+        emit_str(err, err_ctx, "image decode exceeds the memory budget");
+        return nullptr;
       }
+      if (acquisition.consulted && acquisition.result.over_budget) {
+        log_warn("Full-lane memory budget over limit (basic) for SipiImage.new: %zu / %zu bytes for %s",
+          acquisition.result.used,
+          acquisition.result.budget,
+          imgpath.c_str());
+      }
+      budget_guard = std::move(acquisition.guard);
+    }
+
+    // The producer's own SipiImage / decode result, carried out by value so
+    // the deadline helper's timeout path never touches this stack (see
+    // run_with_deadline's lifetime-safety note in ffi/decode_guard.h).
+    struct DecodeOutcome
+    {
+      Sipi::SipiImage image;
+      Sipi::Result<void> status;
+    };
+
+    // `budget_guard` is moved into the decode's worker closure: on success it
+    // comes back armed (unused here — the decode is now complete and the
+    // handle owns the pixel buffer, so the budget releases immediately); on
+    // timeout it stays with the detached worker (DEV-7080).
+    auto deadline_result = Sipi::ffi::run_guarded_decode(std::chrono::milliseconds(eng.decode_timeout_ms),
+      std::move(budget_guard),
+      [imgpath, reg, siz, original_str]() -> DecodeOutcome {
+        Sipi::SipiImage decoded;
+        auto status = !original_str.empty() ? decoded.readSource(imgpath, reg, siz, original_str)
+                                             : decoded.read(imgpath, reg, siz);
+        return DecodeOutcome{ std::move(decoded), std::move(status) };
+      });
+    if (!deadline_result) {
+      emit_str(err, err_ctx, "image decode deadline exceeded");
+      return nullptr;
     }
 
     auto handle = std::make_unique<SipiImageHandle>();
     handle->filename = imgpath;
-    if (!original_str.empty()) {
-      auto r = handle->image.readSource(imgpath, reg, siz, original_str);
-      if (!r) {
-        emit_str(err, err_ctx, r.error().client_message());
-        return nullptr;
-      }
-    } else {
-      auto r = handle->image.read(imgpath, reg, siz);
-      if (!r) {
-        emit_str(err, err_ctx, r.error().client_message());
-        return nullptr;
-      }
+    handle->image = std::move(deadline_result->value.image);
+    if (auto &r = deadline_result->value.status; !r) {
+      emit_str(err, err_ctx, r.error().client_message());
+      return nullptr;
     }
     return handle.release();
   } catch (const Sipi::SipiError &e) {

@@ -35,6 +35,11 @@ cc_library(
         # defined in metrics_snapshot.h); image_handle.cpp is the opaque
         # sipi_image_* handle family the Rust-hosted Lua SipiImage bindings
         # drive.
+        # decode_guard.{h,cpp} is the single decode-guard chokepoint shared by
+        # serve_image.cpp and image_handle.cpp: the DEV-7080 deadline watchdog
+        # plus the full-lane memory-budget acquire/guard lane, so there is
+        # exactly one acquire site for either decode entry point (S2-20).
+        "cpp/decode_guard.cpp",
         "cpp/engine_context.cpp",
         # init.cpp is the production `sipi_init` engine install; it lives in
         # //src/ffi, not //src/cli, so no production FFI entry lives in the CLI
@@ -53,6 +58,7 @@ cc_library(
         "cpp/SipiConf.cpp",
     ],
     hdrs = [
+        "cpp/decode_guard.h",
         "cpp/engine_context.h",
         "cpp/metrics_snapshot.h",
         "cpp/serve_image.h",

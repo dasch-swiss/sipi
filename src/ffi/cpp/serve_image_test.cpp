@@ -273,6 +273,10 @@ class DecodeHangWatchdog : public ::testing::TestWithParam<const char *>
 
 TEST_P(DecodeHangWatchdog, HitsDeadlineAndCountsWedgedThread)
 {
+#if defined(__SANITIZE_ADDRESS__) || (defined(__has_feature) && __has_feature(address_sanitizer))
+  GTEST_SKIP() << "run_with_deadline runs inline under ASan (no watchdog thread — see decode_guard.h); the "
+                  "deadline never fires, so this hang fixture cannot be exercised under ASan.";
+#endif
   const std::string rel = GetParam();
   const std::string basename = rel.substr(rel.find_last_of('/') + 1);
   const std::string path = fixture(rel);
