@@ -93,8 +93,21 @@ fn sustained_load_memory_growth() {
 /// loop, see `lua_hardening.rs`) with the Lua deadline set far above the
 /// request timeout, so the axum-level wall-clock timeout — not the Lua VM's
 /// own deadline kill — is what fires and answers first.
+///
+/// Runs against its own empty cache dir (`tempfile::tempdir`), not the
+/// hardening config's own `./cache`: that path is a relative literal shared
+/// by several `_test_data/config/*.lua` files, and this file's `server()`
+/// (a *second*, concurrently-running sipi process against the same working
+/// directory) already owns it. A second process loading that shared
+/// directory treats the first process's live cache files as orphans absent
+/// from its own fresh index and deletes them (`SipiCache`'s crash-recovery
+/// cleanup) — turning the shared server's next cache hit into a `500` for a
+/// file that no longer exists. Same isolation pattern as
+/// `admission_control.rs`'s `start()` helper.
 #[test]
 fn handler_exceeding_request_timeout_answers_408() {
+    let cache_dir = tempfile::tempdir().expect("create isolated cache dir");
+    let cache_dir_str = cache_dir.path().to_string_lossy().into_owned();
     let srv = SipiServer::start_env(
         "config/sipi.lua-hardening-config.lua",
         &test_data_dir(),
@@ -102,6 +115,7 @@ fn handler_exceeding_request_timeout_answers_408() {
         &[
             ("SIPI_LUA_TIMEOUT_MS", "10000"),
             ("SIPI_REQUEST_TIMEOUT", "1"),
+            ("SIPI_CACHE_DIR", cache_dir_str.as_str()),
         ],
     );
 
@@ -304,10 +318,18 @@ fn multipart_part_count_over_limit_answers_400() {
 /// connection. `SIPI_REQUEST_TIMEOUT=5` is a backstop far above the 1s body
 /// timeout so the assertion below is exercising the body-read timeout, not
 /// the handler wall-clock timeout.
+///
+/// Runs against its own empty cache dir for the same reason as
+/// `handler_exceeding_request_timeout_answers_408`: this config's own
+/// `./cache` is the literal this file's `server()` is concurrently using, and
+/// a second process loading that shared directory deletes the first
+/// process's live cache files as orphans.
 #[test]
 fn trickling_body_is_cut_off_by_body_read_timeout() {
     use std::io::{Read, Write};
 
+    let cache_dir = tempfile::tempdir().expect("create isolated cache dir");
+    let cache_dir_str = cache_dir.path().to_string_lossy().into_owned();
     let srv = SipiServer::start_env(
         "config/sipi.e2e-test-config.lua",
         &test_data_dir(),
@@ -315,6 +337,7 @@ fn trickling_body_is_cut_off_by_body_read_timeout() {
         &[
             ("SIPI_BODY_READ_TIMEOUT", "1"),
             ("SIPI_REQUEST_TIMEOUT", "5"),
+            ("SIPI_CACHE_DIR", cache_dir_str.as_str()),
         ],
     );
     let port = srv.http_port;
