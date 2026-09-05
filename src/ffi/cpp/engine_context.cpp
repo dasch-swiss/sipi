@@ -38,4 +38,6 @@ const EngineContext &engine_context()
   return g_engine;
 }
 
+EngineContext engine_context_or_default() { return g_engine_installed ? g_engine : EngineContext{}; }
+
 }// namespace Sipi::ffi
