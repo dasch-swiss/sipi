@@ -218,7 +218,11 @@ routes = {
     {
         method = 'POST',
         route = '/api/upload',
-        script = 'upload.lua'
+        -- The one hardened reference upload script lives at the repo root
+        -- `scripts/upload.lua` (S2-23); every other route here resolves
+        -- against `scriptdir` (`./scripts`, i.e. this test tree's own
+        -- `scripts/`), so this route alone reaches up and out of it.
+        script = '../../../scripts/upload.lua'
     },
     {
         method = 'GET',
