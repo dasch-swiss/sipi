@@ -641,9 +641,9 @@ approvaltests_cpp(
 http_archive(
     name = "exiv2",
     build_file = "//bazel:exiv2.BUILD.bazel",
-    sha256 = "e1671f744e379a87ba0c984617406fdf8c0ad0c594e5122f525b2fb7c28d394d",
-    strip_prefix = "exiv2-0.28.5",
-    url = "https://github.com/Exiv2/exiv2/archive/refs/tags/v0.28.5.tar.gz",
+    sha256 = "700b76b97695b2fab4ef8c79619c68ae57d09e0c130724791cafbd39e0eb4aef",
+    strip_prefix = "exiv2-0.28.9",
+    url = "https://github.com/Exiv2/exiv2/archive/refs/tags/v0.28.9.tar.gz",
 )
 
 # fmt deliberately omitted from the Bazel graph: the existing CMake build
