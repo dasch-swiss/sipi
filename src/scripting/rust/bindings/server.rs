@@ -476,8 +476,10 @@ fn fs_mkdir(lua: &Lua, args: Variadic<Value>) -> mlua::Result<MultiValue> {
     use std::os::unix::fs::DirBuilderExt;
     // The mode is interpreted as the raw integer the script passed —
     // dsp-api passes decimal 511 (= 0o777); that interpretation is pinned.
+    // World-writable is stripped regardless of what the script requests.
+    let masked_mode = (*mode as u32) & 0o777 & !0o002;
     let result = std::fs::DirBuilder::new()
-        .mode(*mode as u32)
+        .mode(masked_mode)
         .create(dir.to_string_lossy());
     match result {
         Err(e) => fail(lua, strerror(&e)),
@@ -829,10 +831,22 @@ fn require_auth(lua: &Lua, req: &RequestData) -> mlua::Result<MultiValue> {
 
 // ── json ─────────────────────────────────────────────────────────────────────
 
+/// A deeply nested (or, via a metatable-driven `__pairs`, effectively
+/// cyclic) table must not blow the Rust call stack — this bounds the
+/// recursion depth `lua_to_json` will walk.
+const MAX_JSON_DEPTH: usize = 64;
+
 /// The C++ `subtable` conversion rules: string keys → object, integer keys →
 /// array (in iteration order), mixing is an error, and only
 /// number/string/boolean/table values convert.
 fn lua_to_json(table: &Table) -> Result<Option<serde_json::Value>, String> {
+    lua_to_json_at_depth(table, 0)
+}
+
+fn lua_to_json_at_depth(table: &Table, depth: usize) -> Result<Option<serde_json::Value>, String> {
+    if depth >= MAX_JSON_DEPTH {
+        return Err("'server.table_to_json(table)': table nesting too deep".into());
+    }
     let mut object: Option<serde_json::Map<String, serde_json::Value>> = None;
     let mut array: Option<Vec<serde_json::Value>> = None;
 
@@ -874,9 +888,8 @@ fn lua_to_json(table: &Table) -> Result<Option<serde_json::Value>, String> {
             }
             Value::String(s) => serde_json::Value::from(s.to_string_lossy()),
             Value::Boolean(b) => serde_json::Value::from(*b),
-            Value::Table(t) => {
-                lua_to_json(t)?.unwrap_or(serde_json::Value::Object(serde_json::Map::new()))
-            }
+            Value::Table(t) => lua_to_json_at_depth(t, depth + 1)?
+                .unwrap_or(serde_json::Value::Object(serde_json::Map::new())),
             _ => return Err("server.table_to_json(table): datatype inconsistency".into()),
         };
         match object_key {

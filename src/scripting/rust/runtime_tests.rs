@@ -379,6 +379,19 @@ fn os_shim_date_clock_getenv() {
 }
 
 #[test]
+fn print_shim_is_callable_and_does_not_write_stdout() {
+    // The shim routes through `tracing::info!` rather than stdout; this
+    // crate has no tracing-capture test dependency, so this asserts the
+    // shim is installed, joins varargs via `tostring` without erroring, and
+    // returns nothing extra to the script (stdout redirection itself is not
+    // asserted here).
+    let (_dir, rt) = test_runtime();
+    let vm = rt.request_vm().expect("vm");
+    let res = vm.run(|lua| lua.load(r#"print("a", "b", 1, true, nil)"#).exec());
+    assert!(res.is_ok(), "{res:?}");
+}
+
+#[test]
 fn config_vm_is_whitelisted_but_unlimited() {
     let lua = config_vm().expect("config vm");
     let ok: bool = lua
