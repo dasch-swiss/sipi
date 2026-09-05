@@ -420,3 +420,44 @@ jobs:
       - uses: ./.github/actions/commit-lint
         with:
           base-ref: ${{ github.event.pull_request.base.sha }}
+
+  # Advisory scan over the checked-in Cargo-format lockfile (`Cargo.Bazel.lock`,
+  # materialized by `crate.from_specs(cargo_lockfile = ...)` in MODULE.bazel).
+  # Covers the production `@crates` hub — the one dependency graph Dependabot's
+  # `cargo` entry (scoped to `/test/e2e`) cannot see. See `just audit`.
+  dependency-audit:
+    name: dependency-audit
+    runs-on: ubuntu-latest
+    concurrency:
+      group: ${{ github.workflow }}-dependency-audit-${{ github.head_ref || github.run_id }}
+      cancel-in-progress: true
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          fetch-depth: 1
+          lfs: false
+      - uses: extractions/setup-just@f8a3cce218d9f83db3a2ecd90e41ac3de6cdfd9b # v3
+
+      # Cache the compiled binary so `cargo install` only pays the build cost
+      # when the pinned version changes (cargo is preinstalled on GitHub-hosted
+      # ubuntu runners).
+      - name: Cache cargo-audit
+        id: cache-cargo-audit
+        uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4
+        with:
+          path: ~/.cargo/bin/cargo-audit
+          key: cargo-audit-${{ runner.os }}-0.22.2
+      - name: Install cargo-audit
+        if: steps.cache-cargo-audit.outputs.cache-hit != 'true'
+        run: cargo install cargo-audit --version 0.22.2 --locked
+
+      # osv-scanner has no BCR/cargo distribution — install the pinned Linux
+      # release binary directly, verified against its published checksum.
+      - name: Install osv-scanner
+        run: |
+          curl -fsSLo osv-scanner "https://github.com/google/osv-scanner/releases/download/v2.5.1/osv-scanner_linux_amd64"
+          echo "f9f25499a2c8cc367b3af45df2ea7eeca7fbccceab9c35079968f4b3652194be  osv-scanner" | sha256sum -c -
+          chmod +x osv-scanner
+          sudo mv osv-scanner /usr/local/bin/osv-scanner
+
+      - run: just audit
