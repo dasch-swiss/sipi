@@ -46,10 +46,13 @@ Prometheus metrics and the isolated Google Benchmark microbenchmarks. See
 - **Raw Tracy macros at every call site — rejected.** Instrumented code uses the
   `SIPI_ZONE*` macros from `src/observability/cpp/profiling.h`, the single place
   `<tracy/Tracy.hpp>` is included, so the codebase can be re-pointed at a different
-  profiler (or none) from one file. The lone exception is `src/shttps/Server.cpp`
+  profiler (or none) from one file. ~~The lone exception is `src/shttps/Server.cpp`
   worker-thread naming: shttps sits *below* observability in the dependency graph
   and cannot include the shim without inverting that one-way direction, so it uses
-  the upstream header directly under an `#ifdef TRACY_ENABLE` guard.
+  the upstream header directly under an `#ifdef TRACY_ENABLE` guard.~~ *`src/shttps/`
+  was deleted wholesale by [ADR-0020](0020-oracle-removal.md) (2026-08-14, oracle
+  removal); `//src/observability` is now the sole Tracy include site (verified
+  2026-09-05 against `src/observability/BUILD.bazel`'s `@tracy//:tracy` dep).*
 
 ## Consequences
 
@@ -65,8 +68,10 @@ Prometheus metrics and the isolated Google Benchmark microbenchmarks. See
   `profiling` dev shell carrying the Tracy GUI on Linux (`brew install tracy` on
   macOS — nixpkgs' GUI build is unreliable on aarch64-darwin).
 - Dependency edges for the shim: `//src/observability` gains `@tracy//:tracy` and
-  carries `profiling.h`; it propagates to `//src:sipi_lib`. `//src/shttps:shttps`
-  gains `@tracy//:tracy` for thread naming. The fuzz subset and the shared
+  carries `profiling.h`; it propagates to `//src:sipi_lib`. ~~`//src/shttps:shttps`
+  gains `@tracy//:tracy` for thread naming.~~ *`src/shttps/` and its BUILD target
+  were deleted wholesale by [ADR-0020](0020-oracle-removal.md); `//src/observability`
+  is `@tracy//:tracy`'s sole remaining consumer (2026-09-05).* The fuzz subset and the shared
   `handlers/iiif_handler.cpp` are deliberately left untouched — the parse-tier
   zone wraps the `parse_iiif_uri` *call site* in `SipiHttpServer.cpp` (sipi_lib
   only), not the function body in the shared file.

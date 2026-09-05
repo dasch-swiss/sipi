@@ -10,8 +10,10 @@ supersedes: 0001-shttps-as-strangler-fig-target.md
 > below, and the "re-homing … relaxed to consistency cleanup" consequence, are
 > superseded by the decomposition that prepares the oracle removal. The cutover
 > survivors have been extracted to top-level packages — `src/scripting/`
-> (`LuaServer` + `request_context.h` + the sqlite bindings), `src/util/`
-> (`Hash` / `Parsing` / `Error` / `Global`), `src/jwt/` — so production reaches
+> (~~`LuaServer` + `request_context.h` + the sqlite bindings~~ — see the
+> 2026-09-05 correction below), `src/util/`
+> (`Hash` / `Parsing` / `Error` / `Global`), ~~`src/jwt/`~~ (see the 2026-09-05
+> correction below) — so production reaches
 > them directly and **no production file includes anything under `src/shttps/`**.
 > The C++ symbols stay in `namespace shttps` (only the location moved). What
 > remains inside `src/shttps/` is the oracle **transport** (`transport/`,
@@ -24,6 +26,15 @@ supersedes: 0001-shttps-as-strangler-fig-target.md
 > C++ `server` mode, the differential parity gate, prometheus-cpp, and
 > `GET /metrics` are gone. The Rust shell is the sole production server. This ADR
 > is retained as the record of the decomposition that made that removal bounded.
+>
+> **Correction — cutover-survivor inventory (2026-09-05).** `src/jwt/` never
+> materialized as a standalone package; JWT decode lives inline in
+> `src/scripting/rust/bindings/server.rs` (`decode_jwt`). And the
+> `src/scripting/` parenthetical above is stale: `LuaServer` and
+> `request_context.h` (`SipiRequestContext`) were deleted outright by
+> [ADR-0023](0023-rust-hosted-mlua-lua-runtime.md) (2026-08-20), replaced by the
+> Rust-hosted mlua runtime at `src/scripting/rust/`. The `src/util/` entry is
+> unaffected.
 
 `src/shttps/` is an internal module of this codebase, depended on one-way by the rest of `src/`. It is not a peer bounded context. The Rust rewrite scope is the whole of SIPI, with shttps as the first strangler-fig slice — not the only slice that ever gets replaced.
 
