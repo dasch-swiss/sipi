@@ -120,6 +120,13 @@ impl DockerContainer {
                 &format!("{}:/sipi/scripts", root_abs.join("scripts").display()),
                 "-v",
                 &format!("{}:/sipi/server", root_abs.join("server").display()),
+                // The shipped `config/sipi.config.lua` no longer carries a
+                // `jwt_secret` (it must come from the environment), and startup
+                // fail-closes on an empty/default/short key, so the image cannot
+                // serve without one. Supply a ≥32-byte non-default test key, as
+                // a real deployment supplies `SIPI_JWTKEY`.
+                "-e",
+                "SIPI_JWTKEY=docker-smoke-test-only-jwt-secret-0123456789",
                 "-p",
                 "0:1024",
                 image_tag(),

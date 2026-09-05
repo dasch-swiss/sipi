@@ -260,10 +260,12 @@ The following configuration parameters are used by the SIPI server:
   *Environment variable: `SIPI_PATHPREFIX`*  
   *Default: `false`*
   
-- <a name="jwt-secret"></a>`jwt_secret=string`: Shared secret to encode web tokens.  
+- <a name="jwt-secret"></a>`jwt_secret=string`: Shared secret to encode web tokens. Required for
+  any Lua-configured deployment, at least 32 bytes; there is no default, and
+  the server refuses to start without one.  
   *Cmdline option: `--jwtkey`*  
   *Environment variable: `SIPI_JWTKEY`*  
-  *Default: `UP 4888, nice 4-8-4 steam engine`*
+  *Default: none — must be supplied*
 
 - <a name="maxpostsize"></a>`max_post_size=amount`: Maximal size a file upload may have. The amount has the
   form "<number><type>" where `number` is an integer value and `type`an "M" for Megabytes, "G" for Gigabytes

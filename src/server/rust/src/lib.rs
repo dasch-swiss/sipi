@@ -44,6 +44,17 @@ use std::time::{Duration, Instant};
 /// does).
 const DEFAULT_PORT: u16 = 1024;
 
+/// The jwt_secret literal SIPI used to ship in `config/sipi.config.lua`. A
+/// deployment that inherited it unchanged could forge JWTs, so it is rejected
+/// at startup alongside empty and too-short secrets.
+const SHIPPED_JWT_SECRET: &str = "UP 4888, nice 4-8-4 steam engine";
+
+/// True when `key` is unsafe to use as a jwt_secret: empty, shorter than 32
+/// bytes, or the literal SIPI used to ship as a default.
+fn jwtkey_is_unsafe(key: &str) -> bool {
+    key.is_empty() || key.len() < 32 || key == SHIPPED_JWT_SECRET
+}
+
 /// Process start time, for the `/health` uptime field. Set once at server
 /// startup; the handler reads `elapsed()`.
 static START: OnceLock<Instant> = OnceLock::new();
@@ -279,6 +290,13 @@ async fn server_main(
                 return ExitCode::FAILURE;
             }
         };
+        if jwtkey_is_unsafe(&effective.jwtkey.clone().unwrap_or_default()) {
+            tracing::error!(
+                "refusing startup — jwt_secret is empty, too short (<32 bytes), or the shipped default; set SIPI_JWTKEY"
+            );
+            flush_telemetry(otel).await;
+            return ExitCode::FAILURE;
+        }
         tracing::info!(
             pre_flight = probes.pre_flight,
             file_pre_flight = probes.file_pre_flight,
@@ -705,5 +723,30 @@ mod app_tests {
             status_of("/unit/lena512.jp2/full/max/0/default.jpg").await,
             StatusCode::SERVICE_UNAVAILABLE
         );
+    }
+}
+
+#[cfg(test)]
+mod jwtkey_tests {
+    use super::*;
+
+    #[test]
+    fn empty_is_unsafe() {
+        assert!(jwtkey_is_unsafe(""));
+    }
+
+    #[test]
+    fn short_is_unsafe() {
+        assert!(jwtkey_is_unsafe("a".repeat(20).as_str()));
+    }
+
+    #[test]
+    fn shipped_default_is_unsafe() {
+        assert!(jwtkey_is_unsafe(SHIPPED_JWT_SECRET));
+    }
+
+    #[test]
+    fn distinct_long_key_is_safe() {
+        assert!(!jwtkey_is_unsafe("a".repeat(38).as_str()));
     }
 }

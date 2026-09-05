@@ -21,7 +21,7 @@ use std::net::TcpListener;
 use std::sync::OnceLock;
 
 /// Matches `jwt_secret` in `dsp-api/sipi.dsp-api-closure-config.lua`.
-const JWT_SECRET: &str = "UP 4888, nice 4-8-4 steam engine";
+const JWT_SECRET: &str = "dev-only-insecure-jwt-secret-change-me";
 /// The `iss` the closure validates tokens against
 /// (`KNORA_WEBAPI_KNORA_API_EXTERNAL_HOST:PORT`).
 const ISSUER_HOST: &str = "0.0.0.0";

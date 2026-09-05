@@ -128,10 +128,10 @@ sipi = {
     max_temp_file_age = 86400,
 
     --
-    -- The secret for generating JWT's (JSON Web Tokens) (exactly 42 characters)
+    -- The secret for generating JWT's (JSON Web Tokens) MUST be supplied via
+    -- the SIPI_JWTKEY environment variable, at least 32 bytes. It must never
+    -- be a literal in this file — the server refuses to start without one.
     --
-    jwt_secret = 'UP 4888, nice 4-8-4 steam engine',
-    --            123456789012345678901234567890123456789012
 
     --
     -- The engine log level is a CLI/env (or Rust TOML config) setting, not a Lua
@@ -146,18 +146,6 @@ sipi = {
     --   tiles_memory_ratio --tiles-memory-ratio / SIPI_TILES_MEMORY_RATIO (0.25)
     --   admission_mode     --admission-mode / SIPI_ADMISSION_MODE (basic | advanced)
     --
-}
-
-admin = {
-    --
-    -- username of admin user
-    --
-    user = 'admin',
-
-    --
-    -- Administration password
-    --
-    password = 'Sipi-Admin'
 }
 
 fileserver = {
