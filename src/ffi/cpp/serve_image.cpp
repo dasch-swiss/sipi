@@ -6,6 +6,7 @@
 #include "ffi/serve_image.h"
 #include "ffi/serve_timings.h"// PhaseTimer + decode-estimate capture, read back by the shell
 
+#include <fcntl.h>
 #include <sys/stat.h>
 #include <unistd.h>
 
@@ -476,15 +477,23 @@ namespace {
 
   std::string str_or_empty(const char *s) { return s != nullptr ? std::string(s) : std::string(); }
 
-  // A full-file body for the passthrough / cache-hit paths, stat'd here so a
-  // file that vanished after the earlier checks is a clean error rather than a
+  // A full-file body for the passthrough / cache-hit paths. Opened here
+  // (O_NOFOLLOW + a regular-file check via fstat) rather than merely stat'd,
+  // so a planted symlink at `path` — a forged cache index record pointing at
+  // e.g. the server config with the JWT secret (S2-26) — is rejected before
+  // any bytes are ever served, instead of followed. This is also why a file
+  // that vanished after the earlier checks is a clean error rather than a
   // 200 with a wrong length (get_file_size returns 0 on a failed stat, which
   // would underflow send_file's inclusive byte range). A 0-byte file
   // becomes an EmptyBody for the same reason.
   std::expected<Body, SipiStatus> full_file_body(const std::string &path)
   {
+    const int fd = ::open(path.c_str(), O_RDONLY | O_NOFOLLOW);
+    if (fd < 0) { return std::unexpected(SipiStatus::InternalError); }
     struct stat st{};
-    if (stat(path.c_str(), &st) != 0) { return std::unexpected(SipiStatus::InternalError); }
+    const bool ok = fstat(fd, &st) == 0 && S_ISREG(st.st_mode);
+    ::close(fd);
+    if (!ok) { return std::unexpected(SipiStatus::InternalError); }
     const auto size = static_cast<std::uint64_t>(st.st_size);
     if (size == 0) { return Body{ EmptyBody{} }; }
     return Body{ FileBody{ path, 0, size } };
