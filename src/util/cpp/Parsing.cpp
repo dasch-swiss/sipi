@@ -147,22 +147,29 @@ std::pair<std::string, std::string> parseMimetype(const std::string &mimestr)
 
 std::pair<std::string, std::string> getFileMimetype(const std::string &fpath)
 {
-  magic_t handle;
-  if ((handle = magic_open(MAGIC_MIME)) == nullptr) {
-    throw Error("magic_open() failed");
-  }
+  // `magic_t` is not concurrency-safe across threads (`magic_file` mutates the
+  // handle), so the loaded handle is cached per worker thread rather than
+  // shared. Loading the embedded DB is the expensive part; caching it here
+  // means it happens once per thread instead of once per call. Never closed
+  // per-call; leaking it at process/thread exit is fine, it is the same DB
+  // the process needs for its whole life. A failed load is not cached so the
+  // next call retries.
+  thread_local magic_t handle = nullptr;
+  if (handle == nullptr) {
+    magic_t new_handle = magic_open(MAGIC_MIME);
+    if (new_handle == nullptr) { throw Error("magic_open() failed"); }
 
-  void *bufs[] = { magic_mgc };
-  size_t sizes[] = { magic_mgc_len };
-  if (magic_load_buffers(handle, bufs, sizes, 1) != 0) {
-    std::string err = magic_error(handle);
-    magic_close(handle);
-    throw Error(err);
+    void *bufs[] = { magic_mgc };
+    size_t sizes[] = { magic_mgc_len };
+    if (magic_load_buffers(new_handle, bufs, sizes, 1) != 0) {
+      std::string err = magic_error(new_handle);
+      magic_close(new_handle);
+      throw Error(err);
+    }
+    handle = new_handle;
   }
-
 
   std::string mimestr(magic_file(handle, fpath.c_str()));
-  magic_close(handle);
   return parseMimetype(mimestr);
 }
 //=============================================================================================================

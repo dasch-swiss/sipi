@@ -1517,10 +1517,11 @@ async fn serve_docroot(state: Arc<AppState>, req: Request) -> Response {
     let docroot = state.docroot.clone();
     let ext = extension_of(&suffix);
 
-    // Path resolution (realpath), the MIME sniff (libmagic — it reloads its DB and
-    // reads the file each call), and the docroot VM are all blocking, so they run
-    // off the async executor — the same discipline the IIIF path applies via
-    // `dispatch_engine`. Static serving needs no engine pool permit (no decode).
+    // Path resolution (realpath), the MIME sniff (libmagic, DB loaded once per
+    // worker thread), and the docroot VM are all blocking, so they run off the
+    // async executor — the same discipline the IIIF path applies via
+    // `dispatch_engine`. Static serving admits via the Tile lane below (no
+    // decode, but the admission control still bounds concurrency).
     if matches!(ext.as_deref(), Some("lua" | "elua")) {
         // Resolve + contain off-executor, then dispatch through the Lua-route seam
         // (server.docroot injected); serve_lua_script runs the VM on the pool.
@@ -1545,7 +1546,14 @@ async fn serve_docroot(state: Arc<AppState>, req: Request) -> Response {
     let origin = header_str(req.headers(), "origin");
     let range = header_str(req.headers(), header::RANGE.as_str());
     let allowed_origins = state.allowed_origins.clone();
+    // Static docroot serving now admits via the Tile lane (was unbounded),
+    // bounding the realpath+stat+libmagic+stream cost.
+    let permit = match state.admission.acquire(AdmissionKind::Tile).await {
+        Acquired::Admitted(permit) => permit,
+        Acquired::Shed | Acquired::TimedOut => return busy_response(),
+    };
     let outcome = tokio::task::spawn_blocking(move || {
+        let _permit = permit;
         serve_static_blocking(
             &docroot,
             &infile,
