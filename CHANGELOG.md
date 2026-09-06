@@ -1,5 +1,109 @@
 # Changelog
 
+## [9.0.0](https://github.com/dasch-swiss/sipi/compare/v8.0.0...v9.0.0) (2026-09-06)
+
+
+### ⚠ BREAKING CHANGES
+
+* **cli:** the `--adminuser` and `--adminpasswd` CLI flags and the `SIPI_ADMINUSER` / `SIPI_ADMINPASSWD` environment variables are removed. They configured nothing; deployments passing them must drop them.
+* **throttling:** generic deployments that relied on the basic default now enforce the advanced tier and may answer 503/413 where they previously admitted large requests. Set SIPI_ADMISSION_MODE=basic to restore the prior shadow-only behavior.
+
+### Features
+
+* **scripting:** Add a constant-time compare binding for credential checks ([8ca249e](https://github.com/dasch-swiss/sipi/commit/8ca249e6a3a5c309b1a3983c68ba38ae85eaf900))
+* **throttling:** Default admission_mode to advanced ([dde8070](https://github.com/dasch-swiss/sipi/commit/dde8070bab8acdf7c1d5426771c78eee59d76c9c))
+
+
+### Bug Fixes
+
+* **cache:** Clamp cache_used_bytes subtractions against underflow ([aeb8b8b](https://github.com/dasch-swiss/sipi/commit/aeb8b8bee34ab41d1a163771d830b47c9d300d2b))
+* **cache:** Harden the cache index format and reads against forgery ([413cacc](https://github.com/dasch-swiss/sipi/commit/413cacc585633640ce5026674a084fad005adc2b))
+* **ffi:** Bound wedged JP2 decodes with a seam deadline (DEV-7080) ([13c4d0e](https://github.com/dasch-swiss/sipi/commit/13c4d0e0846ad81bfd2014974c1c5ce1542e4766))
+* **ffi:** Cap restricted views by sampling factor across regions ([6782442](https://github.com/dasch-swiss/sipi/commit/678244213aa6076e16cafb255a6df6c60db90f8c))
+* **ffi:** Charge the memory budget for Lua SipiImage.new decodes ([1c85ddf](https://github.com/dasch-swiss/sipi/commit/1c85ddf6af3ba7382ef34f31119dddfe359f59cc))
+* **ffi:** Length-cap the Range header before the regex ([c3c5ef1](https://github.com/dasch-swiss/sipi/commit/c3c5ef150d2dc4f6baf8dd231906ccacf8cde633))
+* **ffi:** Let Lua SipiImage.new decode without an installed engine context ([f3e41ed](https://github.com/dasch-swiss/sipi/commit/f3e41edae8800d487ffedb527ee7befd53992acf))
+* **ffi:** Redact paths and drop the request-uri tag from error events ([2b502ad](https://github.com/dasch-swiss/sipi/commit/2b502ad8c410039f33fd9c98cca53f56b7807533))
+* **ffi:** Refuse restrict decisions that do not restrict ([7f9785b](https://github.com/dasch-swiss/sipi/commit/7f9785bd434079d913564240f468e0f6838ccf8d))
+* **ffi:** Reset the connection when an encode fails after the head is sent ([1dbcec5](https://github.com/dasch-swiss/sipi/commit/1dbcec568e5c38504faa896c5f92cc974255a0fc))
+* **format_handlers:** Bound JPEG marker lengths and fix IPTC APP13 length ([29f7798](https://github.com/dasch-swiss/sipi/commit/29f779865033d8d0cdf360f319cb77574c19b898))
+* **format_handlers:** Correct TIFF planar-separate ROI destination offsets ([3f638c9](https://github.com/dasch-swiss/sipi/commit/3f638c900d7f901cf590f40092a945a5ef1f1001))
+* **format_handlers:** Guard trusted dimensions and empty ICC in codec paths ([49d2313](https://github.com/dasch-swiss/sipi/commit/49d2313c6824b63e1dcb8fe661703f04c823117c))
+* **format_handlers:** Read each plane of a tiled planar-separate TIFF ([ef3b46d](https://github.com/dasch-swiss/sipi/commit/ef3b46d4339183711b3e6ee238f821c6af35d91a))
+* **format_handlers:** Reject TIFF scanlines smaller than the decoded line ([db96c4d](https://github.com/dasch-swiss/sipi/commit/db96c4d6a8e94508f1dffbf185ce5f1b784fb85f))
+* **format_handlers:** Size JP2 stripe_heights to the component count ([66f6c2c](https://github.com/dasch-swiss/sipi/commit/66f6c2c77140ff90efb76ede8a18ee6482d9fd26))
+* **format_handlers:** Validate JP2 metadata box lengths and reads ([1ddfd95](https://github.com/dasch-swiss/sipi/commit/1ddfd9589b70133be51af182f2e7d83edd4f26d8))
+* **iiifparser:** Bound rotation, region, and size-pct against out-of-range input ([6751d58](https://github.com/dasch-swiss/sipi/commit/6751d58eb79dbf755d9f7424841b6f9d46e2f227))
+* **image_processing:** Avoid divide-by-zero in subtract on identical inputs ([74e00fd](https://github.com/dasch-swiss/sipi/commit/74e00fd51aaf5f83a2ec402496fadf6e4ed80b45))
+* **image_processing:** Guard convertYCC2RGB channel count and 16-bit midpoint ([07c6dc2](https://github.com/dasch-swiss/sipi/commit/07c6dc294544fc559539899c92642f845284c2c7))
+* **metadata:** Compute base64 decode length without integer underflow ([8492b89](https://github.com/dasch-swiss/sipi/commit/8492b89f9b6c6c58feae42152d3b2046ffd6d426))
+* **scripting:** Default response cookies to HttpOnly and SameSite=Lax ([3a9e282](https://github.com/dasch-swiss/sipi/commit/3a9e282ece7464c0a4048510b4ebb5170ce3ce55))
+* **scripting:** Delete the token.lua postMessage relay and its route ([594e760](https://github.com/dasch-swiss/sipi/commit/594e760ccf3eb85248cc536ab52bbdd4e037172f))
+* **scripting:** Harden Lua print, mkdir mode, and json depth ([f3a0e21](https://github.com/dasch-swiss/sipi/commit/f3a0e211ed096b85a9fb910b543b3c67296c2dfc))
+* **scripting:** Require a token and a uuid62 basename for the upload example ([7b92dbb](https://github.com/dasch-swiss/sipi/commit/7b92dbb9f46af9563c65528c8ce89c6552c772c8))
+* **server:** Admit docroot static serving and cache the libmagic database ([1f79fa5](https://github.com/dasch-swiss/sipi/commit/1f79fa52fe17f00a99373b4d4e11e7123b1f2e30))
+* **server:** Answer 404 for image-path traversal and docroot dotfiles ([553f2cf](https://github.com/dasch-swiss/sipi/commit/553f2cfbc684f5b6e70a3f142b1f07712f2cb680))
+* **server:** Answer 408 when a request handler exceeds its timeout ([255a288](https://github.com/dasch-swiss/sipi/commit/255a2881303542ecd2947dc369a5ea30d198c6b0))
+* **server:** Bound Lua-route request bodies by size and time before admission ([b6b0984](https://github.com/dasch-swiss/sipi/commit/b6b0984f5d2f4a3adf840458a172efdfc749772b))
+* **server:** Gate bare-restrict info.json and knora.json behind a denial ([996a0f1](https://github.com/dasch-swiss/sipi/commit/996a0f1be9c69b8064837a8dd158c1e3546fe6da))
+* **server:** Refuse startup on an unsafe jwt_secret and drop the shipped default ([92d54c7](https://github.com/dasch-swiss/sipi/commit/92d54c7c31a385bf2bc29ad7d787b47b13b49548))
+* **server:** Refuse startup when docroot overlaps a writable or script root ([348ec28](https://github.com/dasch-swiss/sipi/commit/348ec28ffe4a6b0cb8ac3ebccc247999460648ed))
+* **server:** Stop info.json and knora.json leaking restricted dimensions ([7f9adda](https://github.com/dasch-swiss/sipi/commit/7f9addac882ae5ffc8d70ad87253b71d2cba1208))
+* **server:** Structurally enforce the query-free preflight cache key ([3a19452](https://github.com/dasch-swiss/sipi/commit/3a19452e1781f967a950852dd8a9080970061647))
+* **server:** Validate the forwarded host against a SIPI_PUBLIC_HOSTS allowlist ([1baaa1a](https://github.com/dasch-swiss/sipi/commit/1baaa1a3dd78c0d52a70b84d7381315776e924b3))
+
+
+### Code Refactoring
+
+* **cli:** Remove the dead adminuser and adminpasswd surface ([b3afa68](https://github.com/dasch-swiss/sipi/commit/b3afa685bc3b71c0df6a8d79afddf914f6c4928e))
+* **ffi:** Drop the unused client_ip field from the serve seam ([4648cf0](https://github.com/dasch-swiss/sipi/commit/4648cf0f3d847ccbf24b2b391d2eb0f5f95f19c1))
+* **ffi:** Route both decode paths through one guarded helper ([1c46c1c](https://github.com/dasch-swiss/sipi/commit/1c46c1c2f70fd874c8e4c728bceb022a6a38f871))
+
+
+### Documentation
+
+* **adr:** Add ADR-0026 and the engine-seam extraction plan ([62fbc04](https://github.com/dasch-swiss/sipi/commit/62fbc044d0c21acb4ae5233624f18680c909a3cb))
+* **adr:** Record the per-client fairness ruling in ADR-0022 ([48f60ef](https://github.com/dasch-swiss/sipi/commit/48f60ef803042207cd22cd9ef558a7e86f1c0ce0))
+* **adr:** Scrub stale paths and fix status metadata in active ADRs ([a088db2](https://github.com/dasch-swiss/sipi/commit/a088db2e417fe7ced6a3ea6e98973b6a7ea0659c))
+* **cli:** Reconcile config, CLI help, and domain docs with wave-2 behavior ([94267f4](https://github.com/dasch-swiss/sipi/commit/94267f45a4b1f65150f58a3f2619433edc251812))
+* **docs:** Refresh ARCH-MAP entries after the wave-2 branch ([460deb0](https://github.com/dasch-swiss/sipi/commit/460deb09a1cba4bc0c28c3b8617ea914eb46b19c))
+* **learnings:** A supervised subagent must return at a long build, not park on it ([409c92b](https://github.com/dasch-swiss/sipi/commit/409c92ba6c9a47605e801d5ad9cd43fc34331f4f))
+* **learnings:** A timeout/slowloris e2e must be bounded on server, client, teardown, harness ([ee5ffc2](https://github.com/dasch-swiss/sipi/commit/ee5ffc2fa5b663bf6f3d48f948af66aeb9a8fbdc))
+* **learnings:** Capture the wave-2 goose chase — primary evidence over plausible hypotheses ([51f9d4e](https://github.com/dasch-swiss/sipi/commit/51f9d4e3966db1aa1e0c36f1b227563439d2ad72))
+* **learnings:** Verify a duplication finding with a set-diff — the FFI mirrors are disjoint ([a967f50](https://github.com/dasch-swiss/sipi/commit/a967f50079995f3920988cb6d84b72999bbf0eed))
+* **specs:** Add SIPI security hardening wave 2 plan ([cceab50](https://github.com/dasch-swiss/sipi/commit/cceab505ea89a7ec554b95cd1a3a27e7ac749ebc))
+* **specs:** Flatten spec folders into flat date-numbered files ([ec1b690](https://github.com/dasch-swiss/sipi/commit/ec1b690bd9ab07ad2b2f808bb7015426d607200d))
+* **specs:** Record the JP2 decode watchdog mechanism (DEV-7080) ([6bf8ff6](https://github.com/dasch-swiss/sipi/commit/6bf8ff636832817aef01419374dc6353e6e3c5ab))
+* **specs:** Record the wave-2 CI stabilization journal ([075e5aa](https://github.com/dasch-swiss/sipi/commit/075e5aa55d124868b5ce8c14c0c6151e22f8fefd))
+
+
+### Tests
+
+* **e2e:** Isolate the cache dir of concurrent resource_limits servers ([ae55eaa](https://github.com/dasch-swiss/sipi/commit/ae55eaad31eda5135e3a4c17d8a038c8502b42e3))
+* **e2e:** Read the TIFF-JPEG body before deleting its source fixture ([32ff41c](https://github.com/dasch-swiss/sipi/commit/32ff41c3b91ec6207c6ac619bf86608fe48a639c))
+* **fuzz:** Add codec round-trip encode fuzz targets ([37c9ee4](https://github.com/dasch-swiss/sipi/commit/37c9ee4695cace3f5098c504da4fe9aeadc9855f))
+* **fuzz:** Disable ASan container-overflow check on the parser leg ([bd056d8](https://github.com/dasch-swiss/sipi/commit/bd056d8a4f82ec5fc8542917516782bc01e6a1c9))
+* **fuzz:** Drive the region/size-aware decode path from a header prefix ([f93595d](https://github.com/dasch-swiss/sipi/commit/f93595d16a419f84e35469f7f29ad5954bd17e9b))
+* **fuzz:** Lower the j2k decode fuzz max_len to raise throughput ([80e883e](https://github.com/dasch-swiss/sipi/commit/80e883e926a74adcf48bb107bdb796b35d3dfed6))
+* **fuzz:** Pin the DEV-7080 JP2 decode-hang reproducers ([9a5fe00](https://github.com/dasch-swiss/sipi/commit/9a5fe00044cdf7b4cf926d14818673bc51f41514))
+* **fuzz:** Silence libtiff warning flood and cap fuzz logs ([84ca70d](https://github.com/dasch-swiss/sipi/commit/84ca70df5f3cba45cadc95c80a152af1e2f1957c))
+
+
+### Build System
+
+* **deps:** Bump curl to 8.21.0.bcr.1 ([7edda83](https://github.com/dasch-swiss/sipi/commit/7edda8394c253c417ac3d411f116cbcd34bf67ba))
+* **deps:** Bump exiv2 to 0.28.9 ([5951a1f](https://github.com/dasch-swiss/sipi/commit/5951a1fa7d1d55edb09b60202f5a0209a9e9fbc2))
+* **deps:** Bump lcms2 to 2.19.1 ([c75e95d](https://github.com/dasch-swiss/sipi/commit/c75e95dff15f708fa72762b8302538bfb76bfe6c))
+* **deps:** Bump libpng to 1.6.58 ([8c6ef37](https://github.com/dasch-swiss/sipi/commit/8c6ef377d66656c5da5d0aa1179fdbf02d1ed987))
+* **deps:** Bump libtiff to 4.7.2 ([fe63eb2](https://github.com/dasch-swiss/sipi/commit/fe63eb2c89ac8bee1662dba180f08f74723cfbbf))
+* **deps:** Vendor libexpat 2.8.4 as a native cc_library ([daa642a](https://github.com/dasch-swiss/sipi/commit/daa642af91e1b9b8d22075b04c30678b6af2b0e6))
+
+
+### Miscellaneous Chores
+
+* **ci:** Audit crate advisories over a checked-in lockfile ([3d1afcf](https://github.com/dasch-swiss/sipi/commit/3d1afcf0129bcd1f0b68e9dab35c6660cd43c525))
+* **ci:** Harden the GitHub Actions supply-chain posture ([df8e9a6](https://github.com/dasch-swiss/sipi/commit/df8e9a61b7db72727ad37ff3df02d651216344bd))
+
 ## [8.0.0](https://github.com/dasch-swiss/sipi/compare/v7.0.0...v8.0.0) (2026-08-31)
 
 
