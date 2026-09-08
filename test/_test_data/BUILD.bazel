@@ -33,6 +33,7 @@ filegroup(
     srcs = [
         "images/malformed/tiff_colormap_unsupported_bps.tif",
         "images/malformed/tiff_eight_sample.tif",
+        "images/malformed/tiff_exif_make_jp2_roundtrip.tif",
         "images/malformed/tiff_icc_garbage.tif",
         "images/malformed/tiff_oversized_dimensions.tif",
         "images/malformed/tiff_palette_1bit.tif",
