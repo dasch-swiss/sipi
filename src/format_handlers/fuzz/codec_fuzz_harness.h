@@ -130,6 +130,10 @@ inline std::uint16_t read_u16le(const uint8_t *data, std::size_t offset)
 // above this budget.
 inline constexpr std::uint64_t kMaxHarnessDecodeBytes = 512ULL * 1024 * 1024;
 
+// Encode budget for `run_roundtrip`'s four re-encodes (rationale at the use
+// site): a decoded image above this many bytes is not re-encoded.
+inline constexpr std::uint64_t kMaxRoundtripEncodeBytes = 16ULL * 1024 * 1024;
+
 // Estimates the decode buffer size implied by a shape probe's geometry.
 // `nc`/`bps` are 0 when only `DIMS` (not `ALL`) is known, so a zero channel
 // count is treated as 1 and a zero bit depth as 8. Any negative field (the
@@ -309,6 +313,16 @@ template<typename Handler> int run_roundtrip(const uint8_t *data, size_t size, c
   // and divisors that trip ASan; a real decoded image always has non-zero
   // extent, so skip the encode rather than exercise a nonsense one.
   if (img->getNx() == 0 || img->getNy() == 0 || img->getNc() == 0) { return 0; }
+
+  // Encode budget, not a codec limit. A few hundred bytes of JPEG can declare
+  // a 65056x255 frame, which decodes in milliseconds into ~50 MB of pixels
+  // that the four encodes below then chew through — past libFuzzer's 25s
+  // per-input timeout under the ASan build. The bug class the round-trip legs
+  // hunt is encoder header/marker/metadata handling, which does not need bulk
+  // pixel volume, so skip the encodes for a decoded image above this size.
+  const std::uint64_t decoded_bytes = static_cast<std::uint64_t>(img->getNx()) * img->getNy() * img->getNc()
+                                      * ((static_cast<std::uint64_t>(img->getBps()) + 7) / 8);
+  if (decoded_bytes > kMaxRoundtripEncodeBytes) { return 0; }
 
   static constexpr const char *kEncodeFtypes[] = { "tif", "jpx", "png", "jpg" };
   for (const char *ftype : kEncodeFtypes) {
