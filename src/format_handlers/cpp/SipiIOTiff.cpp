@@ -979,6 +979,19 @@ static Result<std::vector<T>> read_tiled_data(TIFF *tif, int32_t roi_x, int32_t 
   // PLANARCONFIG_SEPARATE, TIFFTileSize() reports the size of a single-sample
   // plane, so nc of these are needed to hold one tile.
   const uint32_t plane_elems = (bps == 8) ? tile_size : (tile_size >> 1);
+  // TIFFTileSize() is libtiff's view of the tile (from its own copy of the
+  // directory); the copy loop below indexes the tile by SIPI's tile geometry
+  // and channel count. A directory the two read differently (e.g. an
+  // inconsistent BitsPerSample array) makes the libtiff buffer smaller than
+  // the loop's extent and the copy reads past it.
+  const uint64_t expected_plane_elems =
+    static_cast<uint64_t>(tile_width) * tile_length * (planar == PLANARCONFIG_SEPARATE ? 1U : nc);
+  if (plane_elems < expected_plane_elems) {
+    return std::unexpected(SipiValueError{ ErrorCode::kMalformedInput,
+      "TIFFTileSize (" + std::to_string(tile_size) + " bytes) smaller than the tile geometry "
+        + std::to_string(tile_width) + "x" + std::to_string(tile_length) + ", channels=" + std::to_string(nc)
+        + ", bps=" + std::to_string(bps) });
+  }
 
   auto tilebuf = std::make_unique<T[]>(plane_elems);
   auto inbuf = std::vector<T>(checked_buf_size_or_throw(roi_w, roi_h, nc, 1));

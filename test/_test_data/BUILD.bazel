@@ -39,6 +39,7 @@ filegroup(
         "images/malformed/tiff_palette_1bit.tif",
         "images/malformed/tiff_planar_separate_lzw_rgb.tif",
         "images/malformed/tiff_scanline_undersized.tif",
+        "images/malformed/tiff_tile_undersized.tif",
         "images/malformed/tiff_tiled_planar_separate_rgba.tif",
         "images/malformed/tiff_transferfunction_grayscale.tif",
         "images/unit/exif_lens_specification.tif",
