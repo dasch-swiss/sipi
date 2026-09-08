@@ -237,3 +237,22 @@ TEST(MalformedTiff, EightComponentJp2DecodesCleanly)
   EXPECT_EQ(img.getNy(), 16U);
   EXPECT_EQ(img.getNc(), 8U);
 }
+
+// Nightly `tiff_roundtrip` ASan finding (2026-09-07/08): a container-overflow
+// WRITE in `Exiv2::append` on the memcpy that follows `blob.resize()`, reached
+// from `SipiIOJ2k::write()` → `Exif::exifBytes()`. The exiv2 code is
+// standards-correct and the same input converts cleanly outside the fuzz
+// binary, so this test pins the exact decode-then-JP2-write path on the
+// verbatim reproducer. It passes under the CI ASan job, which does not link
+// libFuzzer, so the fuzz report is an artifact of that link (see the ASan
+// step of `.github/workflows/fuzz.yml`), not a defect.
+TEST(MalformedTiff, ExifMakeTiffEncodesToJp2Cleanly)
+{
+  Sipi::SipiImage img;
+  ASSERT_TRUE(img.read(malformed_path("tiff_exif_make_jp2_roundtrip.tif")).has_value());
+  ASSERT_NE(img.getExif(), nullptr);
+
+  const std::string dst = sipi::test::tmp_dir() + "/_j2k_exif_make_roundtrip_test.jp2";
+  ASSERT_TRUE(img.write("jpx", dst).has_value());
+  std::remove(dst.c_str());
+}

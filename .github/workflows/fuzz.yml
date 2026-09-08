@@ -37,6 +37,10 @@
 #
 # A crash (libFuzzer exits 77) fails that leg loudly and uploads its
 # reproducers plus the libFuzzer log. Triage is manual — no auto-filed issue.
+# A per-input timeout fails the leg too, except on the two j2k legs, which run
+# in fork mode with `-ignore_timeouts=1` (matrix `libfuzzer_extra`): the
+# Kakadu hang class is known and contained at the seam, so a fresh instance is
+# recorded as a `timeout-*` artifact, not a red leg.
 #
 # Linux-amd64 only: `--config=fuzz` cannot link the libFuzzer runtime on
 # darwin (`.bazelrc` §Fuzzing), exactly like the sanitizer gate. macOS gets the
@@ -88,21 +92,21 @@ jobs:
       matrix:
         include:
           - target: parse_request
+            libfuzzer_extra: ""
             bin: src/iiifparser/fuzz/parse_request_fuzz_bin
             corpus_out: src/iiifparser/fuzz/parse_request_fuzz_corpus
             max_len: ""
             dict: ""
-            # `detect_container_overflow=0` suppresses an ASan
-            # container-overflow false positive on this Rust parser leg
-            # (DEV-7081); the check stays on for the codec legs.
-            asan_options: "detect_container_overflow=0"
+            asan_options: ""
           - target: tiff
+            libfuzzer_extra: ""
             bin: src/format_handlers/fuzz/tiff_decode_fuzz_bin
             corpus_out: src/format_handlers/fuzz/tiff_decode_fuzz_corpus
             max_len: "16384"
             dict: src/format_handlers/fuzz/dicts/tiff.dict
             asan_options: ""
           - target: jpeg
+            libfuzzer_extra: ""
             bin: src/format_handlers/fuzz/jpeg_decode_fuzz_bin
             corpus_out: src/format_handlers/fuzz/jpeg_decode_fuzz_corpus
             max_len: "16384"
@@ -113,6 +117,7 @@ jobs:
             # detection on; never disable it repo-wide.
             asan_options: "detect_leaks=0"
           - target: png
+            libfuzzer_extra: ""
             bin: src/format_handlers/fuzz/png_decode_fuzz_bin
             corpus_out: src/format_handlers/fuzz/png_decode_fuzz_corpus
             max_len: "8192"
@@ -123,6 +128,18 @@ jobs:
           # 32768; a smaller cap raises exec/s so the budget explores more
           # inputs (exec/s before/after is recorded in the PR).
           - target: j2k
+            # Fork mode, timeouts tolerated: Kakadu's box parser has an
+            # unpatchable hang class (DEV-7080) that the seam deadline in
+            # `serve_image.cpp` contains in production, but this harness drives
+            # `SipiIOJ2k::read_shape` directly and reaches it on every run. The
+            # parent keeps fuzzing past a timed-out child, the child still
+            # writes its `timeout-*` reproducer to `-artifact_prefix`, and only
+            # crashes (`-ignore_crashes` stays 0) and OOMs fail the leg.
+            # `-timeout_exitcode=0`: the fork parent exits with its LAST
+            # child's exit code, so a tolerated timeout in the final child
+            # would still fail the step with 70; the child dumps the
+            # reproducer before it exits either way.
+            libfuzzer_extra: "-fork=1 -ignore_timeouts=1 -ignore_ooms=0 -timeout_exitcode=0"
             bin: src/format_handlers/fuzz/j2k_decode_fuzz_bin
             corpus_out: src/format_handlers/fuzz/j2k_decode_fuzz_corpus
             max_len: "8192"
@@ -133,12 +150,14 @@ jobs:
           # every encoder (the JP2-encode bug S2-02 and the JPEG-marker-write
           # bug S2-14) outside fuzzer reach.
           - target: tiff_roundtrip
+            libfuzzer_extra: ""
             bin: src/format_handlers/fuzz/tiff_roundtrip_fuzz_bin
             corpus_out: src/format_handlers/fuzz/tiff_roundtrip_fuzz_corpus
             max_len: "16384"
             dict: src/format_handlers/fuzz/dicts/tiff.dict
             asan_options: ""
           - target: jpeg_roundtrip
+            libfuzzer_extra: ""
             bin: src/format_handlers/fuzz/jpeg_roundtrip_fuzz_bin
             corpus_out: src/format_handlers/fuzz/jpeg_roundtrip_fuzz_corpus
             max_len: "16384"
@@ -148,6 +167,7 @@ jobs:
             # as the decode-only jpeg leg above.
             asan_options: "detect_leaks=0"
           - target: png_roundtrip
+            libfuzzer_extra: ""
             bin: src/format_handlers/fuzz/png_roundtrip_fuzz_bin
             corpus_out: src/format_handlers/fuzz/png_roundtrip_fuzz_corpus
             max_len: "8192"
@@ -156,6 +176,18 @@ jobs:
             # now also on the libpng encode path.
             asan_options: "detect_leaks=0"
           - target: j2k_roundtrip
+            # Fork mode, timeouts tolerated: Kakadu's box parser has an
+            # unpatchable hang class (DEV-7080) that the seam deadline in
+            # `serve_image.cpp` contains in production, but this harness drives
+            # `SipiIOJ2k::read_shape` directly and reaches it on every run. The
+            # parent keeps fuzzing past a timed-out child, the child still
+            # writes its `timeout-*` reproducer to `-artifact_prefix`, and only
+            # crashes (`-ignore_crashes` stays 0) and OOMs fail the leg.
+            # `-timeout_exitcode=0`: the fork parent exits with its LAST
+            # child's exit code, so a tolerated timeout in the final child
+            # would still fail the step with 70; the child dumps the
+            # reproducer before it exits either way.
+            libfuzzer_extra: "-fork=1 -ignore_timeouts=1 -ignore_ooms=0 -timeout_exitcode=0"
             bin: src/format_handlers/fuzz/j2k_roundtrip_fuzz_bin
             corpus_out: src/format_handlers/fuzz/j2k_roundtrip_fuzz_corpus
             max_len: "16384"
@@ -272,6 +304,7 @@ jobs:
           args=(-max_total_time=600 -timeout=25 -print_final_stats=1 -artifact_prefix=.fuzz/artifacts/)
           [ -n "${{ matrix.dict }}" ] && args+=(-dict=${{ matrix.dict }})
           [ -n "${{ matrix.max_len }}" ] && args+=(-max_len=${{ matrix.max_len }})
+          [ -n "${{ matrix.libfuzzer_extra }}" ] && args+=(${{ matrix.libfuzzer_extra }})
           ./bazel-bin/${{ matrix.bin }} "${args[@]}" .fuzz/corpus 2>&1 | tee >(tail -c 50M > .fuzz/libfuzzer.log)
 
       # `-merge=1 <dst> <src>` copies an input into the (empty) destination only
@@ -333,22 +366,40 @@ jobs:
       # ASan's redzones inflate apparent RSS past that default on a legitimate
       # allocation, so libFuzzer's detector would fire spuriously.
       #
-      # `ASAN_OPTIONS` (matrix `asan_options`): `detect_leaks=0` for jpeg/png
-      # only — see the matrix comment above for why. Empty for the other
-      # three targets, which keep leak detection on.
+      # `ASAN_OPTIONS` is composed in the step: `detect_container_overflow=0`
+      # for every leg (rationale inline below), plus the matrix
+      # `asan_options` — `detect_leaks=0` for the jpeg/png legs only, see the
+      # matrix comment above for why; the other legs keep leak detection on.
       - name: Fuzz under ASan (300s)
         env:
           RUST_BACKTRACE: "1"
           ASAN_SYMBOLIZER_PATH: ${{ github.workspace }}/.fuzz/llvm-symbolizer
-          ASAN_OPTIONS: ${{ matrix.asan_options }}
         run: |
           set -euo pipefail
+          # `detect_container_overflow=0` on every leg: the fuzz binary links
+          # the libFuzzer runtime, which hermetic-llvm builds unsanitized
+          # (`cc_unsanitized_library`) against the same libc++ the instrumented
+          # code uses, so libc++'s container annotations are updated by some
+          # objects and checked by others. That is the documented
+          # false-positive shape for this detector, and it has fired three
+          # times here with no defect behind it: the Rust parser leg
+          # (DEV-7081), `Exiv2::append` on the tiff_roundtrip leg (the same
+          # decode-then-JP2-write path is green under the `asan-ubsan` CI job,
+          # which links no libFuzzer; fixture `tiff_exif_make_jp2_roundtrip.tif`),
+          # and libFuzzer's own fork driver (`fuzzer::DirPlusFile`) on the j2k
+          # legs before a single input ran. Heap/stack/global overflow
+          # detection is unaffected; the container detector stays on for the
+          # `asan-ubsan` job's unit and e2e tests.
+          asan_options="detect_container_overflow=0"
+          [ -n "${{ matrix.asan_options }}" ] && asan_options="$asan_options:${{ matrix.asan_options }}"
+          export ASAN_OPTIONS="$asan_options"
           ./bazel-bin/${{ matrix.bin }} \
               -max_total_time=300 \
               -timeout=25 \
               -rss_limit_mb=0 \
               -print_final_stats=1 \
               -artifact_prefix=.fuzz/artifacts/ \
+              ${{ matrix.libfuzzer_extra }} \
               .fuzz/merged 2>&1 | tee >(tail -c 50M > .fuzz/libfuzzer-asan.log)
 
       # BEP for cache-hit-rate analysis (see the `bep-*` uploads in ci.yml).

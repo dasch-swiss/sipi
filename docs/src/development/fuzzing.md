@@ -402,6 +402,34 @@ consume the run instead of being reported. The merge also gets
 `-rss_limit_mb=4096`, since `-merge=1` holds the whole feature set in memory as
 the corpus grows.
 
+The two J2K legs (`j2k`, `j2k_roundtrip`) additionally run both loops in
+libFuzzer fork mode with `-fork=1 -ignore_timeouts=1 -ignore_ooms=0
+-timeout_exitcode=0` (matrix column `libfuzzer_extra`). Kakadu's box parser has an unpatchable hang class
+(DEV-7080) that the seam deadline in `serve_image.cpp` contains in production,
+but the codec harness drives `SipiIOJ2k::read_shape` directly, below that
+seam, and the mutator finds a fresh instance on most nights. In fork mode the
+parent keeps fuzzing past a timed-out child; the child still writes its
+`timeout-*` reproducer to `-artifact_prefix`, so the instance is recorded in
+the `fuzz-crashes-<target>` artifact of a green leg. `-timeout_exitcode=0`
+is needed on top of `-ignore_timeouts=1` because the fork parent exits with
+its *last* child's exit code, so a tolerated timeout in the final child would
+otherwise still fail the step with 70. Crashes and OOMs still fail the leg. The other seven legs keep the strict per-input timeout: a hang
+in libtiff/libjpeg/libpng or in SIPI's own code is a fixable finding.
+
+The ASan pass runs every leg with `ASAN_OPTIONS=detect_container_overflow=0`.
+The fuzz binary links the libFuzzer runtime, which hermetic-llvm builds
+unsanitized (`cc_unsanitized_library`) against the same libc++ the
+instrumented code uses, so libc++'s container annotations are updated by some
+objects in the link and checked by others — the documented false-positive
+shape for that one detector. It fired three times with no defect behind it:
+the Rust parser leg (DEV-7081), `Exiv2::append` on `tiff_roundtrip` (the
+identical decode-then-JP2-write path is green under the `asan-ubsan` CI job,
+which links no libFuzzer; the reproducer is pinned as
+`tiff_exif_make_jp2_roundtrip.tif`), and libFuzzer's own fork driver on the
+j2k legs before a single input ran. Heap, stack, and global overflow detection
+are unaffected, and the container detector stays on for the `asan-ubsan`
+job's unit and e2e tests, which cover the same code without libFuzzer.
+
 Both loops run with `RUST_BACKTRACE=1` and the hermetic `llvm-symbolizer`
 (resolved to `.fuzz/llvm-symbolizer` by `just bazel-build-fuzz`) wired into the
 sanitizer runtime that prints the crash trace — `UBSAN_OPTIONS=external_symbolizer_path`
