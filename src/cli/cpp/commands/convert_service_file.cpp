@@ -5,6 +5,8 @@
 
 #include "cli/commands/convert_service_file.h"
 
+#include "cli/commands/decode_deadline.h"
+
 #include <algorithm>
 #include <cstdint>
 #include <cstdlib>
@@ -78,7 +80,14 @@ int cmd_convert_service_file(const ConvertServiceFileArgs &args)
 
   Sipi::SipiImage img;
   try {
-    if (auto r = img.readSource(args.input_path, /*region=*/nullptr, /*size=*/nullptr); !r) {
+    auto decoded =
+      read_source_with_deadline(args.decode_timeout_ms, args.input_path, /*region=*/nullptr, /*size=*/nullptr);
+    if (!decoded) {
+      log_err("convert service-file: %s", decode_deadline_message(args.decode_timeout_ms).c_str());
+      return EXIT_FAILURE;
+    }
+    img = std::move(decoded->img);
+    if (auto &r = decoded->status; !r) {
       log_err("convert service-file: error reading source: %s", r.error().diagnostic_message().c_str());
       return EXIT_FAILURE;
     }

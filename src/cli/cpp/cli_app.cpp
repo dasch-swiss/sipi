@@ -32,6 +32,7 @@
 #include "util/Error.h"
 #include "cli/commands/convert_access_file.h"
 #include "cli/commands/convert_service_file.h"
+#include "cli/commands/decode_deadline.h"
 #include "cli/commands/health.h"
 #include "cli/commands/verify.h"
 #include "image/SipiIO.h"
@@ -207,12 +208,16 @@ extern "C" int sipi_cli_main(int argc, char **argv)
   //
   auto run_query = [&]() -> int {
     set_cli_mode(true);
-    Sipi::SipiImage img;
-    if (auto r = img.read(optInFile); !r) {
+    auto decoded = Sipi::cli::read_with_deadline(Sipi::cli::kDecodeTimeoutMs, optInFile);
+    if (!decoded) {
+      log_err("sipi: %s", Sipi::cli::decode_deadline_message(Sipi::cli::kDecodeTimeoutMs).c_str());
+      return EXIT_FAILURE;
+    }
+    if (auto &r = decoded->status; !r) {
       log_err("sipi: unhandled exception: %s", r.error().diagnostic_message().c_str());
       return EXIT_FAILURE;
     }
-    std::cout << img << std::endl;
+    std::cout << decoded->img << std::endl;
     return 0;
   };
 
@@ -317,8 +322,15 @@ extern "C" int sipi_cli_main(int argc, char **argv)
     //
     // read the input image
     //
-    Sipi::SipiImage img;
-    if (auto r = img.readSource(optInFile, region, size); !r) {
+    auto decoded = Sipi::cli::read_source_with_deadline(Sipi::cli::kDecodeTimeoutMs, optInFile, region, size);
+    if (!decoded) {
+      const std::string msg = Sipi::cli::decode_deadline_message(Sipi::cli::kDecodeTimeoutMs);
+      log_err("Error reading image: %s", msg.c_str());
+      if (optJsonOutput) { Sipi::emit_json_report(std::cout, sentry_ctx, msg, std::string{ "read" }); }
+      return EXIT_FAILURE;
+    }
+    Sipi::SipiImage img = std::move(decoded->img);
+    if (auto &r = decoded->status; !r) {
       Sipi::observability::populate_from_image(sentry_ctx, img);
       log_err("Error reading image: %s", r.error().diagnostic_message().c_str());
       if (optJsonOutput) {
@@ -519,15 +531,26 @@ extern "C" int sipi_cli_main(int argc, char **argv)
       return EXIT_FAILURE;
     }
 
-    Sipi::SipiImage img1, img2;
-    if (auto r = img1.read(optCompare[0]); !r) {
+    auto decoded1 = Sipi::cli::read_with_deadline(Sipi::cli::kDecodeTimeoutMs, optCompare[0]);
+    if (!decoded1) {
+      log_err("sipi: %s", Sipi::cli::decode_deadline_message(Sipi::cli::kDecodeTimeoutMs).c_str());
+      return EXIT_FAILURE;
+    }
+    if (auto &r = decoded1->status; !r) {
       log_err("sipi: unhandled exception: %s", r.error().diagnostic_message().c_str());
       return EXIT_FAILURE;
     }
-    if (auto r = img2.read(optCompare[1]); !r) {
+    auto decoded2 = Sipi::cli::read_with_deadline(Sipi::cli::kDecodeTimeoutMs, optCompare[1]);
+    if (!decoded2) {
+      log_err("sipi: %s", Sipi::cli::decode_deadline_message(Sipi::cli::kDecodeTimeoutMs).c_str());
+      return EXIT_FAILURE;
+    }
+    if (auto &r = decoded2->status; !r) {
       log_err("sipi: unhandled exception: %s", r.error().diagnostic_message().c_str());
       return EXIT_FAILURE;
     }
+    Sipi::SipiImage &img1 = decoded1->img;
+    Sipi::SipiImage &img2 = decoded2->img;
 
     if (img1 == img2) {
       log_info("Files identical!");

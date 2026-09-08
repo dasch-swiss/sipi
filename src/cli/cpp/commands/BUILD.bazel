@@ -15,6 +15,10 @@ Today's commands:
     `cmd_verify(VerifyArgs)`
   * `sipi health` → `health.{h,cpp}` → `cmd_health(HealthArgs)`
 
+`decode_deadline.{h,cpp}` is not a command: it is the deadline-bounded
+decode every offline verb (the commands above plus `query` / `convert` /
+`compare` in `//src/cli:cli_app`) reads its input through.
+
 The `:commands` cc_library is consumed by `//src/cli:sipi` (the binary
 target) and by `:commands_test` (the co-located unit tests).
 
@@ -33,12 +37,14 @@ cc_library(
     srcs = [
         "convert_access_file.cpp",
         "convert_service_file.cpp",
+        "decode_deadline.cpp",
         "health.cpp",
         "verify.cpp",
     ],
     hdrs = [
         "convert_access_file.h",
         "convert_service_file.h",
+        "decode_deadline.h",
         "health.h",
         "verify.h",
     ],
@@ -49,6 +55,8 @@ cc_library(
         "//src:sipi_lib",
         # convert_access_file.cpp's JSON report emitter.
         "//src/cli:sipi_report",
+        # decode_deadline.cpp's run_with_deadline (the seam's decode watchdog).
+        "//src/ffi:sipi_ffi",
         # convert_access_file.cpp / convert_service_file.cpp's rotate calls.
         "//src/image_processing",
     ],

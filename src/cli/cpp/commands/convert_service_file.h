@@ -6,7 +6,10 @@
 #ifndef SIPI_CLI_COMMANDS_CONVERT_SERVICE_FILE_H
 #define SIPI_CLI_COMMANDS_CONVERT_SERVICE_FILE_H
 
+#include <cstddef>
 #include <string>
+
+#include "cli/commands/decode_deadline.h"
 
 namespace Sipi::cli {
 
@@ -21,6 +24,7 @@ struct ConvertServiceFileArgs
   std::string input_path;  //!< source file path supplied by the operator
   std::string output_path; //!< destination Service File path
   bool set_topleft = false;//!< apply `--topleft` orientation normalization
+  std::size_t decode_timeout_ms = kDecodeTimeoutMs;//!< wall-clock decode deadline, see decode_deadline.h
 };
 
 /*!

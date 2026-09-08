@@ -6,8 +6,11 @@
 #ifndef SIPI_CLI_COMMANDS_CONVERT_ACCESS_FILE_H
 #define SIPI_CLI_COMMANDS_CONVERT_ACCESS_FILE_H
 
+#include <cstddef>
 #include <string>
 #include <vector>
+
+#include "cli/commands/decode_deadline.h"
 
 namespace Sipi::cli {
 
@@ -66,6 +69,9 @@ struct ConvertAccessFileArgs
 
   //!< Apply --topleft orientation normalization.
   bool set_topleft = false;
+
+  //!< Wall-clock decode deadline in ms, see decode_deadline.h.
+  std::size_t decode_timeout_ms = kDecodeTimeoutMs;
 
   //!< Emit JSON report on stdout.
   bool json_output = false;
