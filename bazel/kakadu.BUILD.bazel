@@ -38,8 +38,8 @@ _LINUX_AARCH64 = "@@//platforms:is_linux_aarch64"
 
 # Warning suppressions + language level shared by every Kakadu TU.
 #
-# `-fno-sanitize=function,shift,pointer-overflow,signed-integer-overflow`
-# disables exactly the four UBSan subchecks Kakadu's hand-tuned internals trip
+# `-fno-sanitize=function,shift,pointer-overflow,signed-integer-overflow,alignment`
+# disables exactly the five UBSan subchecks Kakadu's hand-tuned internals trip
 # (a no-op unless `--config=ubsan`/`--config=fuzz` is active, where the
 # hermetic toolchain otherwise adds `-fsanitize=undefined` to every target —
 # see `.bazelrc`). The constructs are benign in this commercial codec:
@@ -48,11 +48,14 @@ _LINUX_AARCH64 = "@@//platforms:is_linux_aarch64"
 # (`pointer-overflow`), and wrapping arithmetic while assembling a palette
 # entry from a crafted `pclr` box in Kakadu's JP2 box parsing
 # (`signed-integer-overflow`, e.g. `apps/jp2/jp2.cpp`'s `val <<= upshift; val
-# += offset;`). The first three fire on the multi-threaded decode path
+# += offset;`), and `__m256i` loads through pointers that are only 4-byte
+# aligned in the AVX2 forward-transform analysis on the encode path
+# (`alignment`, `coresys/transform/avx2_analysis2.cpp`, reached by the
+# round-trip fuzz legs' JPX re-encode). The first three fire on the multi-threaded decode path
 # (`kdu_thread_env` in `SipiIOJ2k::read`); the last is reachable from any
 # malformed JP2 via `SipiIOJ2k::read_shape`/`read` and is exactly what the
 # `--config=fuzz` J2K corpus otherwise reports on crafted input — the wrap
-# produces a wrong palette sample value, not an out-of-bounds access. All four
+# produces a wrong palette sample value, not an out-of-bounds access. All five
 # abort the process under the gate. They are third-party-library noise, not
 # SIPI defects, and are not reachable in production (which runs neither
 # UBSan). The rest of UBSan (null, bool, enum, vla-bound,
@@ -65,7 +68,7 @@ _BASE_COPTS = [
     "-Wall",
     "-Wno-unused-function",
     "-Wno-overloaded-virtual",
-    "-fno-sanitize=function,shift,pointer-overflow,signed-integer-overflow",
+    "-fno-sanitize=function,shift,pointer-overflow,signed-integer-overflow,alignment",
 ]
 
 # Per-platform base flags from coresys/make/Makefile-<P> C_OPT (minus the
