@@ -31,6 +31,13 @@ cc_library(
         "include/lcms2_plugin.h",
     ],
     local_defines = ["HAVE_GMTIME_R=1"],
+    # lcms2 dispatches its pipeline stages and interpolators through generic
+    # function-pointer types (`cmslut.c`'s `Eval1Input` call, `cmsxform.c`'s
+    # transform-worker calls) — a documented idiom of the library, not a SIPI
+    # defect, that UBSan's `function` check reports on every colour
+    # transform under `--config=ubsan`/`--config=fuzz`. Only that subcheck is
+    # disabled; the rest of UBSan and all of ASan stay on for lcms2.
+    copts = ["-fno-sanitize=function"],
     includes = ["include"],
     linkstatic = True,
 )
