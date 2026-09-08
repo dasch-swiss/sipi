@@ -1,5 +1,38 @@
 # Changelog
 
+## [9.0.1](https://github.com/dasch-swiss/sipi/compare/v9.0.0...v9.0.1) (2026-09-08)
+
+
+### Bug Fixes
+
+* **cli:** Bound offline-verb decodes with the seam's decode deadline ([ac3bf78](https://github.com/dasch-swiss/sipi/commit/ac3bf789106ebf747a790711deb1a8f304158c2f))
+* **format_handlers:** Destroy the Kakadu codestream before the JPX target on write errors ([6cd46ff](https://github.com/dasch-swiss/sipi/commit/6cd46ff0b88027b7f9feb5e2709b0aaf105611f8))
+* **format_handlers:** Reject tiled TIFFs whose TIFFTileSize is smaller than the tile geometry ([1de76df](https://github.com/dasch-swiss/sipi/commit/1de76df9d425e9c231ad44d2875745f80800cc8a))
+* **metadata:** Store EXIF ASCII tags as their characters, not the string object ([d9c7704](https://github.com/dasch-swiss/sipi/commit/d9c7704de2b341d40e7c5cd982966309f8e6cc6c))
+
+
+### Documentation
+
+* **learnings:** A red fuzz leg reports one finding at a time — fix, re-dispatch, expect the next ([5ecc9a2](https://github.com/dasch-swiss/sipi/commit/5ecc9a203367459acb0a88dc7acd02c3c85ab55f))
+* **learnings:** A seam mitigation does not green a codec-level fuzz leg — tolerate the known class in fork mode ([cf1673d](https://github.com/dasch-swiss/sipi/commit/cf1673ddbb1217dd2e7e928bd911398d763ee1d9))
+* **learnings:** An ASan container-overflow from a fuzz binary is a link artifact until a non-fuzz ASan build reproduces it ([9eb78db](https://github.com/dasch-swiss/sipi/commit/9eb78dbc58538e4046b1cec07c83a327d1131eb9))
+* **learnings:** Destroy a Kakadu codestream before its target unwinds; never read a class type through &val/sizeof(T) ([cbca58f](https://github.com/dasch-swiss/sipi/commit/cbca58f31292db6540b53a863917f1a6bc23aaeb))
+
+
+### Tests
+
+* **format_handlers:** Cap the round-trip fuzz harness re-encode at 16 MiB of pixels ([499523f](https://github.com/dasch-swiss/sipi/commit/499523fd7744c29626d333053e75c5a54810f21f))
+
+
+### Build System
+
+* **deps:** Exclude Kakadu alignment and lcms2 function UBSan checks ([7ac5f43](https://github.com/dasch-swiss/sipi/commit/7ac5f43ec48dc449cadfbed4a7f2ccc5d31911ac))
+
+
+### Miscellaneous Chores
+
+* **ci:** Keep the nightly fuzz legs green on known non-defects ([8bb3b43](https://github.com/dasch-swiss/sipi/commit/8bb3b431bf6975c6f635e668903ae55d4989f03d))
+
 ## [9.0.0](https://github.com/dasch-swiss/sipi/compare/v8.0.0...v9.0.0) (2026-09-06)
 
 
