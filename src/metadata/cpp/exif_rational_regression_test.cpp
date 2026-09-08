@@ -15,6 +15,7 @@
 #include <gtest/gtest.h>
 
 #include <memory>
+#include <string>
 #include <vector>
 
 #include "image/SipiImage.h"
@@ -66,10 +67,26 @@ TEST(ExifRationalRegression, LensSpecificationArrayRoundTrips)
   }
 }
 
-// LensMake / LensModel string round-trip is intentionally NOT asserted here.
-// Both tags are present in the fixture (verifiable via exiftool) but
-// Exif's std::string conversion is platform-dependent: on macOS the
-// values come through cleanly, on Linux they collapse to the modified-UTF-8
-// NUL sentinel `\xC0\x80` because Exiv2 reports the values as `unsignedByte`
-// rather than `asciiString`. That is a separate Exif issue tracked
-// independently from this rational-array fix.
+/*! LensMake / LensModel (ASCII) round-trip through the EXIF_DT_STRING case
+ *  branch. Pre-fix, `Exif::addKeyVal<std::string>` read the tag value through
+ *  `(unsigned char *)&val, sizeof(T)`, i.e. the 24 bytes of the std::string
+ *  object itself rather than its characters — every ASCII tag read from a
+ *  TIFF EXIF IFD (DateTimeOriginal, LensMake, …) came out as 24 bytes of
+ *  garbage, and ASan flagged the read past the short-string buffer as a
+ *  container-overflow (nightly `tiff` fuzz leg). */
+TEST(ExifRationalRegression, LensStringTagsRoundTrip)
+{
+  Sipi::SipiIOTiff::initLibrary();
+  Sipi::SipiImage img;
+  ASSERT_TRUE(img.read(kFixturePath).has_value());
+  auto exif = img.getExif();
+  ASSERT_NE(exif, nullptr);
+
+  std::string lens_make;
+  ASSERT_TRUE(exif->getValByKey("Exif.Photo.LensMake", lens_make));
+  EXPECT_EQ(lens_make, "Nikon");
+
+  std::string lens_model;
+  ASSERT_TRUE(exif->getValByKey("Exif.Photo.LensModel", lens_model));
+  EXPECT_EQ(lens_model, "AF-S Nikkor 70-200mm f/2.8E FL ED VR");
+}
