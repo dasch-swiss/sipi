@@ -12,6 +12,7 @@
 
 #include <memory>
 #include <string>
+#include <type_traits>
 #include <vector>
 
 #include <exiv2/error.hpp>
@@ -114,9 +115,15 @@ public:
   {
     Exiv2::ExifKey key = Exiv2::ExifKey(tag, groupName);
     Exiv2::Value::UniquePtr v;
-    if (typeid(T) == typeid(std::string)) {
+    if constexpr (std::is_same_v<T, std::string>) {
+      // A string is not a POD to be read through `&val, sizeof(T)`: that
+      // stores the 24-byte std::string object itself as the tag value.
       v = Exiv2::Value::create(Exiv2::asciiString);
-    } else if (typeid(T) == typeid(int8_t)) {
+      v->read(val);
+      exifData.add(key, v.get());
+      return;
+    }
+    if (typeid(T) == typeid(int8_t)) {
       v = Exiv2::Value::create(Exiv2::signedByte);
     } else if (typeid(T) == typeid(uint8_t)) {
       v = Exiv2::Value::create(Exiv2::unsignedByte);
