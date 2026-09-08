@@ -256,3 +256,17 @@ TEST(MalformedTiff, ExifMakeTiffEncodesToJp2Cleanly)
   ASSERT_TRUE(img.write("jpx", dst).has_value());
   std::remove(dst.c_str());
 }
+
+// A tiled TIFF whose directory libtiff and SIPI read differently (an
+// inconsistent BitsPerSample array) makes `TIFFTileSize()` (32 bytes) smaller
+// than the `TileWidth * TileLength * SamplesPerPixel` extent the copy loop
+// walks, so `read_tiled_data()` read past the tile buffer.
+// `tiff_tile_undersized.tif` is the verbatim nightly libFuzzer/ASan crash
+// reproducer; this test asserts a clean rejection rather than the over-read.
+TEST(MalformedTiff, TileUndersizedRejectsCleanly)
+{
+  Sipi::SipiImage img;
+  const auto r = img.read(malformed_path("tiff_tile_undersized.tif"));
+  ASSERT_FALSE(r.has_value());
+  EXPECT_EQ(r.error().code(), Sipi::ErrorCode::kMalformedInput);
+}
