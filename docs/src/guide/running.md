@@ -255,6 +255,16 @@ flag forms are gone.
 | `sipi query <file>` | Dump all information about the given file |
 | `sipi compare <f1> <f2>` | Compare two files pixel-wise |
 
+### Decode deadline
+
+Every offline verb (`convert`, `convert access-file`, `convert service-file`,
+`query`, `compare`) decodes its input under a 120 s wall-clock deadline, the
+same default the server applies per request. A malformed JPEG 2000 file can
+wedge the Kakadu decoder indefinitely; when the deadline passes the verb
+reports `decode exceeded the 120000 ms deadline` and exits non-zero instead
+of hanging the shell (or the ingest worker driving it). The wedged decode
+thread is abandoned and ends with the process.
+
 ### Structured JSON output (CLI)
 
 | Flag | Description |

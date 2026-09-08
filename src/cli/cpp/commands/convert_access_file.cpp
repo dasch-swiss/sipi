@@ -5,6 +5,8 @@
 
 #include "cli/commands/convert_access_file.h"
 
+#include "cli/commands/decode_deadline.h"
+
 #include <algorithm>
 #include <cstdlib>
 #include <iostream>
@@ -12,6 +14,7 @@
 #include <sstream>
 #include <stdexcept>
 #include <string>
+#include <utility>
 
 #include "logging/logger.h"
 #include "image/SipiImage.h"
@@ -191,8 +194,13 @@ int cmd_convert_access_file(const ConvertAccessFileArgs &args)
   // if the source carries one — that's what we gate the Access File
   // contract on (input MUST be a Service File per ADR-0009).
   //
-  SipiImage img;
-  if (auto r = img.readSource(args.input_path, region, size); !r) {
+  auto decoded = read_source_with_deadline(args.decode_timeout_ms, args.input_path, region, size);
+  if (!decoded) {
+    report_error(sentry_ctx, "read", decode_deadline_message(args.decode_timeout_ms), args.json_output);
+    return EXIT_FAILURE;
+  }
+  SipiImage img = std::move(decoded->img);
+  if (auto &r = decoded->status; !r) {
     observability::populate_from_image(sentry_ctx, img);
     report_error(sentry_ctx, "read", r.error().diagnostic_message(), args.json_output);
     return EXIT_FAILURE;

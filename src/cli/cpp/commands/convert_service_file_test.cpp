@@ -33,6 +33,7 @@
 
 #include <gtest/gtest.h>
 
+#include <chrono>
 #include <cstdint>
 #include <cstdlib>
 #include <fstream>
@@ -266,5 +267,30 @@ TEST(CmdConvertServiceFile, FailsOnMissingInput)
   req.output_path = dst;
 
   EXPECT_EQ(Sipi::cli::cmd_convert_service_file(req), EXIT_FAILURE);
+  EXPECT_FALSE(file_exists(dst));
+}
+
+// A JP2 that wedges Kakadu's box parser (the DEV-7080 hang class; the fixture
+// is pinned under images/hang/ and deliberately outside every fuzz corpus)
+// must fail the verb at the decode deadline instead of hanging the operator's
+// shell forever. A 2s deadline must trip well under the 30s bound enforced
+// here (the production default is 120s).
+TEST(CmdConvertServiceFile, WedgedDecodeFailsAtDeadline)
+{
+#if defined(__SANITIZE_ADDRESS__) || (defined(__has_feature) && __has_feature(address_sanitizer))
+  GTEST_SKIP() << "run_with_deadline runs inline under ASan (no watchdog thread — see ffi/decode_guard.h); the "
+                  "deadline never fires, so the hang fixture cannot be exercised under ASan.";
+#endif
+  const std::string src = materialize_fixture("hang/nightly_j2k_read_shape_hang.jp2", "_sfo_hang.jp2");
+  const std::string dst = tmp_dir + "_sfo_hang_out.jp2";
+
+  Sipi::cli::ConvertServiceFileArgs req;
+  req.input_path = src;
+  req.output_path = dst;
+  req.decode_timeout_ms = 2000;
+
+  const auto start = std::chrono::steady_clock::now();
+  EXPECT_EQ(Sipi::cli::cmd_convert_service_file(req), EXIT_FAILURE);
+  EXPECT_LT(std::chrono::steady_clock::now() - start, std::chrono::seconds(30));
   EXPECT_FALSE(file_exists(dst));
 }

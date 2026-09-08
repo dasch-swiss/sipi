@@ -24,6 +24,8 @@
 
 #include <gtest/gtest.h>
 
+#include <chrono>
+
 #include <cstdlib>
 #include <fstream>
 #include <ios>
@@ -218,5 +220,27 @@ TEST(CmdConvertAccessFile, FailsOnMissingInput)
   req.format = "jpg";
 
   EXPECT_EQ(Sipi::cli::cmd_convert_access_file(req), EXIT_FAILURE);
+  EXPECT_FALSE(file_exists(dst));
+}
+
+// Same hang fixture as the service-file suite: the deadline fires before the
+// Service File check ever runs, because the decode never returns.
+TEST(CmdConvertAccessFile, WedgedDecodeFailsAtDeadline)
+{
+#if defined(__SANITIZE_ADDRESS__) || (defined(__has_feature) && __has_feature(address_sanitizer))
+  GTEST_SKIP() << "run_with_deadline runs inline under ASan (no watchdog thread — see ffi/decode_guard.h); the "
+                  "deadline never fires, so the hang fixture cannot be exercised under ASan.";
+#endif
+  const std::string src = materialize_fixture("hang/nightly_j2k_read_shape_hang.jp2", "_afo_hang.jp2");
+  const std::string dst = tmp_dir + "_afo_hang_out.jpg";
+
+  Sipi::cli::ConvertAccessFileArgs req;
+  req.input_path = src;
+  req.output_path = dst;
+  req.decode_timeout_ms = 2000;
+
+  const auto start = std::chrono::steady_clock::now();
+  EXPECT_EQ(Sipi::cli::cmd_convert_access_file(req), EXIT_FAILURE);
+  EXPECT_LT(std::chrono::steady_clock::now() - start, std::chrono::seconds(30));
   EXPECT_FALSE(file_exists(dst));
 }
