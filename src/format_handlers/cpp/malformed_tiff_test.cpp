@@ -270,3 +270,24 @@ TEST(MalformedTiff, TileUndersizedRejectsCleanly)
   ASSERT_FALSE(r.has_value());
   EXPECT_EQ(r.error().code(), Sipi::ErrorCode::kMalformedInput);
 }
+
+// A 1x1 TIFF that declares Photometric=MinIsBlack with three samples per
+// pixel decodes, but Kakadu rejects the JPX colour description the writer
+// derives from it. On that error path `SipiIOJ2k::write()` used to destroy
+// the codestream after `~jpx_target` had already freed the codestream
+// target it flushes into (heap use-after-free in
+// kd_compressed_output::flush_buf; SIGSEGV in the production binary).
+// `tiff_minisblack_three_channel.tif` is the verbatim nightly libFuzzer/ASan
+// crash reproducer; this test asserts a clean write failure instead.
+TEST(MalformedTiff, MinIsBlackThreeChannelJpxWriteFailsCleanly)
+{
+  Sipi::SipiImage img;
+  ASSERT_TRUE(img.read(malformed_path("tiff_minisblack_three_channel.tif")).has_value());
+  ASSERT_EQ(img.getNc(), 3U);
+
+  const std::string dst = sipi::test::tmp_dir() + "/_j2k_minisblack_three_channel_test.jpx";
+  const auto r = img.write("jpx", dst);
+  ASSERT_FALSE(r.has_value());
+  EXPECT_EQ(r.error().code(), Sipi::ErrorCode::kWriteFailed);
+  std::remove(dst.c_str());
+}

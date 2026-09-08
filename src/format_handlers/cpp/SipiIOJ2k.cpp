@@ -1202,10 +1202,11 @@ Result<void> SipiIOJ2k::write(SipiImage *img, const OutputSink &sink, const Sipi
   std::unique_ptr<SinkStream> sink_stream;
   std::unique_ptr<J2kHttpStream> http;
 
-  // Declared outside the try so the catch below can destroy it; the JPX
-  // target and its boxes are deliberately NOT closed on the error path —
-  // closing a jpx_target with incompletely written codestreams raises
-  // another Kakadu error.
+  // The JPX target and its boxes are deliberately NOT closed explicitly on
+  // the error path — closing a jpx_target with incompletely written
+  // codestreams raises another Kakadu error. Its destructor still runs when
+  // the try block unwinds, and frees the codestream target this codestream
+  // flushes into, so `codestream_guard` below destroys the codestream first.
   kdu_codestream codestream;
 
   try {
@@ -1268,6 +1269,20 @@ Result<void> SipiIOJ2k::write(SipiImage *img, const OutputSink &sink, const Sipi
     jpx_out.open(&jp2_ultimate_tgt, &membroker);
     jpx_codestream_target jpx_stream = jpx_out.add_codestream();
     jpx_layer_target jpx_layer = jpx_out.add_layer();
+
+    // Declared after `jpx_out` so it is destroyed before it: on a Kakadu error
+    // `~jpx_target` frees the codestream target, and a `codestream.destroy()`
+    // that runs afterwards flushes into that freed memory (heap
+    // use-after-free in kd_compressed_output::flush_buf). The success path
+    // destroys the codestream itself below; the guard then finds none.
+    struct CodestreamGuard
+    {
+      kdu_codestream &cs;
+      ~CodestreamGuard()
+      {
+        if (cs.exists()) { cs.destroy(); }
+      }
+    } codestream_guard{ codestream };
 
     // jp2_palette jp2_family_palette = jpx_stream.access_palette();
     jp2_resolution jp2_family_resolution = jpx_layer.access_resolution();
@@ -1694,7 +1709,6 @@ Result<void> SipiIOJ2k::write(SipiImage *img, const OutputSink &sink, const Sipi
     jpx_out.close();
     if (jp2_ultimate_tgt.exists()) { jp2_ultimate_tgt.close(); }
   } catch (kdu_exception e) {
-    if (codestream.exists()) { codestream.destroy(); }
     if (http && http->client_aborted) {
       return std::unexpected(
         SipiValueError{ ErrorCode::kClientAbort, "Client aborted HTTP response during JPEG2000 write" });
