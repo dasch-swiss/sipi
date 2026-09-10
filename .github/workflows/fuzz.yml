@@ -42,9 +42,11 @@
 # Kakadu hang class is known and contained at the seam, so a fresh instance is
 # recorded as a `timeout-*` artifact, not a red leg.
 #
-# Linux-amd64 only: `--config=fuzz` cannot link the libFuzzer runtime on
-# darwin (`.bazelrc` §Fuzzing), exactly like the sanitizer gate. macOS gets the
-# corpus-replay tests, which ride along in the ordinary `//src/...` sweeps.
+# Linux-amd64 only. `--config=fuzz` links on macOS too since hermetic-llvm
+# 0.8.18 (`.bazelrc` §Fuzzing; `just fuzz` runs the loop locally on darwin),
+# but phase 5's `--config=fuzz --config=asan` pairing is still Linux-only, so
+# one Linux leg carries both passes. macOS gets the corpus-replay tests, which
+# ride along in the ordinary `//src/...` sweeps.
 #
 # Every Bazel step invokes `just <recipe>` — no inline bazel calls (CLAUDE.md's
 # build-reproducibility invariant). The fuzz loop itself is not a Bazel
