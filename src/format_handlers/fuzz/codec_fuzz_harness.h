@@ -128,7 +128,16 @@ inline std::uint16_t read_u16le(const uint8_t *data, std::size_t offset)
 // is where the container/header parsing coverage lives — only the second,
 // full `read` step is skipped once the probe's geometry implies a buffer
 // above this budget.
-inline constexpr std::uint64_t kMaxHarnessDecodeBytes = 512ULL * 1024 * 1024;
+//
+// Sized for the slowest configuration that runs this harness, not for RSS.
+// The ASan-paired fuzz pass builds at `-O0` (`build:asan` forces
+// `--compilation_mode=dbg`), where libc++ destroys a byte vector with one
+// non-inlined call per element and the TIFF handler holds two full-size
+// pixel buffers at once — so an admitted decode costs roughly 60 ms per MB
+// of geometry even when libtiff rejects the first scanline. libFuzzer's
+// per-input timeout is 25 s (`fuzz.yml`); 64 MiB keeps the worst case near
+// 4 s. Larger geometries add no coverage: more scanlines run the same code.
+inline constexpr std::uint64_t kMaxHarnessDecodeBytes = 64ULL * 1024 * 1024;
 
 // Encode budget for `run_roundtrip`'s four re-encodes (rationale at the use
 // site): a decoded image above this many bytes is not re-encoded.
