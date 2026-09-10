@@ -537,13 +537,13 @@ _Execution: sonnet, low (proposed diffs only; every change is applied by the mai
 
 _Execution: haiku, low (dispositions are listed here; the work is bookkeeping)._
 
-- [ ] Close DEV-6072 with the disposition recorded in the wave-1 plan (S16 fixed, S25 gone, S15 accepted) (S2-44)
-- [ ] Close DEV-6075 as superseded: realloc-null fixed, strncpy absent, MEMTIFF unreachable, J2K cast = S2-02/03 (Phase 1)
-- [ ] Close DEV-6368 and DEV-6369 (duplicate pair; libjwt fork died with shttps, JWT is `jsonwebtoken`)
-- [ ] Close DEV-6117 (2025 report against the removed C++ server) or re-triage against the Rust shell with a reproduction request
-- [ ] Verify DEV-6640 against PR #795 (hermetic-llvm 0.8.18 unlocked macOS libFuzzer) and close if done
-- [ ] Verify DEV-7079 status against commit `dc12a6d1` (PNG eXIf fix) and close
-- [ ] Verify DEV-7132 to DEV-7147 are children of DEV-7131 with the finding IDs in each description and that their blocking edges match the dependencies stated in this plan (created 2026-09-04; keep them in sync when the plan changes)
+- [x] Close DEV-6072 with the disposition recorded in the wave-1 plan (S16 fixed, S25 gone, S15 accepted) (S2-44)
+- [x] Close DEV-6075 as superseded: realloc-null fixed, strncpy absent, MEMTIFF unreachable, J2K cast = S2-02/03 (Phase 1)
+- [x] Close DEV-6368 and DEV-6369 (duplicate pair; libjwt fork died with shttps, JWT is `jsonwebtoken`)
+- [x] Close DEV-6117 (2025 report against the removed C++ server) or re-triage against the Rust shell with a reproduction request
+- [x] Verify DEV-6640 against PR #795 (hermetic-llvm 0.8.18 unlocked macOS libFuzzer) and close if done
+- [x] Verify DEV-7079 status against commit `dc12a6d1` (PNG eXIf fix) and close
+- [x] Verify DEV-7132 to DEV-7147 are children of DEV-7131 with the finding IDs in each description and that their blocking edges match the dependencies stated in this plan (created 2026-09-04; keep them in sync when the plan changes)
 
 #### Phase 13: Security release and rollout (after the one PR merges) (DEV-7147)
 
