@@ -467,11 +467,19 @@ fn bare_restrict_knora_json_is_not_found() {
 /// unchanged.
 #[test]
 fn public_hosts_allowlist_substitutes_hostile_forwarded_host() {
+    // Its own cache directory: this second server shares the working directory
+    // with the binary's shared server, and a starting server reclaims every
+    // cache file its freshly-read index does not list — which would delete the
+    // entries the shared server still holds in memory and turn its next cache
+    // hit into a 500.
     let srv = SipiServer::start_env(
         "config/sipi.e2e-test-config.lua",
         &test_data_dir(),
         &[],
-        &[("SIPI_PUBLIC_HOSTS", "iiif.example.org,iiif2.example.org")],
+        &[
+            ("SIPI_PUBLIC_HOSTS", "iiif.example.org,iiif2.example.org"),
+            ("SIPI_CACHE_DIR", "./cache_public_hosts"),
+        ],
     );
 
     let redirect_resp = client_no_redirect()
