@@ -136,6 +136,13 @@ state the policy never emits. An unrecognised literal must
 deny **and increment a counter** — a silent catch-all would make a future
 rollout look like mysterious denials with no stack trace.
 
+On the dsp-api side that is a real counter. In the hook it is a `LOG_ERR` line:
+SIPI exposes no metrics binding to Lua, and opening one for a single defensive
+branch would put metric labels under script control, which is a cardinality
+hazard. The branch fires only on a vocabulary mismatch between dsp-api and the
+hook, and the two ship in the same image, so an alert on the log line is the
+proportionate signal. Decided 2026-09-12.
+
 **Vocabulary.** The payload is authored by the VRE (`dsp-api`) and consumed by
 `dsp-ingest` and by SIPI's hook, so it speaks VRE terms — **Original** and
 **Derivative** — not the Access Area's Preservation File / Service File / Access
@@ -327,9 +334,9 @@ it today.
   first, bump the two per-arch `oci.pull` digests in dsp-api's `MODULE.bazel`
   within the dsp-api PR, deploy dsp-api and the pinned image together, and sync
   ops-deploy. Deploying either alone breaks the other: an old SIPI meets an
-  unknown `stream`, `permission_from_str:720-730` maps it to `Deny` and the
-  request answers 401; a new SIPI meets an old hook's bare `restrict` and
-  answers 403.
+  unknown `stream`, `valid_permission` refuses it inside the Lua runtime before
+  `permission_from_str` is ever reached, and the request answers 500; a new SIPI
+  meets an old hook's bare `restrict` and answers 403.
 - **The contract can change atomically.** Both production consumers of
   `/admin/files` live in the dsp-api repo — `FetchAssetPermissions.scala:41` and
   `modules/sipi/scripts/sipi.init.lua:25`, the latter shipped into the SIPI image
@@ -429,19 +436,19 @@ it today.
 
 _Execution: opus, medium (a new permission type is a vocabulary addition with a deliberately weak initial enforcement; the boundary it draws matters more than the code)._
 
-- [ ] Add `Stream = 7` to **both** sides of the hand-mirrored FFI enum — `SipiPermType` in `src/server/rust/src/ffi.rs:352-360` and `sipi_ffi.h:236` — and extend the drift `static_assert`s (`sipi_ffi.h:458-464`) and their paired Rust guard (`ffi.rs:362-364`). **Append; never renumber**, or an existing permission is silently misread across the seam
-- [ ] Add `"stream"` to `permission_from_str` (`src/server/rust/src/routes.rs:720-730`)
-- [ ] `/file` serves a `stream` decision exactly as it serves `allow`. Do **not** add a disposition override: `content_disposition` (`routes.rs:2351-2367`) already emits `inline` for every response and SIPI never sends `attachment`
-- [ ] Count `stream` decisions (a counter alongside the existing metrics) so the population is observable before any enforcement is chosen — this is the only day-one behavioural addition
-- [ ] `stream` joins `Allow | Restrict` in the `Iiif | KnoraJson` access predicate (`routes.rs:462-467`) so metadata is served
-- [ ] `stream` on the IIIF image route behaves as `allow` — it carries no pixel restriction. dsp-api never emits it for a still image, so this branch exists for generic SIPI deployments; record that so it is never mistaken for a restriction
-- [ ] `UBIQUITOUS_LANGUAGE.md`: add **Stream** to the permission-types table, stating that it expresses intent and is not a security boundary today
-- [ ] Update every place that hardcodes the count or enumerates the types — `UBIQUITOUS_LANGUAGE.md:117` ("The seven valid permission-type strings"), its **Permission** row's list at `:108`, `CONTEXT.md:54` ("the seven Permission types"), and `docs/src/lua/index.md:446`. Seven becomes eight in prose, not only in a table
+- [x] Add `Stream = 7` to **both** sides of the hand-mirrored FFI enum — `SipiPermType` in `src/server/rust/src/ffi.rs:352-360` and `sipi_ffi.h:236` — and extend the drift `static_assert`s (`sipi_ffi.h:458-464`) and their paired Rust guard (`ffi.rs:362-364`). **Append; never renumber**, or an existing permission is silently misread across the seam
+- [x] Add `"stream"` to `permission_from_str` (`src/server/rust/src/routes.rs:720-730`)
+- [x] `/file` serves a `stream` decision exactly as it serves `allow`. Do **not** add a disposition override: `content_disposition` (`routes.rs:2351-2367`) already emits `inline` for every response and SIPI never sends `attachment`
+- [x] Count `stream` decisions (a counter alongside the existing metrics) so the population is observable before any enforcement is chosen — this is the only day-one behavioural addition
+- [x] `stream` joins `Allow | Restrict` in the `Iiif | KnoraJson` access predicate (`routes.rs:462-467`) so metadata is served
+- [x] `stream` on the IIIF image route behaves as `allow` — it carries no pixel restriction. dsp-api never emits it for a still image, so this branch exists for generic SIPI deployments; record that so it is never mistaken for a restriction
+- [x] `UBIQUITOUS_LANGUAGE.md`: add **Stream** to the permission-types table, stating that it expresses intent and is not a security boundary today
+- [x] Update every place that hardcodes the count or enumerates the types — `UBIQUITOUS_LANGUAGE.md:117` ("The seven valid permission-type strings"), its **Permission** row's list at `:108`, `CONTEXT.md:54` ("the seven Permission types"), and `docs/src/lua/index.md:446`. Seven becomes eight in prose, not only in a table
 - [x] `CONTEXT.md`: record the VRE's **Original** / **Derivative** vocabulary as upstream language, and that it is a lifecycle rather than a synonym for Preservation File / Service File / Access File
-- [ ] `docs/src/lua/index.md`: document the new return value for `pre_flight`
-- [ ] ADR-0027 (0026 is the highest today) recording why `stream` exists, that it changes no served byte on day one, what it guarantees (nothing against a determined capture), and which tightenings are reserved to SIPI versus which need a different derivative from ingest
-- [ ] e2e: a `stream` decision returns 200 on `/file` and 200 on `info.json`, and is byte-identical to what `allow` returns for the same asset — the e2e that pins "day one changes nothing" so a later tightening has to break it deliberately
-- [ ] Correct the wave-2 plan's Phase 5 coordination note, which claims dsp-api must default a size in `sipi.init.lua`
+- [x] `docs/src/lua/index.md`: document the new return value for `pre_flight`
+- [x] ADR-0027 (0026 is the highest today) recording why `stream` exists, that it changes no served byte on day one, what it guarantees (nothing against a determined capture), and which tightenings are reserved to SIPI versus which need a different derivative from ingest
+- [x] e2e: a `stream` decision returns 200 on `/file` and 200 on `info.json`, and is byte-identical to what `allow` returns for the same asset — the e2e that pins "day one changes nothing" so a later tightening has to break it deliberately
+- [x] Correct the wave-2 plan's Phase 5 coordination note, which claims dsp-api must default a size in `sipi.init.lua`
 
 #### Phase 2: dsp-api — optional stored setting
 
@@ -655,11 +662,17 @@ SELECT ?p ?size ?wm WHERE {
 
 ### Deploy sequence
 
-- Deploy dsp-api with the pinned SIPI image as one train, then dsp-app, then sync
-  ops-deploy.
-- Roll the SIPI wave-2 image (wave-2 plan Phase 13) only after that train lands.
-- Close dsp-api PR #4329 and DEV-7155 as superseded — the branch they patch no
-  longer exists.
+- **The digest bump is the wave-2 rollout.** `MODULE.bazel` pins SIPI `v8.0.0`
+  today, which predates wave-2. Phase 4 moves it to the release carrying
+  `stream`, so that one bump also ships every wave-2 change — including S2-09,
+  which refuses a bare `restrict`. Rolling this dsp-api release *is* wave-2
+  Phase 13; they are one event, not two in sequence, and wave-2's verification
+  and comms belong to this train.
+- Deploy dsp-api, then dsp-app, then sync ops-deploy. There is no separate SIPI
+  deploy step: `knora-sipi` is a thin overlay that copies the Lua scripts onto
+  the upstream image, and ops-deploy pins one dsp-api version that carries both.
+- Close DEV-7155 as superseded. PR #4329 is **not** closed — its branch is reused
+  for this work, reset onto `main` so the superseded commit does not ship.
 
 ### Decisions still open
 
@@ -686,12 +699,12 @@ SELECT ?p ?size ?wm WHERE {
 
 | Risk | Severity | Mitigation |
 |---|---|---|
-| dsp-api and the SIPI image are deployed separately, so an old SIPI meets `stream` (401) or a new SIPI meets a bare `restrict` (403) | High | One release train: SIPI released first, its digests pinned in the dsp-api PR, deployed together |
+| A new `sipi.init.lua` runs against an older SIPI binary, so `stream` is refused with a 500 | Medium | Not reachable in a deployed environment: `knora-sipi` is a thin overlay that copies the Lua scripts onto the upstream SIPI image (`modules/sipi/BUILD.bazel`), and the two `oci.pull` digests in `MODULE.bazel` are the sole source of the SIPI version, so hook and binary ship as one artifact under one dsp-api version. The exposure is dev and CI, between the hook rewrite and the digest bump inside this PR — which is where it bit: 13 `//modules/test-e2e:test` failures until the digests land |
 | A stale `pct:100` triple outlives the migration and makes a project unreadable once `Size.from` rejects it | High | The `KnoraBaseVersion` bump blocks serving until the plugin runs; it must not be skipped |
 | `stream` is mistaken for an enforcement guarantee | Medium | ADR-0027 and the glossary state plainly that it expresses intent and defeats no capture today, and the e2e pins `stream` as byte-identical to `allow` so the absence of enforcement is asserted, not assumed |
 | A media kind is mapped wrongly and a restricted image is served as `stream` | High | `AssetAccess.from` is one total function with an exhaustive match, covered per media kind in `AssetPermissionsResponderSpec` |
 | A file value class added to `knora-base` later has no `MediaKind`, and the compiler cannot catch it | Medium | Unmapped IRIs fail closed and are counted; the ontology-enumerating test fails when a class is added |
-| SIPI wave-2 rolls before this train lands | High | Wave-2 Phase 13 is explicitly gated on it |
+| ~~SIPI wave-2 rolls before this train lands~~ | Closed | Not separable: `MODULE.bazel` pins SIPI `v8.0.0`, so wave-2 reaches a deployment only via Phase 4's digest bump. This train *is* the wave-2 rollout |
 | The `Option` change touches a positional constructor across 60+ files | Medium | The compiler catches type changes; the two pinned SPARQL tests catch mapper changes |
 | Between the dsp-api and dsp-app deploys, the old UI POSTs `pct:100` and gets a 400 | Low | Ship both in one release train; the failure is a visible error on one admin action, not data loss |
 | ~~`RV` archives exist in production and lose access on rollout~~ | Closed | Measured on stage 2026-09-12: zero `RV` archives. Re-run the census before the deploy to confirm it still holds |
