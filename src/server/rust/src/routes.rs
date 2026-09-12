@@ -11,6 +11,7 @@
 
 use std::ffi::CString;
 use std::io::Write;
+use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::Arc;
 use std::time::{Duration, Instant, SystemTime};
 
@@ -456,7 +457,8 @@ fn dispatch_engine(
         Err(resp) => return complete(outcome_tx, *resp),
     };
 
-    // The IIIF image serve enforces auth itself (401 for any non-allow/restrict);
+    // The IIIF image serve enforces auth itself (401 for anything but
+    // allow/restrict/stream);
     // info.json renders the auth-service block at 401 instead of gating here;
     // knora.json is a DSP-internal metadata surface with no auth-challenge
     // shape of its own, so an unauthorized caller gets a bare 404 rather than a
@@ -464,7 +466,7 @@ fn dispatch_engine(
     if matches!(parsed.kind, RequestKind::Iiif | RequestKind::KnoraJson)
         && !matches!(
             access.permission,
-            SipiPermType::Allow | SipiPermType::Restrict
+            SipiPermType::Allow | SipiPermType::Restrict | SipiPermType::Stream
         )
     {
         let status = if parsed.kind == RequestKind::Iiif {
@@ -552,6 +554,47 @@ fn busy_response() -> Response {
 }
 
 // ── Access resolution (preflight) ───────────────────────────────────────────
+
+/// The permission vocabulary in discriminant order: the index into
+/// [`DECISIONS`], and the value set the OTLP bridge fans the counter over.
+pub(crate) const PERMISSIONS: [SipiPermType; 8] = [
+    SipiPermType::Allow,
+    SipiPermType::Login,
+    SipiPermType::Clickthrough,
+    SipiPermType::Kiosk,
+    SipiPermType::External,
+    SipiPermType::Restrict,
+    SipiPermType::Deny,
+    SipiPermType::Stream,
+];
+
+/// Resolved preflight decisions per permission (process-global; read by the OTel
+/// bridge in `crate::metrics`). `stream` serves exactly as `allow` (ADR-0027), so
+/// nothing in a response distinguishes that population — and a bare `stream` count
+/// only says it is non-zero. Counting every permission gives it the denominator
+/// that sizes an enforcement decision.
+static DECISIONS: [AtomicU64; PERMISSIONS.len()] = [const { AtomicU64::new(0) }; PERMISSIONS.len()];
+
+/// Cumulative decisions carrying `permission`, for the OTLP bridge.
+pub(crate) fn decisions(permission: SipiPermType) -> u64 {
+    DECISIONS[permission as usize].load(Ordering::Relaxed)
+}
+
+/// The hook's wire string for a permission — the inverse of
+/// [`permission_from_str`], and the counter's attribute value. Exhaustive on
+/// purpose: a new permission type does not compile until it has a string here.
+pub(crate) fn permission_str(permission: SipiPermType) -> &'static str {
+    match permission {
+        SipiPermType::Allow => "allow",
+        SipiPermType::Login => "login",
+        SipiPermType::Clickthrough => "clickthrough",
+        SipiPermType::Kiosk => "kiosk",
+        SipiPermType::External => "external",
+        SipiPermType::Restrict => "restrict",
+        SipiPermType::Deny => "deny",
+        SipiPermType::Stream => "stream",
+    }
+}
 
 /// Resolve the infile + permission for an IIIF / info / knora request: run the
 /// `pre_flight` hook when one is defined (it returns the infile), else build the
@@ -705,8 +748,14 @@ fn file_access(
             )));
         }
     };
-    match outcome.permission {
-        SipiPermType::Allow => Ok(access_from(outcome)),
+    // Folded before the dispatch, not inside it: a refused decision is as much a
+    // resolved decision as a served one, and the counter needs both.
+    let access = access_from(outcome);
+    match access.permission {
+        // `stream` expresses "consume in place, do not hand over"; it carries no
+        // restriction SIPI enforces today and serves exactly as `allow`
+        // (ADR-0027).
+        SipiPermType::Allow | SipiPermType::Stream => Ok(access),
         // A restrict decision cannot be applied to a raw `/file` download (no
         // clamp or watermark point exists on that path), so it is refused
         // rather than served at full fidelity (S2-09).
@@ -725,6 +774,7 @@ fn permission_from_str(s: &str) -> SipiPermType {
         "kiosk" => SipiPermType::Kiosk,
         "external" => SipiPermType::External,
         "restrict" => SipiPermType::Restrict,
+        "stream" => SipiPermType::Stream,
         _ => SipiPermType::Deny,
     }
 }
@@ -781,6 +831,10 @@ fn build_request_data(
 /// Fold a [`PreflightOutcome`] into an [`Access`], taking the hook's `infile`
 /// (empty for `deny`, which then fails R2 → 404, matching the C++ `access()`).
 fn access_from(outcome: PreflightOutcome) -> Access {
+    // Counted here rather than at `permission_from_str` because a preflight-cache
+    // hit never re-parses the hook's string: this is the one point every
+    // resolved decision — hook or cache, IIIF or `/file` — passes through.
+    DECISIONS[outcome.permission as usize].fetch_add(1, Ordering::Relaxed);
     let infile = outcome.get("infile").unwrap_or_default().to_owned();
     Access {
         infile,
@@ -2196,17 +2250,23 @@ fn access_kv_str<'a>(access: &'a Access, key: &str) -> Option<&'a str> {
         .map(|(_, v)| v.as_str())
 }
 
-/// Clamp an image's dims for a non-`Allow` permission so info.json / knora.json
+/// Clamp an image's dims for a restricted permission so info.json / knora.json
 /// never discloses the native tiling pyramid. A `Restrict` decision that caps
 /// the view to an IIIF size string also has its width/height clamped to that
-/// size (rather than the native resolution); every other non-`Allow`
+/// size (rather than the native resolution); every other restricted
 /// permission keeps the native width/height (the caller renders an auth
 /// challenge, not the image) but still loses the tile grid.
+///
+/// `Stream` is not a restriction: it restricts no pixel and must describe the
+/// image exactly as `Allow` does, tile grid included (ADR-0027).
 fn restricted_dims(
     dims: &ffi::SipiImageDims,
     access: &Access,
 ) -> Result<ffi::SipiImageDims, iiif_parser::ParseError> {
-    if access.permission == SipiPermType::Allow {
+    if matches!(
+        access.permission,
+        SipiPermType::Allow | SipiPermType::Stream
+    ) {
         return Ok(*dims);
     }
     let mut restricted = *dims;
@@ -2872,5 +2932,131 @@ mod tests {
             decode_path_suffix("/a%20b.bin").as_deref(),
             Some("/a b.bin") // %20 → space (a valid path char)
         );
+    }
+
+    #[test]
+    fn permission_vocabulary_is_identical_on_both_gates() {
+        for permission in PERMISSIONS {
+            let wire = permission_str(permission);
+            assert_eq!(permission_from_str(wire), permission, "{wire} round-trip");
+            // The runtime gate splits the vocabulary: clickthrough/kiosk/external
+            // are IIIF-only, the rest are the base set `file_pre_flight` shares.
+            let extended_only = matches!(
+                permission,
+                SipiPermType::Clickthrough | SipiPermType::Kiosk | SipiPermType::External
+            );
+            assert!(
+                scripting::valid_permission(wire, true),
+                "{wire} must pass the IIIF gate"
+            );
+            assert_eq!(
+                scripting::valid_permission(wire, false),
+                !extended_only,
+                "{wire} base-set gate"
+            );
+        }
+    }
+
+    fn preflight_state(lua: Arc<scripting::LuaEnv>) -> AppState {
+        let admission = Arc::new(
+            Admission::new(AdmissionConfig {
+                nthreads: 2,
+                tiles_thread_ratio: 0.5,
+                tiles_memory_ratio: 0.25,
+                mode: AdmissionMode::Basic,
+                max_waiting: 2,
+                queue_timeout: Duration::from_secs(1),
+                large_decode_threshold_bytes: 32 * 1024 * 1024,
+                memory_limit_bytes: 0,
+            })
+            .expect("admission config"),
+        );
+        AppState {
+            ready: true,
+            imgroot: "/img".to_string(),
+            resolved_imgroot: "/img".to_string(),
+            prefix_as_path: true,
+            has_preflight: true,
+            has_file_preflight: true,
+            lua: Some(lua),
+            admission,
+            routes: Vec::new(),
+            max_post_size: crate::config::DEFAULT_MAX_POST_SIZE,
+            docroot: String::new(),
+            wwwroute: String::new(),
+            preflight_cache: preflight_cache::PreflightCache::new(16, Duration::from_secs(60)),
+            allowed_origins: Vec::new(),
+            public_hosts: Vec::new(),
+        }
+    }
+
+    #[test]
+    fn every_resolved_decision_is_counted_once_under_its_permission() {
+        // The decision counters are process-global, so all three paths are walked
+        // in one test: a sibling test resolving a decision in parallel would make
+        // the deltas unreadable.
+        let dir = tempfile::tempdir().expect("tempdir");
+        let init = dir.path().join("init.lua");
+        std::fs::write(
+            &init,
+            "function pre_flight(prefix, identifier, cookie)\n\
+             return 'stream', '/img/' .. identifier\n\
+             end\n\
+             function file_pre_flight(filepath, cookie)\n\
+             return 'login', filepath\n\
+             end\n",
+        )
+        .expect("write init");
+        let state = preflight_state(Arc::new(scripting::LuaEnv::new(
+            dir.path().to_path_buf(),
+            Some(init),
+            String::new(),
+            scripting::LimitConfig::default(),
+            scripting::bindings::ConfigValues::default(),
+        )));
+        let parsed = ParsedRequest {
+            kind: RequestKind::Iiif,
+            prefix: "unit".to_string(),
+            identifier: "lena.jp2".to_string(),
+            params: None,
+        };
+        let uri: Uri = "/unit/lena.jp2/full/max/0/default.jpg".parse().unwrap();
+        let hdrs = headers(&[]);
+        let before: Vec<u64> = PERMISSIONS.iter().map(|p| decisions(*p)).collect();
+
+        // 1. IIIF route, hook run fresh (the cache is empty, so this is a miss).
+        let hits_before = preflight_cache::hits();
+        let access = iiif_access(&state, &parsed, &Method::GET, &uri, &hdrs)
+            .unwrap_or_else(|_| panic!("hook decision"));
+        assert_eq!(access.permission, SipiPermType::Stream);
+        assert_eq!(access.infile, "/img/lena.jp2");
+        assert_eq!(decisions(SipiPermType::Stream), before[7] + 1);
+
+        // 2. IIIF route again, same key: the cache answers and the hook never runs.
+        let access = iiif_access(&state, &parsed, &Method::GET, &uri, &hdrs)
+            .unwrap_or_else(|_| panic!("cached decision"));
+        assert_eq!(access.permission, SipiPermType::Stream);
+        assert_eq!(
+            preflight_cache::hits(),
+            hits_before + 1,
+            "second call must be served from the cache"
+        );
+        assert_eq!(decisions(SipiPermType::Stream), before[7] + 2);
+
+        // 3. `/file`, whose hook refuses: a refused decision is resolved too.
+        let file_uri: Uri = "/unit/lena.jp2/file".parse().unwrap();
+        let refused = file_access(&state, &parsed, &Method::GET, &file_uri, &hdrs)
+            .err()
+            .expect("login is refused on /file");
+        assert_eq!(refused.status(), StatusCode::UNAUTHORIZED);
+        assert_eq!(decisions(SipiPermType::Login), before[1] + 1);
+
+        // Nothing else moved, and nothing moved twice.
+        let deltas: Vec<u64> = PERMISSIONS
+            .iter()
+            .enumerate()
+            .map(|(i, p)| decisions(*p) - before[i])
+            .collect();
+        assert_eq!(deltas, vec![0, 1, 0, 0, 0, 0, 0, 2]);
     }
 }

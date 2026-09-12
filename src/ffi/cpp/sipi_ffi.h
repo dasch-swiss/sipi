@@ -232,7 +232,8 @@ typedef enum {
   SIPI_KIOSK = 3,
   SIPI_EXTERNAL = 4,
   SIPI_RESTRICT = 5,
-  SIPI_DENY = 6
+  SIPI_DENY = 6,
+  SIPI_STREAM = 7
 } SipiPermType;
 
 typedef void (*SipiKVFn)(void *ctx, const char *key, const char *value);
@@ -462,6 +463,7 @@ static_assert(SIPI_KIOSK == 3, "SipiPermType drift");
 static_assert(SIPI_EXTERNAL == 4, "SipiPermType drift");
 static_assert(SIPI_RESTRICT == 5, "SipiPermType drift");
 static_assert(SIPI_DENY == 6, "SipiPermType drift");
+static_assert(SIPI_STREAM == 7, "SipiPermType drift");
 
 /* SipiResponse — void* + five callback pointers. */
 static_assert(sizeof(SipiResponse) == 48, "SipiResponse size drifted from src/server/rust/src/ffi.rs");
