@@ -1,5 +1,33 @@
 # Changelog
 
+## [9.1.0](https://github.com/dasch-swiss/sipi/compare/v9.0.1...v9.1.0) (2026-09-12)
+
+
+### Features
+
+* **server,observability:** Add the stream permission type ([c17d413](https://github.com/dasch-swiss/sipi/commit/c17d41362f40c0671139d2572373725dee7ea8ad))
+
+
+### Documentation
+
+* **docs:** Document the stream permission type ([a9be587](https://github.com/dasch-swiss/sipi/commit/a9be58781f634890146fe4fca2601360e5d1cc98))
+* **docs:** Record the VRE's Original/Derivative vocabulary ([abdd939](https://github.com/dasch-swiss/sipi/commit/abdd939dfc3cfa57fb04931ab486b4f58af14665))
+* **docs:** Register the Permission vocabulary in the architecture map ([93c0a7d](https://github.com/dasch-swiss/sipi/commit/93c0a7de41760ec61fb1f2d8bf2715fdc6186e0f))
+* **specs:** Correct the asset-access plan's release-coupling model ([ab9e84d](https://github.com/dasch-swiss/sipi/commit/ab9e84d129d47cdf070f1d5b2379d1924d5040fd))
+* **specs:** Plan asset access as a first-class decision ([c03094e](https://github.com/dasch-swiss/sipi/commit/c03094e30c842777c4ecbb681ed5b2b69ce2bb46))
+* **specs:** Tick wave-2 Phase 12 (Linear reconciliation) as done ([05e0083](https://github.com/dasch-swiss/sipi/commit/05e0083fc09115bf0c561aff131b78f18e10e9fe))
+
+
+### Tests
+
+* **e2e:** Give the public-hosts server its own cache directory ([8505424](https://github.com/dasch-swiss/sipi/commit/85054243e2eaa24e6a9ad061d454e7b23cee2bcc))
+* **format_handlers:** Size the codec fuzz decode budget for the ASan -O0 pass ([8414705](https://github.com/dasch-swiss/sipi/commit/8414705fe9bc68f720a1e045f75e66708b46cd2d))
+
+
+### Miscellaneous Chores
+
+* **ci:** Correct the stale Darwin libFuzzer note in fuzz.yml ([f1cb142](https://github.com/dasch-swiss/sipi/commit/f1cb1422bfe5703c21234620238d8bebeeb39a90))
+
 ## [9.0.1](https://github.com/dasch-swiss/sipi/compare/v9.0.0...v9.0.1) (2026-09-08)
 
 
