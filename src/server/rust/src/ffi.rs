@@ -357,6 +357,7 @@ pub enum SipiPermType {
     External = 4,
     Restrict = 5,
     Deny = 6,
+    Stream = 7,
 }
 
 // Compile-time value guard for the preflight permission enum — paired with the
@@ -370,6 +371,7 @@ const _: () = {
     assert!(SipiPermType::External as isize == 4);
     assert!(SipiPermType::Restrict as isize == 5);
     assert!(SipiPermType::Deny as isize == 6);
+    assert!(SipiPermType::Stream as isize == 7);
 };
 
 /// The preflight key/value emit callback (mirrors `SipiKVFn`).

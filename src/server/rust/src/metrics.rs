@@ -49,6 +49,7 @@ use admission::{Admission, AdmissionMode, AdmissionSnapshot};
 use crate::ffi::{self, SipiMetricsSnapshot};
 use crate::malloc_stats::{self, MallocStats};
 use crate::preflight_cache;
+use crate::routes;
 
 /// Explicit bucket boundaries (seconds) for `http.server.request.duration`, as
 /// recommended by the HTTP semantic conventions.
@@ -311,6 +312,25 @@ pub(crate) fn register(admission: Arc<Admission>) {
         .u64_observable_counter("sipi.preflight_cache.misses")
         .with_description("Preflight access-cache misses (hook ran)")
         .with_callback(|observer| observer.observe(preflight_cache::misses(), &[]))
+        .build();
+    // ── Preflight decision metrics ──────────────────────────────────────────
+    // The shell's resolved access decisions (`crate::routes`), split by
+    // permission. Renders as `sipi_preflight_decisions_total{permission}` after
+    // Prometheus normalization, so a share is a ratio over the same family.
+    meter
+        .u64_observable_counter("sipi.preflight.decisions")
+        .with_description("Resolved preflight decisions, by permission")
+        .with_callback(|observer| {
+            for permission in routes::PERMISSIONS {
+                observer.observe(
+                    routes::decisions(permission),
+                    &[KeyValue::new(
+                        "permission",
+                        routes::permission_str(permission),
+                    )],
+                );
+            }
+        })
         .build();
     // ── Process allocator metrics ───────────────────────────────────────────
     // Gauges splitting container RSS into "in use" vs "freed but retained by

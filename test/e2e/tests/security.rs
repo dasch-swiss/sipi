@@ -1,6 +1,7 @@
 mod common;
 
 use common::{client, client_no_redirect, server};
+use image::GenericImageView as _;
 use serde_json::json;
 use sipi_e2e::jwt::{alg_none_token, create_jwt, tamper_payload};
 use sipi_e2e::{allocate_ports, http_client, sipi_bin_path, test_data_dir, SipiServer};
@@ -457,6 +458,134 @@ fn bare_restrict_knora_json_is_not_found() {
         resp.status().as_u16(),
         404,
         "a bare restrict decision (no size, no watermark) must be hidden (404) on knora.json"
+    );
+}
+
+// =============================================================================
+// `stream` permission: parity with `allow` (ADR-0027)
+// =============================================================================
+//
+// `stream` records the intent "consumable in place, never handed over as a
+// file". It enforces nothing: the `test_stream` prefix resolves to the same
+// file `unit` serves under `allow`, and every response below must be identical
+// to the `allow` one. A later tightening therefore has to break these
+// assertions deliberately rather than drift past them.
+
+#[test]
+fn stream_file_download_is_byte_identical_to_allow() {
+    let srv = server();
+    let streamed = client()
+        .get(format!("{}/test_stream/test.csv/file", srv.base_url))
+        .send()
+        .expect("GET streamed /file failed");
+    assert_eq!(streamed.status().as_u16(), 200, "stream must serve /file");
+    let streamed_disposition = streamed
+        .headers()
+        .get("content-disposition")
+        .map(|v| v.to_str().expect("ASCII disposition").to_owned());
+    let streamed_body = streamed.bytes().expect("streamed /file body");
+
+    let allowed = client()
+        .get(format!("{}/unit/test.csv/file", srv.base_url))
+        .send()
+        .expect("GET allowed /file failed");
+    assert_eq!(allowed.status().as_u16(), 200);
+    let allowed_disposition = allowed
+        .headers()
+        .get("content-disposition")
+        .map(|v| v.to_str().expect("ASCII disposition").to_owned());
+    let allowed_body = allowed.bytes().expect("allowed /file body");
+
+    assert_eq!(
+        streamed_body, allowed_body,
+        "a stream decision must serve the same bytes as allow"
+    );
+    assert_eq!(
+        streamed_disposition, allowed_disposition,
+        "a stream decision must not change Content-Disposition"
+    );
+}
+
+#[test]
+fn stream_info_json_matches_allow() {
+    let srv = server();
+    let streamed: serde_json::Value = client()
+        .get(format!(
+            "{}/test_stream/lena512.jp2/info.json",
+            srv.base_url
+        ))
+        .send()
+        .expect("GET streamed info.json failed")
+        .json()
+        .expect("streamed info.json must be JSON");
+    let allowed: serde_json::Value = client()
+        .get(format!("{}/unit/lena512.jp2/info.json", srv.base_url))
+        .send()
+        .expect("GET allowed info.json failed")
+        .json()
+        .expect("allowed info.json must be JSON");
+
+    // `id` is the request's own canonical URL, so it differs by prefix; every
+    // other member — the native dims and the `tiles` pyramid a restriction
+    // strips — must match.
+    let strip_id = |mut v: serde_json::Value| {
+        v.as_object_mut().expect("info.json object").remove("id");
+        v
+    };
+    assert_eq!(
+        strip_id(streamed),
+        strip_id(allowed),
+        "a stream decision must describe the image exactly as allow does"
+    );
+}
+
+#[test]
+fn stream_image_serve_matches_allow() {
+    // Compared as decoded pixels, not raw bytes: every rendered representation
+    // embeds an ICC profile carrying a wall-clock creation date (deterministic
+    // only under the approval tests' `SOURCE_DATE_EPOCH`), so two renders
+    // seconds apart differ byte-wise while being the same image.
+    let srv = server();
+    let allowed = client()
+        .get(format!(
+            "{}/unit/lena512.jp2/full/max/0/default.jpg",
+            srv.base_url
+        ))
+        .send()
+        .expect("GET allowed image failed");
+    assert_eq!(allowed.status().as_u16(), 200);
+    let allowed_type = allowed
+        .headers()
+        .get("content-type")
+        .map(|v| v.to_str().expect("ASCII content-type").to_owned());
+    let allowed_img = image::load_from_memory(&allowed.bytes().expect("allowed image body"))
+        .expect("decode allowed render");
+
+    let streamed = client()
+        .get(format!(
+            "{}/test_stream/lena512.jp2/full/max/0/default.jpg",
+            srv.base_url
+        ))
+        .send()
+        .expect("GET streamed image failed");
+    assert_eq!(streamed.status().as_u16(), 200);
+    let streamed_type = streamed
+        .headers()
+        .get("content-type")
+        .map(|v| v.to_str().expect("ASCII content-type").to_owned());
+    let streamed_img = image::load_from_memory(&streamed.bytes().expect("streamed image body"))
+        .expect("decode streamed render");
+
+    assert_eq!(streamed_type, allowed_type);
+    assert_eq!(
+        streamed_img.dimensions(),
+        allowed_img.dimensions(),
+        "a stream decision must not clamp the served resolution"
+    );
+    assert_eq!(
+        streamed_img.to_rgb8().into_raw(),
+        allowed_img.to_rgb8().into_raw(),
+        "a stream decision must serve the same pixels as allow"
     );
 }
 

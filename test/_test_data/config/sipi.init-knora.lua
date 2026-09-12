@@ -66,6 +66,14 @@ end
 -------------------------------------------------------------------------------
 
 function file_pre_flight(filepath, cookie)
+    -- Test-only prefix: a `stream` decision resolving to the same file the
+    -- `unit` prefix serves under `allow`, so the e2e can compare the two
+    -- responses byte for byte.
+    local streamed = filepath:match("^%./images/test_stream/(.+)$")
+    if streamed then
+        return "stream", "./images/unit/" .. streamed
+    end
+
     if filepath == "./images/unit/test2.csv" then
         return "deny", ""
     else
@@ -135,6 +143,13 @@ function pre_flight(prefix, identifier, cookie)
     if prefix == "test_restrict_max" then
         local actual_filepath = config.imgroot .. '/unit/' .. identifier
         return {type = 'restrict', size = 'max'}, actual_filepath
+    end
+
+    -- Test-only prefix: a `stream` decision resolving to the same file the
+    -- `unit` prefix serves under `allow`.
+    if prefix == "test_stream" then
+        local actual_filepath = config.imgroot .. '/unit/' .. identifier
+        return 'stream', actual_filepath
     end
 
     if prefix == "test_restrict_bare" then

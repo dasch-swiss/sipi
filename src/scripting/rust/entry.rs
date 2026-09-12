@@ -617,9 +617,12 @@ fn direct_reply(
     }
 }
 
-/// The permission vocabulary: base set + the IIIF-only extensions.
-fn valid_permission(s: &str, extended: bool) -> bool {
-    matches!(s, "allow" | "login" | "restrict" | "deny")
+/// The permission vocabulary: base set + the IIIF-only extensions. The first of
+/// two gates over the same vocabulary — an unlisted string is refused here,
+/// inside the runtime, before the shell's `permission_from_str` ever sees it —
+/// so the shell owns a test that pins the two in lockstep.
+pub fn valid_permission(s: &str, extended: bool) -> bool {
+    matches!(s, "allow" | "login" | "restrict" | "stream" | "deny")
         || (extended && matches!(s, "clickthrough" | "kiosk" | "external"))
 }
 
