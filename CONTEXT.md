@@ -14,6 +14,41 @@ These three terms are **shared Published Language across contexts** at the syste
 
 Use these terms in code, commits, ADRs, and PR descriptions when crossing the seam to the Archive or to another Access Area subdomain. Do not synonymize them with SIPI-internal vocabulary.
 
+## Upstream language (from the VRE)
+
+SIPI also runs inside the **VRE** — `dsp-api` and `dsp-ingest` — where researchers
+upload material and work on it before anything is archived. The VRE has its own
+vocabulary, and SIPI meets it at one seam: the access decision the *Preflight
+script* fetches from `dsp-api` (`GET /admin/files/{shortcode}/{filename}`). That
+payload is authored by the VRE and speaks VRE terms; SIPI translates on receipt.
+
+- **Original** — the byte stream a researcher uploaded. `dsp-ingest` serves it at
+  `/projects/{shortcode}/assets/{assetId}/original`. SIPI never serves an Original
+  under that name.
+- **Derivative** — what `dsp-ingest` produces from an Original at upload time and
+  what SIPI serves, whether through the IIIF pipeline as an *Image* or as-is
+  through `/file` as a *Bitstream*.
+
+**Only still images are transcoded.** `IngestService` dispatches on media type,
+and only `StillImage` produces new bytes (a JP2). `MovingImage`, `Audio`,
+`SvgImage` and `OtherFiles` (PDF, archive, text) all reach
+`storage.copyFile(original.file, derivative)` — the Derivative is byte-identical
+to the Original and differs only in filename (`{assetId}.{ext}`). So for every
+media kind except raster still images, **Original and Derivative name the same
+bytes reached by two different routes**, not two artifacts. Any reasoning that
+treats withholding one as withholding the content is wrong for those kinds.
+
+**These are not synonyms for the Access Area's terms**, and the mapping is a
+lifecycle rather than a translation table. When material is archived, the
+Original is archived *and* a *Preservation File* is derived from it for long-term
+bit preservation; the Access Area separately derives a *Service File*, from which
+SIPI carves *Access Files*. So an Original and a Preservation File are different
+artifacts that coexist, as are a Derivative and a Service File.
+
+Use VRE terms only when describing that seam — the preflight payload and the
+callers on either side of it. Everywhere else in this repo, the Access Area terms
+above and the SIPI glossary remain canonical.
+
 ## Subdomain language (SIPI-local)
 
 The canonical SIPI glossary is in [UBIQUITOUS_LANGUAGE.md](./UBIQUITOUS_LANGUAGE.md). It defines: Image vs Bitstream, Identifier (with embedded Page) + Prefix, Image root vs Document root, the IIIF pipeline terms (Region / Size / Rotation / Quality / Format / Decode level / Canonical URL / Cache key), Format handler vs Codec, Preservation metadata (umbrella) over Embedded metadata + Essentials packet, Image / Bitstream Information document, the three Lua entry points (Init script / Preflight script / Route handler), the seven Permission types, and the Throttling umbrella over Admission (the shell-side two-lane pool) + Decode memory budget.
