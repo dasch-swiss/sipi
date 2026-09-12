@@ -131,6 +131,10 @@ The pre-flight function must return at least 2 parameters:
      exceed `f` times that region's own pixel extent. A client cannot recover
      full resolution by requesting many native-scale regions instead of the
      full image.
+    - `"stream"` marks the representation as one to be consumed in place rather than kept as a file —
+      streamed audio or video, typically. **It expresses intent and enforces nothing:** SIPI serves a
+      `stream` decision exactly as `allow`, with the same bytes and the same headers, and only counts
+      it (`sipi.preflight.decisions{permission="stream"}`). Do not rely on it as an access control.
     - SIPI also supports the [IIIF Authentification API](https://iiif.io/api/auth/1.0/). See section [IIIF
       Authentification]() on how to implement this feature in the pre-flight function.
 - `filepath`: The path to the Service File in the media files repository. This path can be assembled using the

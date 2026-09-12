@@ -105,7 +105,7 @@ Access File (without).
 | **Route handler** (umbrella) | URL-pattern-bound request logic. Built-in endpoints are Rust axum routes on the shell's `Router` (`src/server/rust/src/routes.rs`); scripted endpoints are *Lua route handlers*. | route, custom endpoint |
 | **Lua route handler** | A Lua script bound to a URL pattern, loaded dynamically. Examples: `upload.lua`, `orientation.lua`. **Role:** request-shaping only — preflight permission decisions, custom content endpoints. **Server-state mutation** (cache management, server lifecycle, config reload) is implemented as a *C++ route handler*, not a Lua script. See *Mutation script* (anti-pattern). | route, custom endpoint |
 | **Lua bindings** | Umbrella term for the Rust-hosted binding tables the hardened VM exposes to scripts: `server.*` (request/response + helpers), `server.fs`, `helper` (`filename_hash`), the `SipiImage` userdata (backed by the seam's `sipi_image_*` handle family), and the sqlite `server.db` bindings. Live in `src/scripting/rust/bindings/`; every table registers through the `RequestVm::register_binding` chokepoint. | (none) |
-| **Permission** | The verdict and shaping output returned by a *Preflight script*. Valid types: allow / login / clickthrough / kiosk / external / restrict / deny (see *Permission types*). The Lua-returned permission value is parsed Rust-side (`permission_from_str` in `src/server/rust/src/routes.rs`) into the `SipiPermType` `#[repr(C)]` enum the serve request carries across the seam, and the resolved on-disk path + shaping (`infile`, `watermark`, size caps) travel the preflight reply's key/value list. (A typed `std::variant<AllowPermission, …>` in a `permission/` package was an ADR-0001 target that lapsed under ADR-0013.) | access policy, ACL result |
+| **Permission** | The verdict and shaping output returned by a *Preflight script*. Valid types: allow / login / clickthrough / kiosk / external / restrict / stream / deny (see *Permission types*). The Lua-returned permission value is parsed Rust-side (`permission_from_str` in `src/server/rust/src/routes.rs`) into the `SipiPermType` `#[repr(C)]` enum the serve request carries across the seam, and the resolved on-disk path + shaping (`infile`, `watermark`, size caps) travel the preflight reply's key/value list. (A typed `std::variant<AllowPermission, …>` in a `permission/` package was an ADR-0001 target that lapsed under ADR-0013.) | access policy, ACL result |
 | **Mutation script** (anti-pattern) | A *Lua route handler* that mutates **server state** (cache eviction, server lifecycle, filesystem cleanup, config reload, …). **Forbidden in SIPI.** The canonical surface for server-state mutation is a *C++ route handler* (or a signal handler for lifecycle). Cache state inspection is exposed exclusively through *Metrics*, never through Lua. Past examples that have been removed: `cache.lua`, `exit.lua`, `clean_temp_dir.lua`, `admin_upload.lua`, `debug.lua`. | admin script (when used to mutate state) |
 | **VM profile** | The hardened configuration every per-request Lua VM is built to (ADR-0023, `src/scripting/rust/runtime.rs`): stdlib whitelist (`string`/`table`/`math`/`utf8`/`package`; no `io`, no `debug`), scrubbed base escape hatches (`dofile`/`loadfile`/`load`/`collectgarbage`/`package.loadlib`/`package.searchpath`), the *os shim*, script-dir-restricted `require`, a Lua-heap memory cap, and a wall-clock deadline. The startup config-parse VM shares the whitelist but runs without request limits. | sandbox (as a noun for the whole config) |
 | **os shim** | The Rust-implemented replacement for Lua's `os` table in the *VM profile*: exactly `getenv`, `clock`, `date` — the audited union of what production scripts use. `date` is a strftime subset formatted in Rust, never a passthrough to C `strftime`; `getenv` is deliberately unrestricted. | restricted os table |
@@ -114,7 +114,7 @@ Access File (without).
 
 ### Permission types
 
-The seven valid permission-type strings a preflight script may return:
+The eight valid permission-type strings a preflight script may return:
 
 | Type | Meaning |
 | --- | --- |
@@ -124,6 +124,7 @@ The seven valid permission-type strings a preflight script may return:
 | **kiosk** | Unauthenticated public-terminal mode. |
 | **external** | Defer authorization to an external service. |
 | **restrict** | Serve a degraded representation (size cap and/or watermark) instead of the requested one. The size cap bounds the effective sampling factor of any region request, not just the full-image output box, so it composes across region requests instead of being bypassable by tiling. |
+| **stream** | Serve the representation for consumption in place, not as a file to keep. **Expresses intent; it is not a security boundary.** SIPI serves a `stream` decision exactly as `allow` — same bytes, same headers — and only counts it (`sipi.preflight.decisions{permission="stream"}`, which carries every permission so the share has a denominator), so the population is observable before any enforcement is chosen. See [ADR-0027](docs/adr/0027-stream-permission-type.md). |
 | **deny** | Refuse the request (HTTP 401/403). |
 
 ## Throttling
