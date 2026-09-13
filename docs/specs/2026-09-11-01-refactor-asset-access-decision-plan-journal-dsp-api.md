@@ -421,4 +421,326 @@ ERROR: ... scala @@//modules/webapi:webapi failed
 The probe was removed. Acceptance criterion *"Adding a `MediaKind` fails to compile until
 `AssetAccess.from` handles it"* holds.
 
+## Review fixes
 
+An adversarial review of the branch found four defects. All four are folded into `6e06b0d2` (the asset
+access decision commit), which becomes `3c8f9d611`; the branch is still three commits and still unpushed.
+Nothing was stacked as a `fix:`, because none of this is a defect in `main`.
+
+### The class filter was both too strict and too loose — one bug, one change
+
+The review's FIX 1 and FIX 2 are the same line seen from two sides:
+
+- Too strict: `FILTER (?fileValueClass IN (…nine known classes…))` meant a file value whose only
+  `rdf:type` is a class outside `MediaKind`'s map returned **zero rows**. The responder then failed at the
+  earlier `NotFoundException`, so the `failClosed` branch, its `ZIO.logError` and its counter were
+  unreachable. Ontology drift was indistinguishable from "the file does not exist", and the plan's
+  acceptance criterion *"an RDF class with no `MediaKind` mapping fails closed at runtime"* was
+  unexercised.
+- Too loose: the filter does nothing about two *concrete sibling* classes on one node. That yields two
+  rows, and `getFirstRow` picked one arbitrarily — the media kind, and therefore the whole decision,
+  became a nondeterministic pick between `clamped` and `stream`. "We are a repository, no corruption is
+  allowed" forbids exactly that.
+
+The fix is one coherent change rather than two patches:
+
+1. **The filter is gone.** `?currentFileValue rdf:type ?fileValueClass` is now unconstrained, so the
+   value's actual concrete type reaches the responder whatever it is. Still `?currentFileValue`, never
+   `?fileValue`, so the multi-version row explosion the filter partly guarded against does not return.
+2. **The projection is `SELECT DISTINCT`.** The `?fileValue ?objPred ?objObj` optimizer hint multiplies
+   rows by the number of properties on `?fileValue`, so the un-deduplicated result was already many
+   identical rows; `DISTINCT` collapses them and makes "one row" mean "the data agrees with itself". It
+   also shrinks the result from ~a dozen identical rows to one.
+3. **The responder requires exactly one class.** `mediaKindOf` matches `Seq(one)` and returns `None` for
+   anything else, so both the unmapped class and the doubly-typed value reach `failClosed`, which logs the
+   classes it saw and increments the counter.
+
+Because the counter now covers both shapes, `asset_access_unmapped_file_value_class` is renamed
+`asset_access_unresolved_file_value_class` — "unmapped" would be a false description of the ambiguous
+case. The metric has never been released, so nothing downstream depends on the old name, and the commit
+body was rewritten to name the new one.
+
+Note that a second row can also mean two `attachedToUser` or two `hasPermissions` values on one file
+value. That is caught by the same branch, which is correct: the asset's identity is not a fact in that
+case either.
+
+#### Pinned-query review — what changed and why it is correct
+
+Reviewed by eye against the previous pin, not blind-accepted. Exactly two changes in each of the two
+pinned strings in `FileValuePermissionsQuerySpec`:
+
+1. `SELECT ?creator …` becomes `SELECT DISTINCT ?creator …`.
+2. The last group
+
+   ```sparql
+   { ?currentFileValue <…#type> ?fileValueClass .
+   FILTER ( ?fileValueClass IN ( knora-base:ArchiveFileValue, … ) ) }
+   ```
+
+   becomes a plain triple pattern
+
+   ```sparql
+   ?currentFileValue <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> ?fileValueClass .
+   ```
+
+   The braces disappear because rdf4j's sparqlbuilder only wraps a pattern in a group when it carries a
+   `FILTER`. Nothing else moved: every preceding pattern is byte-identical, so the deliberate pattern
+   order that steers Jena away from resolving the `previousValue*` closure first is untouched.
+
+The pins were written by hand first and the test then run — it passed on the first attempt, which is the
+check that the hand-written expectation and the generated query agree.
+
+`MediaKind.fileValueClasses` is no longer read by the query. It is kept because `AssetAccessSpec` still
+uses it for the ontology-parity assertion ("maps no class that knora-base.ttl does not declare").
+
+### Both fail-closed paths are now tested
+
+`test_data/project_data/asset-access-data.ttl` gains two fixtures, both with permissions that grant a
+full view so that the *only* thing that can withhold the asset is the unresolved class:
+
+- `asset-access-unmapped.holo`, typed `knora-base:HolographicFileValue` — a class `knora-base.ttl` does
+  not declare, standing in for ontology drift.
+- `asset-access-ambiguous.jp2`, typed `StillImageFileValue` **and** `AudioFileValue` — two concrete
+  classes that map to different media kinds.
+
+`AssetPermissionsResponderSpec` asserts, for each, that the decision is `Withhold` / `Denied` **and** that
+`asset_access_unresolved_file_value_class` increments by exactly one. The counter is read through a
+locally declared `Metric.counter` of the same name rather than by making the responder's `private val`
+visible: ZIO metrics are keyed by name, so this reads the same state and pins the operator-visible name as
+part of the contract. The delta is exact because `E2EZSpec` applies `TestAspect.sequential`.
+
+The two log lines confirm both paths reach `failClosed` with the real classes:
+
+```
+level=ERROR message="No single media kind for file value classes
+  [http://www.knora.org/ontology/knora-base#HolographicFileValue] of asset-access-unmapped.holo; denying access"
+level=ERROR message="No single media kind for file value classes
+  [http://www.knora.org/ontology/knora-base#StillImageFileValue,
+   http://www.knora.org/ontology/knora-base#AudioFileValue] of asset-access-ambiguous.jp2; denying access"
+```
+
+The pre-existing not-found test asserted only `exit.isFailure`, which could not distinguish "not found"
+from "unmapped class" — the very confusion FIX 1 was about. It now asserts
+`failsWithA[NotFoundException]`, so the three outcomes (not found, unresolved class, ordinary decision)
+are distinguishable in the assertions.
+
+### `DerivativeAccess.Stream`'s open question now has an owner
+
+The doc comment ended *"Sipi enforces nothing today"* — a pending intention with no issue attached, which
+this repo's comment convention disallows. It is a real open question (how strictly `stream` must be
+enforced is an unsettled legal interpretation, not an oversight), so it now reads *"How strictly Sipi must
+enforce that is DEV-7244."* One line; ADR-0027 is not restated.
+
+### The endpoint is documented
+
+`GET /admin/files/{shortcode}/{filename}` had no page under `docs/03-endpoints/api-admin/`, which was
+tolerable while it answered a bare ACL code and is not once its response is a two-channel contract read by
+two separate services. New page `docs/03-endpoints/api-admin/files.md`, matching the tree's
+one-page-per-endpoint structure, linked from `mkdocs.yml`'s Admin API nav and from
+`03-endpoints/api-admin/overview.md`. It states the two channels and who reads each, the four `derivative`
+literals and the two `original` ones, that exactly one of `size` (an IIIF size string) or `watermark` (a
+boolean) accompanies `clamped` and nothing else carries them, and — load-bearing — that the two channels
+must not be collapsed, neither consumer reading the other's field. `just markdownlint` passes (the tables
+needed `MD060` alignment).
+
+### The RV-still-image change is in the commit body
+
+Checked as asked. `CHANGELOG.md` here is release-please-generated, so a user-visible change has to travel
+in the commit body. The asset-access commit's `BREAKING CHANGE:` block already carried it, alongside the
+archive denial:
+
+> An asset under restricted view is also no longer served at full fidelity through Sipi's `/file` route,
+> and an archive under restricted view is no longer served at all.
+
+No addition was needed. The body's media-kind paragraph was rewritten for the query change and the
+renamed counter.
+
+### Verification run (local, this machine)
+
+```
+//modules/webapi:test                 PASSED
+//modules/ingest:test                 PASSED
+//modules/bagit:test                  PASSED
+//modules/jwt:test                    PASSED
+//modules/shacl-validator:test        PASSED
+//modules/sparql-builder:test         PASSED
+//modules/test-it:test                PASSED (205.9s)
+//modules/test-it:test_gravsearch_span PASSED
+just check                            PASSED (scalafmt format-test, SPDX headers, no-relative-imports)
+just markdownlint                     PASSED
+//modules/test-e2e:test               FAILED — 945 tests, 26 JUnit failure entries
+```
+
+The e2e count is unchanged. The 26 entries are the **same 13 tests** reported earlier, each listed twice:
+the zio-test JUnit runner emits a paired "Test mechanism" entry per failure. The 13 are the ten
+`KnoraSipiIntegrationV2ITSpec` cases and the three `StandoffEndpointsE2ESpec` cases already enumerated
+above, all of them `stream` decisions against the un-bumped Sipi image. Nothing moved.
+
+`MODULE.bazel` is untouched; the digest bump is still the operator action described above.
+
+
+
+## Shared JWT secret rotation after the Sipi 9.1.0 bump (2026-09-12)
+
+With `MODULE.bazel` bumped to Sipi v9.1.0, `knora-sipi` exited 1 at startup and `//modules/test-e2e:test`
+could not run at all (`Tests run: 0, Failures: 1` — a testcontainer launch failure). Sipi 9.1.0 carries a
+fail-closed startup gate that rejects an empty key, a key shorter than 32 bytes, or its own shipped default
+`"UP 4888, nice 4-8-4 steam engine"`. dsp-api used that exact string.
+
+### The secret is a trust domain, not a setting
+
+dsp-api signs the JWTs; Sipi and dsp-ingest verify them. Moving only the Sipi Lua configs would have left
+dsp-api signing with the old secret and Sipi rejecting every token — containers up, tests failing for a
+much less obvious reason. Every member moved in one change to
+`test-only-local-dev-jwt-secret-not-for-production` (49 chars, comfortably over the 32-byte floor, no
+quotes or backslashes so it needs no escaping in Lua, HOCON or YAML alike).
+
+Sites changed (14). The four marked **(+)** were not in the handoff list and were found by grepping the
+literal; each is a real trust-domain member, so omitting any of them would have reproduced the split-secret
+failure:
+
+| File                                                                              | Role                                |
+|-----------------------------------------------------------------------------------|-------------------------------------|
+| `modules/webapi/src/main/resources/application.conf`                              | dsp-api `jwt.secret` — the signer   |
+| `modules/ingest/src/main/resources/application.conf`                              | dsp-ingest verifier default         |
+| `docker-compose.yml`                                                              | `JWT_SECRET` for dsp-ingest         |
+| `modules/sipi/config/sipi.docker-config.lua`                                      | Sipi verifier                       |
+| `modules/sipi/config/sipi.docker-test-config.lua`                                 | Sipi verifier                       |
+| `modules/sipi/config/sipi.docker-no-auth-config.lua`                              | Sipi verifier                       |
+| `modules/sipi/config/sipi.local-config.lua`                                       | Sipi verifier                       |
+| `modules/test-it/src/test/resources/sipi.docker-config.lua`                       | Sipi verifier (test-it)             |
+| `modules/test-e2e/src/test/resources/sipi.docker-config.lua`                      | **(+)** Sipi verifier (test-e2e)    |
+| `modules/test-it/src/test/scala/org/knora/sipi/SipiIT.scala`                      | **(+)** signs the JWT Sipi verifies |
+| `modules/testkit/.../testcontainers/DspIngestTestContainer.scala`                 | **(+)** `JWT_SECRET` env for ingest |
+| `modules/test-ingest-integration/.../testcontainers/DspIngestTestContainer.scala` | **(+)** `JWT_SECRET` env for ingest |
+| `modules/ingest/docs/service-configuration.md`                                    | documented `JWT_SECRET` default     |
+| `docs/04-publishing-deployment/configuration.md`                                  | documented `app.jwt.secret` default |
+
+All six `sipi.*-config.lua` files in the repo that define `jwt_secret` are covered; the two
+`modules/sipi/scripts/sipi.init*.lua` files carry no secret. The `modules/*/target/**` copies are build
+outputs and regenerate.
+
+### Deliberately not changed
+
+`modules/jwt/src/test/scala/org/knora/jwt/JwtCodecSpec.scala:291,298` keeps the old string. Read in full:
+it is a jwt-scala interop vector — a hardcoded token literal plus the secret that token was signed with,
+asserting `JwtCodec.decodeAll` still parses tokens produced by jwt-zio-json 11.0.3. It is a fixture, not a
+runtime configuration; changing the secret without regenerating the token would break the test and prove
+nothing. `//modules/jwt:test` stayed action-cache green through the change, confirming it was untouched.
+
+No `SIPI_JWTKEY` env override was added to the testcontainer. The config value is the single mechanism.
+
+Production and stage are unaffected: `ops-deploy`'s `sipi.prod-config.lua.j2` sets `jwt_secret` from the
+vault-supplied `DSP_JWT_TOKEN`. `ops-deploy` was not touched.
+
+### One find beyond the trust domain
+
+`docs/04-publishing-deployment/configuration.md:20` documented `app.jwt.secret` as `super-secret-key`,
+which was never the default — stale before this change and stale in the same way after it. It is corrected
+to the real value in the same commit rather than left contradicting the code. Cost: markdownlint's MD060
+(`table-column-style: aligned`) then required re-padding both touched tables, so that file's diff is 74
+lines of which 2 are content. The same re-padding applies to the `Jwt` table in the ingest doc.
+
+### Verification run (local, this machine)
+
+```
+//modules/test-e2e:test                PASSED in 337.6s — OK (945 tests), 0 failures
+//modules/test-it:test                 PASSED in 215.2s
+//modules/test-it:test_gravsearch_span PASSED in 16.7s
+//modules/webapi:test                  PASSED
+//modules/ingest:test                  PASSED
+//modules/bagit:test                   PASSED
+//modules/jwt:test                     PASSED (cached — untouched, as intended)
+//modules/shacl-validator:test         PASSED
+//modules/sparql-builder:test          PASSED
+just check                             PASSED
+just markdownlint                      PASSED
+```
+
+The suite is fully green. The e2e count is the same 945, but the 13 previously failing tests (ten
+`KnoraSipiIntegrationV2ITSpec`, three `StandoffEndpointsE2ESpec`, all `stream` decisions) now pass — the
+v9.1.0 digest bump fixed them, as predicted. `just check` does **not** run markdownlint; that is a separate
+recipe and a separate CI gate, so it must be run by hand after touching any `.md`.
+
+Folded into `feat(admin)!: return an asset access decision instead of a permission code` (the commit that
+pins Sipi 9.1.0) via `git commit --fixup=amend:` + `git rebase --autosquash`, with a paragraph added to the
+message explaining the trust domain and the `JwtCodecSpec` exception. Branch left unpushed.
+
+## Test token aligned with Sipi (2026-09-12)
+
+The rotation above chose `test-only-local-dev-jwt-secret-not-for-production`. Sipi's own seven test
+configs already use `dev-only-insecure-jwt-secret-change-me` (38 chars, clears the 32-byte floor, not
+the shipped default). The maintainer asked for one token across both repos, so all 14 dsp-api sites moved
+to Sipi's. It is also the better name for the job — it says *insecure* and *change-me*.
+
+Re-padding the two documentation tables after the shorter token tripped `MD060`
+(`table-column-style: aligned`). Realigning **only the changed row** against its header's pipe positions,
+rather than re-padding the whole table, cut those two files from a 74-line diff to a 2-line one.
+
+Verified by the supervising session, not relayed:
+
+```
+just test-e2e     PASSED in 343.9s — OK (945 tests), 0 failures
+just test-unit    6/6
+just test-it      2/2
+just check        PASSED
+just markdownlint PASSED
+```
+
+Folded into `b4d5d44c2` and force-pushed (lease pinned to `55864d5d4`). CI green on `b4d5d44c2`,
+including a `Check PR Title` job that accepts `feat(admin)!:` — so the module-style scope is fine
+despite `CONVENTIONS.md:166` describing scopes as release artifacts.
+
+## State at handoff — 2026-09-13
+
+### Where each repo is
+
+| Repo | Branch | State |
+|---|---|---|
+| sipi | merged to `main` | PR #811 merged 2026-09-12, released **v9.1.0** (`688348f1`) |
+| dsp-api | `feature/dev-7155-dsp-api-default-a-restrict-size-in-sipiinitlua-before-sipi` | PR #4329 open at `b4d5d44c2`, **CI fully green**, awaiting review |
+| dsp-app | `feature/dev-7155-image-settings-default` | branch created off `main`, **nothing implemented** |
+
+Linear: **DEV-7244** is the umbrella (gate 1 ticked). **DEV-7155** is superseded — close it once #4329
+merges, not before.
+
+### What is left
+
+1. Review and merge dsp-api #4329.
+2. Close DEV-7155 as superseded.
+3. Deploy dsp-api to dev — a real gate: Phase 6's `npm run update-openapi` reads the live dev spec.
+4. Implement Phase 6 in dsp-app (15 checkboxes; the largest single phase — a Cypress spec, a component
+   spec, a Storybook story, and registering the spec in the CI matrix).
+5. A trailing sipi docs commit ticking Phases 2–6 and adding the dsp-app journal.
+6. Operator steps: stage verification, census re-run, release note.
+
+### Why Phases 2–5 are not ticked in the plan
+
+They are implemented and green but **not merged**. A plan on `main` claiming them done would be wrong for
+as long as that gap lasts. The maintainer chose (2026-09-12) to tick Phases 2–6 in one trailing sipi commit
+after dsp-app lands, rather than hold this work or move the plan mid-flight.
+
+The underlying awkwardness is structural and worth fixing next time: the plan lives in `sipi/docs/specs/`,
+so **only a sipi commit can tick it**, even for work done in dsp-api and dsp-app. A plan whose
+`repositories:` frontmatter names other repos belongs in `dasch-specs`.
+
+### Things a fresh session will otherwise rediscover the hard way
+
+- **Bazel `oci.pull` fails on this machine.** `~/.docker/config.json` has `credsStore: desktop` while the
+  runtime is colima, so any target needing the Sipi base image dies with
+  `credential helper failed: credentials not found in native keychain`. The images are public, so no
+  credential is actually needed — point `DOCKER_CONFIG` at a directory containing a `config.json` holding
+  exactly `{}`. Do not edit the user's Docker config.
+- **`just check` does not run markdownlint.** Separate recipe (`justfile:275`), separate CI gate.
+- **The JWT secret is a shared trust domain**, not a setting: dsp-api signs, Sipi and dsp-ingest verify.
+  It moves in all 14 sites together or none. `JwtCodecSpec` is the one deliberate exception — a pinned
+  interop vector, not configuration.
+- **This deploy is the wave-2 rollout.** `MODULE.bazel` pinned Sipi v8.0.0, which predates wave-2, so
+  wave-2 reaches a deployment only through this train. It is not a later, separate step, and wave-2's
+  stage verification and release note belong here.
+- **Two user-visible changes the plan never listed.** An `RV` archive is now refused on both routes, and an
+  `RV` user no longer receives the full-resolution unclamped still image from `/file` — the old hook mapped
+  ACL code 1 to `allow` with the comment *"restricted view permission on file means full access !!"*. The
+  second is a genuine access-control fix and the one most likely to prompt a "why did this change" question.
+- **`stream` is not a security boundary.** Only still images are transcoded, so for every other media kind
+  the derivative *is* the original: `withhold` + `stream` withholds no bytes.

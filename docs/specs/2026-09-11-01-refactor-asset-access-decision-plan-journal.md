@@ -2,13 +2,20 @@
 title: Asset access as a first-class decision — Phase 1 (sipi) execution journal
 date: 2026-09-12
 author: Ivan Subotic
-status: draft
+status: implemented
 repositories:
   - dsp-api
   - dsp-app
 ---
 
 # Phase 1 execution journal — sipi: the `stream` permission type
+
+> **Resuming? This is not the file you want.** Automatic resume detection lands here because
+> the name matches `<plan-name>-journal.md`, but this journal covers **Phase 1 only**, which is
+> merged and released. The current state of the whole train — repo/branch table, what is left,
+> and the traps worth not rediscovering — is in the sibling journal:
+> `2026-09-11-01-refactor-asset-access-decision-plan-journal-dsp-api.md` § **State at handoff**.
+> The plan's own § **Resuming this plan** summarises both.
 
 Scope: **only** `#### Phase 1: sipi — the `stream` permission type` of
 `2026-09-11-01-refactor-asset-access-decision-plan.md`. Phases 2–6 belong to
@@ -277,3 +284,50 @@ into the docs commit; findings 8 and this journal section folded into the
 `docs(specs)` commit. Finding 7 is the one exception — the architecture-map
 registration is its own concern (repo topology, not the `stream` type), so it is
 its own commit rather than being folded into a commit about documenting `stream`.
+
+## Closeout — 2026-09-12
+
+**Status: complete, merged, released.** PR #811 merged 2026-09-12 14:32 UTC; released as **v9.1.0**
+(`688348f1 chore(main): release 9.1.0`). All 13 Phase 1 checkboxes done.
+
+**Root cause.** Callers had no word for "consumable in place, never handed over". They said `restrict`
+(whose only mechanisms — a size cap and a watermark — apply to still images and nothing else) or `allow`
+(which says the opposite of what is meant), and neither left a trace. Wave-2 made that urgent by refusing
+a `restrict` that restricts nothing.
+
+**Solution.** An eighth *Permission*, `stream`, appended to the hand-mirrored seam enum and pinned by the
+paired drift assertions. It changes no served byte: served exactly as `allow` on `/file` and on the IIIF
+image route, with native dimensions and the full tile grid in `info.json`. The one behavioural addition is
+`sipi.preflight.decisions{permission}`, which counts every resolved decision by permission so the `stream`
+population can be sized before any enforcement is chosen for it.
+
+**Prevention — what now stops the next permission type going wrong.** The defect the implementer hit
+mid-work (editing `permission_from_str` but not `scripting`'s `valid_permission`, which would have 500'd)
+is now closed mechanically rather than by memory:
+
+- `permission_str`'s exhaustive match is the counter's attribute source, so a ninth variant **fails the
+  build**, not just a test.
+- `permission_vocabulary_is_identical_on_both_gates` round-trips every permission through both string
+  gates, respecting the `extended` split.
+- `ARCH-MAP.md` registers *Permission* as a key entity under `ffi`, `server` and `scripting`, and carries
+  a banned-construct exception naming the full fanout.
+
+**What the adversarial review changed after implementation.** Six reviewers; eight findings, all fixed
+before merge. Two were Critical: `CLAUDE.md` still said "the seven Permission types" (the highest-
+consequence stale count in the repo, since it is auto-loaded into every agent session), and ADR-0027
+described a version skew as answering 401 when it answers **500** — `valid_permission` refuses the string
+inside the Lua runtime, so `permission_from_str`'s `deny` fallback is never reached. The dsp-api run later
+hit that 500 empirically, confirming it from a second direction.
+
+The review also reshaped the metric: a bare `stream_decisions` count has no denominator, so it could not
+answer the question ADR-0027 exists to make answerable. Fanning one instrument over all eight permissions
+gives `decisions{permission="stream"} / sum(decisions)` for free.
+
+**Verified before merge** (re-run by the supervising session, not relayed): `just bazel-build`,
+`just bazel-test` 77/77, `just bazel-rustfmt-check`, `just bazel-clippy-check`, `just commit-lint` — all
+green; CI green on all nine checks including `asan-ubsan / amd64`, which covers the sanitizers that cannot
+link locally on this machine.
+
+**Downstream.** v9.1.0's digests are pinned in dsp-api PR #4329. See
+`2026-09-11-01-refactor-asset-access-decision-plan-journal-dsp-api.md` § *State at handoff* for the rest
+of the train.
