@@ -2,13 +2,48 @@
 title: "Asset access as a first-class decision, and restricted view as an optional setting"
 date: 2026-09-11
 author: "Ivan Subotic"
-status: reviewed(5)
+status: implemented
 repositories:
   - dsp-api
   - dsp-app
 ---
 
 # Asset access as a first-class decision, and restricted view as an optional setting
+
+## Execution state — all code is merged
+
+**Complete, 2026-09-17.** Every phase has shipped:
+
+| Phase | Repo | Landed as |
+|---|---|---|
+| 1 | sipi | #811, released v9.1.0 |
+| 2–5 | dsp-api | #4329, squash `9ddad36b7`, deployed to dev |
+| 6 | dsp-app | #3453, squash `bdc9d606a` |
+
+The 12 boxes still unticked below are **operator actions, not code**: the stage censuses,
+stage verification, and the deploy sequence. They are the only work this plan has left.
+
+**Two things the plan did not anticipate, recorded so they are not rediscovered:**
+
+- **No migration guide or release note was written.** It belonged in #4329 and did not ship
+  with it; `CHANGELOG.md` carries only the release-please subject line. Two user-visible
+  changes are therefore undocumented: an `RV` archive is now refused on both routes, and an
+  `RV` still image is no longer served at full fidelity — a project that stored `pct:100`
+  falls to the `!128,128` platform default, and no setting reproduces "full resolution, no
+  download button". Deliberate call (DEV-7244).
+- **dsp-api's OpenAPI schema contradicts its own wire format** for `SetRestrictedViewRequest`:
+  the spec types `size` as `{value: string}`, the server accepts only a bare string. dsp-app
+  casts explicitly and cites the issue rather than trusting the generated type, because typing
+  it against the generated model ships a save that 400s. Tracked in **DEV-7292**; pre-existing,
+  not introduced here.
+
+**On re-running this plan:** it is multi-repo, so `/eng:workflows:work-orchestrate` rejects it
+at intake. That rejection is correct and now moot — there is no code left to execute. A plan
+whose `repositories:` frontmatter names other repos belongs in `dasch-specs`; this one lives in
+`sipi/docs/specs/`, which is why only a sipi commit could ever tick it.
+
+Journals: `…-journal.md` (Phase 1) and `…-journal-dsp-api.md` (Phases 2–5, plus the traps a
+fresh session otherwise rediscovers). Umbrella issue: **DEV-7244**.
 
 ## Overview
 
@@ -432,7 +467,7 @@ it today.
 
 ### Implementation Phases
 
-#### Phase 1: sipi — the `stream` permission type
+#### Phase 1: sipi — the `stream` permission type — DONE: merged, released as v9.1.0
 
 _Execution: opus, medium (a new permission type is a vocabulary addition with a deliberately weak initial enforcement; the boundary it draws matters more than the code)._
 
@@ -450,98 +485,98 @@ _Execution: opus, medium (a new permission type is a vocabulary addition with a 
 - [x] e2e: a `stream` decision returns 200 on `/file` and 200 on `info.json`, and is byte-identical to what `allow` returns for the same asset — the e2e that pins "day one changes nothing" so a later tightening has to break it deliberately
 - [x] Correct the wave-2 plan's Phase 5 coordination note, which claims dsp-api must default a size in `sipi.init.lua`
 
-#### Phase 2: dsp-api — optional stored setting
+#### Phase 2: dsp-api — optional stored setting — DONE: merged in dsp-api#4329 (squash `9ddad36b7`)
 
 _Execution: sonnet, medium (the change is named; the work is a wide but mechanical fan-out plus one pinned query)._
 
-- [ ] `KnoraProject.restrictedView` becomes `Option[RestrictedView]` (`KnoraProject.scala:40`)
-- [ ] `KnoraProjectRepoLive.getRestrictedView` returns `Option` — drop `.getOrElse(RestrictedView.default)` at `:100`
-- [ ] `KnoraProjectRepoLive.toTriples` emits no restricted-view triple for `None` (`:138`, emission at `:154-156`)
-- [ ] Restate the dual-triple precedence explicitly (size wins over watermark) rather than leaving it a side effect of `orElse`
-- [ ] A stored `projectRestrictedViewWatermark false` resolves to `None` — an explicitly-off watermark is "nothing configured", not a watermark restriction. `UpgradePluginPR3112` should have cleared these, but the state stays representable in RDF, so the mapper must be total over it rather than trusting the earlier migration
-- [ ] `KnoraProjectRepo.builtIn.makeBuiltIn` passes `None` (`:34-51`)
-- [ ] `KnoraProjectService.createProject` stores `None` for a new project (`:81`)
-- [ ] `KnoraProjectService.setProjectRestrictedView` keeps mapping `Watermark(false)` to the default, wrapped as `Some` (`:49-56`)
-- [ ] Add `KnoraProjectService.clearProjectRestrictedView`, persisting `None`
-- [ ] Update every remaining `KnoraProject(...)` construction site, including `TestDataFactory` and the ttl fixtures
-- [ ] Update the pinned query in `KnoraProjectRepoLiveSpec:261-305` and review the diff rather than accepting it
-- [ ] Unit test: neither triple round-trips as `None`; a size round-trips as `Some(Size)`; saving `None` writes neither predicate
-- [ ] Unit test: a project storing both a size and a watermark resolves to the size, matching `admin-data.ttl:84-85`
-- [ ] Unit test: a project storing only `watermark false` resolves to `None` and inherits the default
+- [x] `KnoraProject.restrictedView` becomes `Option[RestrictedView]` (`KnoraProject.scala:40`)
+- [x] `KnoraProjectRepoLive.getRestrictedView` returns `Option` — drop `.getOrElse(RestrictedView.default)` at `:100`
+- [x] `KnoraProjectRepoLive.toTriples` emits no restricted-view triple for `None` (`:138`, emission at `:154-156`)
+- [x] Restate the dual-triple precedence explicitly (size wins over watermark) rather than leaving it a side effect of `orElse`
+- [x] A stored `projectRestrictedViewWatermark false` resolves to `None` — an explicitly-off watermark is "nothing configured", not a watermark restriction. `UpgradePluginPR3112` should have cleared these, but the state stays representable in RDF, so the mapper must be total over it rather than trusting the earlier migration
+- [x] `KnoraProjectRepo.builtIn.makeBuiltIn` passes `None` (`:34-51`)
+- [x] `KnoraProjectService.createProject` stores `None` for a new project (`:81`)
+- [x] `KnoraProjectService.setProjectRestrictedView` keeps mapping `Watermark(false)` to the default, wrapped as `Some` (`:49-56`)
+- [x] Add `KnoraProjectService.clearProjectRestrictedView`, persisting `None`
+- [x] Update every remaining `KnoraProject(...)` construction site, including `TestDataFactory` and the ttl fixtures
+- [x] Update the pinned query in `KnoraProjectRepoLiveSpec:261-305` and review the diff rather than accepting it
+- [x] Unit test: neither triple round-trips as `None`; a size round-trips as `Some(Size)`; saving `None` writes neither predicate
+- [x] Unit test: a project storing both a size and a watermark resolves to the size, matching `admin-data.ttl:84-85`
+- [x] Unit test: a project storing only `watermark false` resolves to `None` and inherits the default
 
-#### Phase 3: dsp-api — admin API surface for the optional setting
+#### Phase 3: dsp-api — admin API surface for the optional setting — DONE: merged in dsp-api#4329 (squash `9ddad36b7`)
 
 _Execution: sonnet, medium (endpoint shapes are specified; the three-tier split is a convention to follow, not a decision)._
 
-- [ ] Add `isDefault: Boolean` to `ProjectRestrictedViewSettingsGetResponseADM` (`ProjectsMessagesADM.scala:131-139`)
-- [ ] Resolve the effective settings in `ProjectRestService.getProjectRestrictedViewSettings*` (`:228-249`): `getOrElse(RestrictedView.default)`, with `isDefault = restrictedView.isEmpty`
-- [ ] Add the two DELETE endpoints (by IRI and shortcode) to `ProjectsEndpoints.Secured` (`:87-117`), returning the GET response shape
-- [ ] Change the two POST endpoints to return the GET response shape as well, and retire `RestrictedViewResponse` (`ProjectsEndpointsRequestsAndResponses.scala:66-78`) so one shape serves all three verbs
-- [ ] Wire them in `ProjectsServerEndpoints` (`:33-43`) and register in `AdminApiServerEndpoints`
-- [ ] Add the REST-service methods behind the same `ensureSystemAdminOrProjectAdmin*` auth as the POSTs (`ProjectRestService.scala:251-261`)
-- [ ] Keep `SetRestrictedViewRequest.toRestrictedView`'s "exactly one of" validation unchanged
-- [ ] E2E in `AdminProjectsEndpointsE2ESpec`: GET on an unset project reports `isDefault: true`; POST then GET reports `false`; DELETE then GET returns to `true`
-- [ ] E2E: DELETE is refused for a non-admin
+- [x] Add `isDefault: Boolean` to `ProjectRestrictedViewSettingsGetResponseADM` (`ProjectsMessagesADM.scala:131-139`)
+- [x] Resolve the effective settings in `ProjectRestService.getProjectRestrictedViewSettings*` (`:228-249`): `getOrElse(RestrictedView.default)`, with `isDefault = restrictedView.isEmpty`
+- [x] Add the two DELETE endpoints (by IRI and shortcode) to `ProjectsEndpoints.Secured` (`:87-117`), returning the GET response shape
+- [x] Change the two POST endpoints to return the GET response shape as well, and retire `RestrictedViewResponse` (`ProjectsEndpointsRequestsAndResponses.scala:66-78`) so one shape serves all three verbs
+- [x] Wire them in `ProjectsServerEndpoints` (`:33-43`) and register in `AdminApiServerEndpoints`
+- [x] Add the REST-service methods behind the same `ensureSystemAdminOrProjectAdmin*` auth as the POSTs (`ProjectRestService.scala:251-261`)
+- [x] Keep `SetRestrictedViewRequest.toRestrictedView`'s "exactly one of" validation unchanged
+- [x] E2E in `AdminProjectsEndpointsE2ESpec`: GET on an unset project reports `isDefault: true`; POST then GET reports `false`; DELETE then GET returns to `true`
+- [x] E2E: DELETE is refused for a non-admin
 
-#### Phase 4: dsp-api — asset access as a decision
+#### Phase 4: dsp-api — asset access as a decision — DONE: merged in dsp-api#4329 (squash `9ddad36b7`)
 
 _Execution: opus, high (this replaces a cross-service contract, and the media-kind mapping and the original/derivative split each have a security consequence if they are got wrong)._
 
-- [ ] Add `MediaKind`, `OriginalAccess`, `DerivativeAccess` and `AssetAccess` under `slice/admin/domain/model/`, with `AssetAccess.from` as the single total policy function and a private constructor so no inconsistent pair can be assembled
-- [ ] Map every `knora-base` file value class IRI to a `MediaKind`. The compiler guarantees totality only on the Scala side — `MediaKind => AssetAccess` is exhaustive — but the IRI arrives as a string from the triplestore, so an unmapped class must fail closed (deny) and be counted, never fall through to a permissive default
-- [ ] Test that enumerates the file value classes declared in `knora-base.ttl` and asserts each maps to a `MediaKind`; this, not the compiler, is what catches a class added to the ontology later
-- [ ] `FileValuePermissionsQuery.build` also selects the `rdf:type` of `?currentFileValue` — the newest version, not `?fileValue` — and constrains it to the known file value classes so a multi-typed resource cannot multiply rows (`:32-74`). `AssetPermissionsResponder` takes `result.getFirstRow`, so extra rows would make the media kind a nondeterministic pick
-- [ ] Update the pinned `getQueryString` assertions in `FileValuePermissionsQuerySpec`
-- [ ] `AssetPermissionsResponder` returns `AssetAccess`; delete `PermissionCodeAndProjectRestrictedViewSettings` and `buildResponse`'s code-1 branch (`:55-72`)
-- [ ] New response DTO, codecs and `FilesEndpoints` output type; the ACL code leaves the payload
-- [ ] `AssetPermissionsCache` carries the new value type, and its key is confirmed to distinguish assets so a per-media-kind decision can never be served for a different file
-- [ ] Rewrite `modules/sipi/scripts/sipi.init.lua`'s `pre_flight`: translate the `derivative` literal to a SIPI *Permission* — `full` → `allow`, `clamped` → `restrict` passing `size` through verbatim as the IIIF size string and substituting the hook's own configured path when `watermark` is `true`, `stream` → `stream`, `denied` → `deny` — with no permission arithmetic and no media knowledge
-- [ ] An unrecognised `derivative` literal denies **and** increments a counter, so a vocabulary change never degrades to silent denials
-- [ ] `sipi.init.lua` reads only `derivative` and `FetchAssetPermissions` reads only `original`; assert that separation in review, since nothing on the wire enforces it
-- [ ] `FetchAssetPermissions` decodes the new shape (`:44-46`, DTO `PermissionResponse` at `:54`) and `ProjectsEndpointsHandler` gates on `original == "grant"` instead of `permissionCode >= 2` (`:125`)
-- [ ] Bump both per-arch SIPI `oci.pull` digests in `MODULE.bazel` — blocked until the SIPI release named under Operator Actions exists; stop and hand back if it does not
-- [ ] Integration test in `AssetPermissionsResponderSpec`, one case per `MediaKind` × {no permission, RV, V}: a still image yields `clamped` carrying its IIIF size string (or `watermark: true`); video, audio, document, text, vector and 3D yield `stream`; an archive yields `denied`; every `RV` case yields `original: withhold`
-- [ ] Integration test: dsp-ingest's original-download gate still refuses every `RV` asset, of every media kind
-- [ ] `SipiIT` asserts `knora.json` answers 404 for a `denied` decision — the response dsp-app's `catchError` relies on to show its representation-error card for an `RV` archive without any dsp-app change
-- [ ] `SipiIT` cases for the relay itself — one per decision kind. Every existing case stubs only the equivalent of `denied` or `full`, so `restricted` and `stream` are untested today
-- [ ] Update `AdminFilesE2ESpec` and `TestAdminApiClient:60` to the new shape
-- [ ] CHANGELOG under a breaking marker: the endpoint returns an access decision, not a permission code, and an `RV` archive is no longer served
+- [x] Add `MediaKind`, `OriginalAccess`, `DerivativeAccess` and `AssetAccess` under `slice/admin/domain/model/`, with `AssetAccess.from` as the single total policy function and a private constructor so no inconsistent pair can be assembled
+- [x] Map every `knora-base` file value class IRI to a `MediaKind`. The compiler guarantees totality only on the Scala side — `MediaKind => AssetAccess` is exhaustive — but the IRI arrives as a string from the triplestore, so an unmapped class must fail closed (deny) and be counted, never fall through to a permissive default
+- [x] Test that enumerates the file value classes declared in `knora-base.ttl` and asserts each maps to a `MediaKind`; this, not the compiler, is what catches a class added to the ontology later
+- [x] `FileValuePermissionsQuery.build` also selects the `rdf:type` of `?currentFileValue` — the newest version, not `?fileValue` — and constrains it to the known file value classes so a multi-typed resource cannot multiply rows (`:32-74`). `AssetPermissionsResponder` takes `result.getFirstRow`, so extra rows would make the media kind a nondeterministic pick
+- [x] Update the pinned `getQueryString` assertions in `FileValuePermissionsQuerySpec`
+- [x] `AssetPermissionsResponder` returns `AssetAccess`; delete `PermissionCodeAndProjectRestrictedViewSettings` and `buildResponse`'s code-1 branch (`:55-72`)
+- [x] New response DTO, codecs and `FilesEndpoints` output type; the ACL code leaves the payload
+- [x] `AssetPermissionsCache` carries the new value type, and its key is confirmed to distinguish assets so a per-media-kind decision can never be served for a different file
+- [x] Rewrite `modules/sipi/scripts/sipi.init.lua`'s `pre_flight`: translate the `derivative` literal to a SIPI *Permission* — `full` → `allow`, `clamped` → `restrict` passing `size` through verbatim as the IIIF size string and substituting the hook's own configured path when `watermark` is `true`, `stream` → `stream`, `denied` → `deny` — with no permission arithmetic and no media knowledge
+- [x] An unrecognised `derivative` literal denies **and** increments a counter, so a vocabulary change never degrades to silent denials
+- [x] `sipi.init.lua` reads only `derivative` and `FetchAssetPermissions` reads only `original`; assert that separation in review, since nothing on the wire enforces it
+- [x] `FetchAssetPermissions` decodes the new shape (`:44-46`, DTO `PermissionResponse` at `:54`) and `ProjectsEndpointsHandler` gates on `original == "grant"` instead of `permissionCode >= 2` (`:125`)
+- [x] Bump both per-arch SIPI `oci.pull` digests in `MODULE.bazel` — blocked until the SIPI release named under Operator Actions exists; stop and hand back if it does not
+- [x] Integration test in `AssetPermissionsResponderSpec`, one case per `MediaKind` × {no permission, RV, V}: a still image yields `clamped` carrying its IIIF size string (or `watermark: true`); video, audio, document, text, vector and 3D yield `stream`; an archive yields `denied`; every `RV` case yields `original: withhold`
+- [x] Integration test: dsp-ingest's original-download gate still refuses every `RV` asset, of every media kind
+- [x] `SipiIT` asserts `knora.json` answers 404 for a `denied` decision — the response dsp-app's `catchError` relies on to show its representation-error card for an `RV` archive without any dsp-app change
+- [x] `SipiIT` cases for the relay itself — one per decision kind. Every existing case stubs only the equivalent of `denied` or `full`, so `restricted` and `stream` are untested today
+- [x] Update `AdminFilesE2ESpec` and `TestAdminApiClient:60` to the new shape
+- [x] CHANGELOG under a breaking marker: the endpoint returns an access decision, not a permission code, and an `RV` archive is no longer served
 
-#### Phase 5: dsp-api — make `pct:100` unrepresentable
+#### Phase 5: dsp-api — make `pct:100` unrepresentable — DONE: merged in dsp-api#4329 (squash `9ddad36b7`)
 
 _Execution: sonnet, medium (`UpgradePluginPR3112` is a direct precedent for both the plugin and its spec)._
 
-- [ ] `RestrictedView.Size.from` rejects `pct:100` — the percentage pattern becomes `pct:[1-9][0-9]?$` (`RestrictedView.scala:34`)
-- [ ] Unit test in `RestrictedViewSpec`: `pct:100` rejected, `pct:99` and `!128,128` still accepted
-- [ ] Add `UpgradePluginPRxxxx` deleting two classes of `knora-admin:projectRestrictedViewSize` triple in the admin named graph, following `UpgradePluginPR3112`: every `"pct:100"` (2 projects) and every `"!128,128"` (48 projects). The second is the value `UpgradePluginPR3112` backfilled; clearing it restores "nothing configured" and changes no served byte, since `RestrictedView.default` is the same `!128,128`
-- [ ] Plugin spec: a `"!128,128"` triple is removed, a `"pct:100"` triple is removed, and `"!512,512"`, `"pct:1"` and a watermark triple are all untouched
-- [ ] Register it in `RepositoryUpdatePlan.makePluginsForVersions:20-43` as version 56
-- [ ] Bump `KnoraBaseVersion` 55 → 56 (`package.scala:17`) and the version in `knora-base.ttl`
-- [ ] Plugin spec following `UpgradePluginPR3112Spec`: a `pct:100` triple is removed, a `pct:30` triple untouched, a watermark triple untouched
-- [ ] CHANGELOG: the Image Settings page now shows **Default** for any project with no explicit restriction, which after the migration is 50 of 62. The effective restriction is unchanged; projects that had "Off" selected would serve the default `!128,128` to `RV` users on still images, though neither currently has any
+- [x] `RestrictedView.Size.from` rejects `pct:100` — the percentage pattern becomes `pct:[1-9][0-9]?$` (`RestrictedView.scala:34`)
+- [x] Unit test in `RestrictedViewSpec`: `pct:100` rejected, `pct:99` and `!128,128` still accepted
+- [x] Add `UpgradePluginPRxxxx` deleting two classes of `knora-admin:projectRestrictedViewSize` triple in the admin named graph, following `UpgradePluginPR3112`: every `"pct:100"` (2 projects) and every `"!128,128"` (48 projects). The second is the value `UpgradePluginPR3112` backfilled; clearing it restores "nothing configured" and changes no served byte, since `RestrictedView.default` is the same `!128,128`
+- [x] Plugin spec: a `"!128,128"` triple is removed, a `"pct:100"` triple is removed, and `"!512,512"`, `"pct:1"` and a watermark triple are all untouched
+- [x] Register it in `RepositoryUpdatePlan.makePluginsForVersions:20-43` as version 56
+- [x] Bump `KnoraBaseVersion` 55 → 56 (`package.scala:17`) and the version in `knora-base.ttl`
+- [x] Plugin spec following `UpgradePluginPR3112Spec`: a `pct:100` triple is removed, a `pct:30` triple untouched, a watermark triple untouched
+- [x] CHANGELOG: the Image Settings page now shows **Default** for any project with no explicit restriction, which after the migration is 50 of 62. The effective restriction is unchanged; projects that had "Off" selected would serve the default `!128,128` to `RV` users on still images, though neither currently has any
 
-#### Phase 6: dsp-app — "Default" replaces "Off"
+#### Phase 6: dsp-app — "Default" replaces "Off" — DONE: merged in dsp-app#3453 (squash `bdc9d606a`)
 
 _Execution: sonnet, medium (every file and line is named; the only judgement is test shape, and sibling components give the pattern)._
 
-- [ ] Rename `ImageSettingsEnum.Off` to `Default` (`image-settings.component.ts:20-24`)
-- [ ] Rewrite `getImageSettings` as a whole (`:119-145`), not only the `pct:100` test at `:132`: the new payload always carries populated `settings`, so the sparse-payload handling at `:125-131` would fall through to `setRestrictedSize` and render the default state as "Restrict image size: 128". Select from `isDefault` first, then `watermark`, then `size`
-- [ ] `getSizeForRequest` no longer returns `'pct:100'`; the `Default` branch leaves the write payload entirely (`:162-168`)
-- [ ] `onSubmit` calls DELETE when `Default` is selected, POST otherwise (`:91-103`)
-- [ ] `onSubmit` handles the error case for both verbs — today `.subscribe()` has no error callback, so a failed save is silently swallowed
-- [ ] `hasChanges` compares the tri-state against the loaded state rather than stringifying two different shapes; today a fresh load leaves `currentSettings` undefined, so Submit is enabled before the user touches anything (`:65-67`)
-- [ ] Decide and implement what switching radios without saving does to a half-typed value — today only typing clears the sibling field
-- [ ] Move `ProjectApiService.getRestrictedViewSettingsForProject` onto the generated client (`project-api.service.ts:64-68`) and collapse `currentSettings` from a union to the single response type all three verbs now return (`:50`)
-- [ ] Template: the first radio reads the new key and shows the inherited value (`image-settings.component.html:6-8`)
-- [ ] Replace `pages.project.imageSettings.off` with `.default` in `en`, `de`, `fr` and `it` (each at line 168)
-- [ ] Run `npm run update-openapi` and commit the refreshed `dsp-api_spec.yaml` — blocked until the dsp-api dev deploy named under Operator Actions has landed; stop and hand back if it has not
-- [ ] Add `image-settings.component.spec.ts` — none exists today: `Default` renders when `isDefault` is true, `Default` issues a DELETE, a size issues a POST, `pct:100` is never sent, Submit is disabled on a fresh load, a failed save surfaces an error
-- [ ] Add `image-settings.component.stories.ts` with a `play()` assertion per the repo's story convention — none exists today
-- [ ] Bring the local stack up and exercise the changed screen with `/eng:test-browser` — navigate, screenshot each radio state, check the console for errors, and confirm the DELETE and POST actually fire — before writing the spec, so the spec encodes observed behaviour rather than assumed behaviour
-- [ ] Add `cypress/e2e/system-admin/image-settings.cy.ts` driving the real screen against a local stack: load a project with a stored size (radio lands on Restrict image size), switch to Default and submit (a DELETE is issued), reload (radio lands on Default, `isDefault: true`), switch to Watermark and submit, and assert no request body ever contains `pct:100`
-- [ ] **Register the new spec in the CI matrix** (`.github/workflows/ci.yml:186`, the `rest` runner). System-admin specs are enumerated individually, not globbed — a spec that is not listed never runs in CI and the coverage is silently zero
-- [ ] Decide what the Default radio displays: the inherited value as static text beside the label, or nothing. The template has no slot for it today — the preview children (`app-image-display-ratio` / `app-image-display-absolute`) render only under `RestrictImageSize` (`image-settings.component.html:45-48`), so "show the inherited value" is new markup, not a binding change
-- [ ] State in the PR description that `check-openapi-sync` is red by design until the dsp-api dev deploy lands
+- [x] Rename `ImageSettingsEnum.Off` to `Default` (`image-settings.component.ts:20-24`)
+- [x] Rewrite `getImageSettings` as a whole (`:119-145`), not only the `pct:100` test at `:132`: the new payload always carries populated `settings`, so the sparse-payload handling at `:125-131` would fall through to `setRestrictedSize` and render the default state as "Restrict image size: 128". Select from `isDefault` first, then `watermark`, then `size`
+- [x] `getSizeForRequest` no longer returns `'pct:100'`; the `Default` branch leaves the write payload entirely (`:162-168`)
+- [x] `onSubmit` calls DELETE when `Default` is selected, POST otherwise (`:91-103`)
+- [x] `onSubmit` handles the error case for both verbs — today `.subscribe()` has no error callback, so a failed save is silently swallowed
+- [x] `hasChanges` compares the tri-state against the loaded state rather than stringifying two different shapes; today a fresh load leaves `currentSettings` undefined, so Submit is enabled before the user touches anything (`:65-67`)
+- [x] Decide and implement what switching radios without saving does to a half-typed value — today only typing clears the sibling field
+- [x] Move `ProjectApiService.getRestrictedViewSettingsForProject` onto the generated client (`project-api.service.ts:64-68`) and collapse `currentSettings` from a union to the single response type all three verbs now return (`:50`)
+- [x] Template: the first radio reads the new key and shows the inherited value (`image-settings.component.html:6-8`)
+- [x] Replace `pages.project.imageSettings.off` with `.default` in `en`, `de`, `fr` and `it` (each at line 168)
+- [x] Run `npm run update-openapi` and commit the refreshed `dsp-api_spec.yaml` — blocked until the dsp-api dev deploy named under Operator Actions has landed; stop and hand back if it has not
+- [x] Add `image-settings.component.spec.ts` — none exists today: `Default` renders when `isDefault` is true, `Default` issues a DELETE, a size issues a POST, `pct:100` is never sent, Submit is disabled on a fresh load, a failed save surfaces an error
+- [x] Add `image-settings.component.stories.ts` with a `play()` assertion per the repo's story convention — none exists today
+- [x] Bring the local stack up and exercise the changed screen with `/eng:test-browser` — navigate, screenshot each radio state, check the console for errors, and confirm the DELETE and POST actually fire — before writing the spec, so the spec encodes observed behaviour rather than assumed behaviour
+- [x] Add `cypress/e2e/system-admin/image-settings.cy.ts` driving the real screen against a local stack: load a project with a stored size (radio lands on Restrict image size), switch to Default and submit (a DELETE is issued), reload (radio lands on Default, `isDefault: true`), switch to Watermark and submit, and assert no request body ever contains `pct:100`
+- [x] **Register the new spec in the CI matrix** (`.github/workflows/ci.yml:186`, the `rest` runner). System-admin specs are enumerated individually, not globbed — a spec that is not listed never runs in CI and the coverage is silently zero
+- [x] Decide what the Default radio displays: the inherited value as static text beside the label, or nothing. The template has no slot for it today — the preview children (`app-image-display-ratio` / `app-image-display-absolute`) render only under `RestrictImageSize` (`image-settings.component.html:45-48`), so "show the inherited value" is new markup, not a binding change
+- [x] State in the PR description that `check-openapi-sync` is red by design until the dsp-api dev deploy lands
 
 ## Operator Actions
 
