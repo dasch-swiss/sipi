@@ -139,10 +139,29 @@ and the build short-circuits. Internal PRs are unaffected.
 
 Branch rulesets require the three `test / *` legs
 (`test / linux-amd64`, `test / linux-arm64`, `test / darwin-arm64`)
-plus the `asan-ubsan / amd64` job. The `docs` job and the `changes`
-gate itself are not required checks. (This job was previously split
-into `asan-ubsan-unit / amd64` + `asan-ubsan-e2e / amd64`; the ruleset
-must be updated to the merged name.)
+plus the `asan-ubsan / amd64` job. The `docs` job, the `dependency-audit`
+job and the `changes` gate itself are not required checks. (The
+asan-ubsan job was previously split into `asan-ubsan-unit / amd64` +
+`asan-ubsan-e2e / amd64`; the ruleset must be updated to the merged name.)
+
+**`main` is protected by a *ruleset*, not by classic branch protection.**
+`GET /repos/dasch-swiss/sipi/branches/main/protection` therefore answers
+`404 Branch not protected`, which is true only of the classic mechanism and
+says nothing about the ruleset. Read the rules from the rulesets API instead,
+or just read this section:
+
+```bash
+gh api repos/dasch-swiss/sipi/rulesets                 # find the ruleset id
+gh api repos/dasch-swiss/sipi/rulesets/<id> --jq '[.rules[].type]'
+```
+
+The same ruleset pins **`rebase` as the only allowed merge method** (alongside
+`required_linear_history`), so `gh pr merge --squash` and `--merge` are
+rejected. This is the mechanism behind the "a PR lands as one commit by
+default" convention in `CLAUDE.md`: every branch commit reaches `main`
+verbatim, with no squash to tidy it, which is why branches are cleaned up
+before merge. Note that dsp-api and dsp-app are the opposite — squash-only —
+so the habit does not carry between repos.
 
 ## Post-merge coverage
 

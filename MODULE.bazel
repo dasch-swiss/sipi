@@ -601,6 +601,23 @@ crate.spec(package = "base64", version = "0.22")
 crate.spec(package = "proptest", version = "1")
 crate.spec(package = "rand", version = "0.9")
 
+# Security floors on transitive crates. These are NOT direct dependencies and no
+# first-party target references them — they exist only to raise the minimum the
+# resolver will pick, because a repin alone will not move a transitive crate that
+# the existing lock already satisfies. Unlike the specs above, do not prune these
+# on sight for being unreferenced; drop one only once the graph pulls a version
+# at or above the floor on its own.
+#
+# rustls: RUSTSEC-2026-0285, TLS 1.3 handshake messages accepted across
+# encryption level boundaries. Reaches the graph via the `sentry` crates'
+# `rustls-no-provider`. Fixed in 0.23.45.
+#
+# `default_features = False` is load-bearing, not tidiness: rustls' default
+# feature set selects the `aws-lc-rs` provider, which drags in `aws-lc-sys` —
+# the one crate this graph must never contain (see the note above). Declaring
+# the floor with defaults on is enough to pull it in.
+crate.spec(package = "rustls", version = ">=0.23.45", default_features = False, features = ["ring", "std", "tls12", "logging"])
+
 # `cargo_lockfile` materializes a Cargo-format lock alongside the Bazel-native
 # resolution — cargo-audit/OSV-Scanner read Cargo.lock syntax, not
 # MODULE.bazel.lock's JSON. Repin with:
