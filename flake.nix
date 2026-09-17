@@ -43,6 +43,15 @@
             # Local only; CI installs it via `cargo install commitlint-rs`.
             commitlint-rs
 
+            # cargo-audit + osv-scanner — the two halves of the
+            # `dependency-audit` gate (`just audit`), both reading
+            # `Cargo.Bazel.lock`. Local only; CI installs them itself. Without
+            # them the recipe dies on "no such command: audit" and
+            # "osv-scanner: command not found", so the gate could only be
+            # checked by pushing and waiting for CI.
+            cargo-audit
+            osv-scanner
+
             # jpylyzer — JP2 conformance validator. Runs against
             # regenerated JP2 goldens to confirm the SIPI UUID box reads as an
             # informational `Unknown UUID` and the file otherwise passes
@@ -87,7 +96,15 @@
               # interactions for one-off builds done outside Bazel.
               hardeningDisable = [ "all" ];
               packages = commonPackages ++ extraPackages;
-              shellHook = ''export PS1="\\u@\\h | ${name}> "'' + commonShellHook;
+              # The trailing newline matters: `commonShellHook` opens with a `#`
+              # comment, and without a line break it lands flush against this
+              # closing quote, where `#` no longer starts a comment. Bash then
+              # folds the comment into the PS1 word and mis-parses the rest of
+              # the hook — `syntax error near unexpected token '('` on every
+              # shell entry.
+              shellHook = ''
+                export PS1="\\u@\\h | ${name}> "
+              '' + commonShellHook;
             };
 
         in
