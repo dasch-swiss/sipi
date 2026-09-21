@@ -92,10 +92,9 @@ _DEPS = [
 # corruption). See docs/adr/0019-mimalloc-production-allocator.md.
 #
 # Never under ASan: AddressSanitizer interposes malloc/free with its own
-# allocator, and two interposers in one binary is undefined behavior (the
-# asan-ubsan e2e leg crashed every C++ CLI verb). The `mimalloc` crate
-# feature carries the same condition into the Rust source, so the
-# interposition probe and stats reader drop out together with the dep.
+# allocator, and two interposers in one binary is undefined behavior. The
+# `mimalloc` crate feature carries the same condition into the Rust source, so
+# the interposition probe and stats reader drop out together with the dep.
 config_setting(
     name = "linux_sans_asan",
     constraint_values = ["@platforms//os:linux"],
@@ -103,15 +102,12 @@ config_setting(
     visibility = ["//visibility:private"],
 )
 
-# The mimalloc stats read (`sipi.malloc.*` gauges) goes through this
-# one-function C shim, compiled against the vendored `mimalloc-stats.h`
-# (`mi_stats_get` signature + `mi_stats_t` layout) and `mimalloc.h`
-# (`mi_process_info`, for the resident-set figure) so both APIs are
-# compiler-checked against the exact @mimalloc pin. Rust-side `extern "C"`
-# re-declarations of mimalloc's stats API are banned: nothing verifies them
-# against the header, and a declaration drifting from the pinned version
-# segfaults the metrics thread at the first collection (SIPI-1R) instead of
-# failing the build.
+# The mimalloc stats read (`sipi.malloc.*` gauges) goes through this one-function
+# C shim so `mi_stats_get` and `mi_process_info` are compiler-checked against the
+# exact @mimalloc pin. Rust-side `extern "C"` re-declarations of mimalloc's stats
+# API are banned: nothing verifies them against the header, and a declaration
+# drifting from the pinned version segfaults the metrics thread at the first
+# collection instead of failing the build.
 cc_library(
     name = "mi_stats_shim",
     srcs = ["mi_stats_shim.c"],
@@ -158,11 +154,9 @@ rust_binary(
     ] + _DEPS + _ALLOCATOR,
 )
 
-# Inline #[cfg(test)] unit tests — the clap `server` arg-parsing pins (e.g. that
-# no overridable flag carries a clap `default_value`, which would silently
-# clobber the Lua config). Compiles the binary crate with --cfg test; it
-# performs the same final link of the C++ engine archives as the binary, so it
-# needs the C++ stdlib link bracket and the same `no-sanitizer` exclusion.
+# Compiles the binary crate with --cfg test; it performs the same final link of
+# the C++ engine archives as the binary, so it needs the C++ stdlib link bracket
+# and the same `no-sanitizer` exclusion.
 rust_test(
     name = "sipi_unit_test",
     crate = ":sipi",

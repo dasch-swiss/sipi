@@ -72,10 +72,10 @@ fn main() -> ExitCode {
     // pending events before the process exits.
     let _sentry_guard = init_sentry();
 
-    // Native-crash (minidump) reporting — `server` only (DEV-6659). `sipi
-    // health` runs on a short interval in prod and must never fork a fresh
-    // reporter child of its own; CLI `convert` crash coverage is deliberately
-    // out of scope here (it never reaches Rust code — see the module doc).
+    // Native-crash (minidump) reporting, `server` only. `sipi health` runs on a
+    // short interval in prod and must never fork a reporter child of its own;
+    // CLI `convert` crash coverage is out of scope here, since it never reaches
+    // Rust code (see the module doc).
     // `Hub::current().client()` is `Some` only when `init_sentry` actually
     // called `sentry::init` (a valid DSN was configured) — a DSN-less run
     // never forks a reporter child or installs crash-signal handlers.
@@ -91,9 +91,7 @@ fn main() -> ExitCode {
         // `server` → the Rust shell. Pass the slice from the verb onward; clap
         // treats argv[idx] ("server"/"health") as the binary name and skips it.
         Some(idx) if argv[idx] == "server" => commands::server::run(&argv[idx..]),
-        // `health` → the Rust-native loopback probe (no FFI, no engine).
         Some(idx) if argv[idx] == "health" => commands::health::run(&argv[idx..]),
-        // Everything else → the C++ CLI, verbatim.
         _ => run_cli(&argv),
     }
 }
@@ -122,13 +120,9 @@ mod allocator {
     extern "C" {
         fn mi_version() -> core::ffi::c_int;
         fn mi_is_in_heap_region(p: *const c_void) -> bool;
-        // `mi_stats_shim.c` (`:mi_stats_shim` in BUILD.bazel). The mimalloc
-        // stats read lives in C, compiled against the vendored
-        // `mimalloc-stats.h`, so the `mi_stats_get` contract is checked by
-        // the C compiler. Never re-declare mimalloc's stats API in Rust:
-        // nothing verifies a hand-mirrored declaration against the header,
-        // and a drift from the pinned version is a SIGSEGV on the metrics
-        // thread (SIPI-1R), not a build error.
+        // `mi_stats_shim.c` (`:mi_stats_shim` in BUILD.bazel). Never re-declare
+        // mimalloc's stats API in Rust: nothing verifies a hand-mirrored
+        // declaration against the header.
         fn sipi_mi_stats_read(
             malloc_normal_current: *mut i64,
             malloc_huge_current: *mut i64,
@@ -214,12 +208,10 @@ mod allocator {
 
     #[cfg(test)]
     mod tests {
-        /// The reader must survive a real `mi_stats_get` round-trip against
-        /// the linked mimalloc and report live allocations.
+        /// The reader must survive a real `mi_stats_get` round-trip against the
+        /// linked mimalloc and report live allocations.
         /// `//src/cli/rust:sipi_unit_test` links mimalloc exactly like the
-        /// binary, so this is the in-CI execution of the stats FFI that was
-        /// missing when 6.3.0's mis-declared `mi_stats_get` shipped and
-        /// segfaulted the first OTel metrics collection (SIPI-1R).
+        /// binary, so this is the in-CI execution of the stats FFI.
         #[test]
         fn stats_reads_live_mimalloc_accounting() {
             // Hold 1 MiB of small binned blocks — the `malloc_normal` class.
@@ -244,15 +236,11 @@ mod allocator {
 }
 
 /// `SIPI_SENTRY_DSN` empty/unset/unparseable ⇒ `None`, and `sentry::init` is
-/// never called at all on an empty DSN: constructing a disabled client
-/// still exercises `sentry`'s init-time machinery (integrations, its
-/// `reqwest`-backed transport factory) for no observable benefit, since a
-/// disabled client's panic hook already just chains through to the previous
-/// (default) hook. `release`/`environment` share their source with the OTel
-/// resource attributes (`sipi::telemetry`), so both observability backends
-/// agree. `traces_sample_rate: 0.0` — Sentry owns crashes/panics/errors here,
-/// OTLP owns traces; a nonzero rate would duplicate transactions across both
-/// backends.
+/// never called at all on an empty DSN. `release`/`environment` share their
+/// source with the OTel resource attributes (`sipi::telemetry`), so both
+/// observability backends agree. `traces_sample_rate: 0.0`: Sentry owns
+/// crashes/panics/errors here, OTLP owns traces; a nonzero rate would duplicate
+/// transactions across both backends.
 fn init_sentry() -> Option<sentry::ClientInitGuard> {
     let dsn = std::env::var("SIPI_SENTRY_DSN")
         .ok()

@@ -67,7 +67,7 @@ pub struct AppState {
     /// Configured Lua routes (method/route/script), registered as axum routes by
     /// [`crate::app`]. Empty when the engine is uninstalled.
     pub routes: Vec<ffi::RouteEntry>,
-    /// Max POST body size in bytes — always finite (S2-19): a Lua config that
+    /// Max POST body size in bytes, always finite: a Lua config that
     /// leaves `max_post_size` unset falls back to
     /// [`crate::config::DEFAULT_MAX_POST_SIZE`] in [`AppState::load`]. The
     /// Lua-route and docroot handlers reject oversized bodies (413).
@@ -82,14 +82,13 @@ pub struct AppState {
     /// hook in [`iiif_access`]. `None` when disabled (`--preflight-cache-ttl 0`).
     /// See [`crate::preflight_cache`].
     preflight_cache: Option<Arc<preflight_cache::PreflightCache>>,
-    /// CORS origin allowlist (`SIPI_ALLOWED_ORIGINS`, DEV-6061). Empty (the
-    /// default) is opt-out: every CORS site falls back to today's
-    /// reflect-any-origin behaviour via [`cors_allow`]. Non-empty switches the
-    /// instance into allowlist mode.
+    /// CORS origin allowlist (`SIPI_ALLOWED_ORIGINS`). Empty (the default) is
+    /// opt-out: every CORS site reflects any origin via [`cors_allow`].
+    /// Non-empty switches the instance into allowlist mode.
     allowed_origins: Vec<String>,
-    /// Public host allowlist (`SIPI_PUBLIC_HOSTS`, S2-17). Empty (the default)
-    /// is opt-out: [`forwarded`] returns the `X-Forwarded-Host`/`Host` header
-    /// verbatim, today's behaviour. Non-empty switches the instance into
+    /// Public host allowlist (`SIPI_PUBLIC_HOSTS`). Empty (the default) is
+    /// opt-out: [`forwarded`] returns the `X-Forwarded-Host`/`Host` header
+    /// verbatim. Non-empty switches the instance into
     /// allowlist mode: a header host on the list passes through, any other
     /// host is replaced by the first allowlisted host — closing the
     /// canonical-`@id`/`Location`/`Link`/cache-key/`server.host` spoofing
@@ -114,13 +113,13 @@ impl AppState {
     /// `--nthreads`/`--max-waiting`/`--queue-timeout` serve knobs (`None` → the
     /// defaults below).
     ///
-    /// `allowed_origins` is the `SIPI_ALLOWED_ORIGINS` CORS allowlist (DEV-6061,
-    /// [`crate::config::allowed_origins_from_env`]); empty = opt-out (every CORS
-    /// site reflects any Origin, today's behaviour).
+    /// `allowed_origins` is the `SIPI_ALLOWED_ORIGINS` CORS allowlist
+    /// ([`crate::config::allowed_origins_from_env`]); empty = opt-out, every
+    /// CORS site reflects any Origin.
     ///
-    /// `public_hosts` is the `SIPI_PUBLIC_HOSTS` host allowlist (S2-17,
-    /// [`crate::config::public_hosts_from_env`]); empty = opt-out (`forwarded`
-    /// trusts `X-Forwarded-Host`/`Host` verbatim, today's behaviour).
+    /// `public_hosts` is the `SIPI_PUBLIC_HOSTS` host allowlist
+    /// ([`crate::config::public_hosts_from_env`]); empty = opt-out, `forwarded`
+    /// trusts `X-Forwarded-Host`/`Host` verbatim.
     // Startup glue with one parameter per serve knob (like `serve()` in
     // lib.rs); a config struct would just relocate the list.
     #[allow(clippy::too_many_arguments)]
@@ -194,7 +193,7 @@ impl AppState {
                     // TOML config supplies routes directly; a Lua config has them
                     // read back from the engine via the seam.
                     routes: configured_routes.unwrap_or_default(),
-                    // S2-19: `0` from the engine means "unset" (Lua config never
+                    // `0` from the engine means "unset" (Lua config never
                     // configured `max_post_size`), not "unlimited" — fall back to
                     // a finite default rather than reading an unbounded body into
                     // RAM before admission.
@@ -328,7 +327,7 @@ pub async fn iiif(
     // Shell-set headers on the streamed (success) response, captured before the
     // request (and `state`) is moved onto the blocking thread: the CORS Origin
     // echo + credentials (image + /file), gated by `cors_allow` against the
-    // configured allowlist (empty = today's unconditional echo), and, for a
+    // configured allowlist (empty = the unconditional echo default), and, for a
     // /file Range request, the identifier-derived Content-Disposition.
     let origin = header_str(&headers, "origin");
     let cors_decision = cors_allow(origin.as_deref(), &state.allowed_origins);
@@ -598,8 +597,7 @@ pub(crate) fn permission_str(permission: SipiPermType) -> &'static str {
 
 /// Resolve the infile + permission for an IIIF / info / knora request: run the
 /// `pre_flight` hook when one is defined (it returns the infile), else build the
-/// default `imgroot/prefix/identifier` path with `allow`
-///.
+/// default `imgroot/prefix/identifier` path with `allow`.
 fn iiif_access(
     state: &AppState,
     parsed: &ParsedRequest,
@@ -697,7 +695,7 @@ fn iiif_access(
 
 /// Resolve the infile + permission for a `/file` download: build the path, then
 /// run `file_pre_flight` on it when defined.
-/// A restrict decision is rejected here (403, S2-09); any other non-allow
+/// A restrict decision is rejected here (403); any other non-allow
 /// permission is rejected here (401).
 fn file_access(
     state: &AppState,
@@ -758,7 +756,7 @@ fn file_access(
         SipiPermType::Allow | SipiPermType::Stream => Ok(access),
         // A restrict decision cannot be applied to a raw `/file` download (no
         // clamp or watermark point exists on that path), so it is refused
-        // rather than served at full fidelity (S2-09).
+        // rather than served at full fidelity.
         SipiPermType::Restrict => Err(Box::new(sink::error_response(StatusCode::FORBIDDEN))),
         _ => Err(Box::new(sink::error_response(StatusCode::UNAUTHORIZED))),
     }
@@ -780,8 +778,8 @@ fn permission_from_str(s: &str) -> SipiPermType {
 }
 
 /// The request as the Lua bindings see it: lowercase header names (axum
-/// guarantees them), one entry per cookie with original-case names
-/// (DEV-6119), and the host-injected outbound traceparent.
+/// guarantees them), one entry per cookie with original-case names, and the
+/// host-injected outbound traceparent.
 fn build_request_data(
     method: &Method,
     uri: &Uri,
@@ -898,7 +896,7 @@ fn serve_image(
         .flatten();
     // A restrict decision that supplies neither a size cap nor a watermark
     // arrives at the seam indistinguishable from `allow` (both NULL) — refuse
-    // it here rather than let the engine pass the original through (S2-09).
+    // it here rather than let the engine pass the original through.
     if access.permission == SipiPermType::Restrict && c_size.is_none() && c_watermark.is_none() {
         return complete(outcome_tx, sink::error_response(StatusCode::FORBIDDEN));
     }
@@ -1103,7 +1101,7 @@ pub fn lua_route_method_router(
         async move { serve_lua_script(state, script, None, req).await }
     });
     // Cap the request body at max_post_size (oversized → 413) and bound the
-    // body read by time (S2-19): a slow/trickling client is cut off before it
+    // body read by time: a slow/trickling client is cut off before it
     // ever reaches `serve_lua_script`'s `admission.acquire`, so it never holds
     // a Full permit while still streaming its body.
     let handler: MethodRouter<Arc<AppState>> = handler.layer(DefaultBodyLimit::max(max_post));
@@ -1115,15 +1113,14 @@ pub fn lua_route_method_router(
 }
 
 /// The maximum number of multipart parts (file or non-file fields combined)
-/// `serve_lua_script` will process in one request (S2-19); the request beyond
+/// `serve_lua_script` will process in one request; the request beyond
 /// this is rejected with 400, independent of `max_post_size`.
 const MAX_MULTIPART_PARTS: u32 = 64;
 
-/// Run a Lua script against the request: snapshot it, spool any multipart uploads
-/// to temp files, build the request data, and run the script through
-/// `LuaEnv::run_route` on the blocking pool. The script's own Lua sets the
-/// response status/headers/body (no shell-injected CORS — the script owns its
-/// headers). Shared by configured Lua routes (`docroot = None`) and docroot
+/// Run a Lua script against the request on the blocking pool. The script's own
+/// Lua sets the response status/headers/body (no shell-injected CORS: the
+/// script owns its headers). Shared by configured Lua routes (`docroot = None`)
+/// and docroot
 /// `.lua`/`.elua` scripts (`docroot = Some`, injecting `server.docroot`).
 async fn serve_lua_script(
     state: Arc<AppState>,
@@ -1167,7 +1164,7 @@ async fn serve_lua_script(
         loop {
             match multipart.next_field().await {
                 Ok(Some(mut field)) => {
-                    // S2-19: cap the part count independent of the body-size limit —
+                    // Cap the part count independent of the body-size limit:
                     // a request built from many tiny parts stays under
                     // `max_post_size` while still costing a field-processing pass
                     // (and a temp file, for file parts) per part.
@@ -1189,8 +1186,8 @@ async fn serve_lua_script(
                     } else {
                         // A file part: stream chunks straight to the temp file so a
                         // single upload never buffers fully in memory. The whole-request
-                        // size is still bounded by the DefaultBodyLimit layer (S2-19:
-                        // max_post_size is always finite, see config::DEFAULT_MAX_POST_SIZE).
+                        // size is still bounded by the DefaultBodyLimit layer
+                        // (max_post_size is always finite, see config::DEFAULT_MAX_POST_SIZE).
                         let Ok(mut tf) = NamedTempFile::new() else {
                             return sink::error_response(StatusCode::INTERNAL_SERVER_ERROR);
                         };
@@ -1379,9 +1376,8 @@ fn run_lua_route_blocking(
     });
     // Every body-channel send is bounded by the request's Lua deadline: a
     // client that stops reading stalls the axum body stream, fills the
-    // bounded channel, and would otherwise pin this blocking thread forever —
-    // exactly the DEV-6070 hang the deadline exists to close, reachable by
-    // any unauthenticated slow reader. On expiry the write fails as
+    // bounded channel, and would otherwise pin this blocking thread forever,
+    // reachable by any unauthenticated slow reader. On expiry the write fails as
     // client-gone and the script aborts.
     let write_deadline = std::time::Instant::now() + lua.limits().timeout;
     let write_tx = body_tx.clone();
@@ -1505,7 +1501,7 @@ pub fn docroot_method_router(state: Arc<AppState>) -> Option<MethodRouter<Arc<Ap
         },
     );
     // Cap docroot `.lua`/`.elua` POST bodies at the configured size (static GETs
-    // ignore it) and bound the body read by time (S2-19), matching
+    // ignore it) and bound the body read by time, matching
     // `lua_route_method_router`.
     let handler: MethodRouter<Arc<AppState>> = handler.layer(DefaultBodyLimit::max(max_post));
     let handler: MethodRouter<Arc<AppState>> =
@@ -1592,14 +1588,14 @@ async fn serve_docroot(state: Arc<AppState>, req: Request) -> Response {
 
     let is_head = req.method() == Method::HEAD;
     // Echo the Origin (no credentials), matching the IIIF success paths — gated
-    // by the allowlist (empty = today's unconditional echo) via `push_cors`.
+    // by the allowlist (empty = the unconditional echo default) via `push_cors`.
     // Validated downstream (`apply_headers` / `head_only` drop a header `http`
     // rejects).
     let origin = header_str(req.headers(), "origin");
     let range = header_str(req.headers(), header::RANGE.as_str());
     let allowed_origins = state.allowed_origins.clone();
-    // Static docroot serving now admits via the Tile lane (was unbounded),
-    // bounding the realpath+stat+libmagic+stream cost.
+    // Static docroot serving admits via the Tile lane, bounding the
+    // realpath+stat+libmagic+stream cost.
     let permit = match state.admission.acquire(AdmissionKind::Tile).await {
         Acquired::Admitted(permit) => permit,
         Acquired::Shed | Acquired::TimedOut => return busy_response(),
@@ -1996,7 +1992,7 @@ fn serve_info_json(
         // A restrict decision that supplies neither a size cap nor a watermark
         // arrives here indistinguishable from `allow` — refuse it rather than
         // disclose the native dims and tile grid, matching the image-serve
-        // path (routes.rs `serve_image`) and `/file` (S2-09).
+        // path (routes.rs `serve_image`) and `/file`.
         if access.permission == SipiPermType::Restrict
             && access_kv_str(access, "size").is_none()
             && access_kv_str(access, "watermark").is_none()
@@ -2040,8 +2036,8 @@ fn serve_info_json(
     };
 
     // info.json always sends ACAO: *, even with an Origin — unaffected by the
-    // allowlist (DEV-6061 restricts credentialed CORS, not this public,
-    // credential-less response), so it bypasses `cors_allow` entirely. When a
+    // allowlist, which restricts credentialed CORS and not this public,
+    // credential-less response, so it bypasses `cors_allow` entirely. When a
     // preflight hook is configured, the permission (and thus the body) is
     // credential-dependent, so the response must not be shared across
     // credentials by an intermediary cache.
@@ -2084,7 +2080,7 @@ fn serve_knora_json(
         // arrives here indistinguishable from `allow` — refuse it (hiding
         // existence, per knora.json's deny convention) rather than disclose
         // the native dims and tile grid, matching the image-serve path
-        // (routes.rs `serve_image`) and `/file` (S2-09).
+        // (routes.rs `serve_image`) and `/file`.
         if access.permission == SipiPermType::Restrict
             && access_kv_str(access, "size").is_none()
             && access_kv_str(access, "watermark").is_none()
@@ -2113,7 +2109,7 @@ fn serve_knora_json(
     };
 
     // knora.json echoes the Origin when present (gated by `cors_allow` against
-    // the configured allowlist — empty = today's unconditional echo), else *.
+    // the configured allowlist — empty = the unconditional echo default), else *.
     let origin = header_str(headers, "origin");
     let (acao, origin_vary) = match origin {
         None => (Some("*".to_owned()), false),
@@ -2144,8 +2140,7 @@ fn serve_knora_json(
     )
 }
 
-/// 303 redirect from a bare identifier to its canonical info.json
-///.
+/// 303 redirect from a bare identifier to its canonical info.json.
 fn redirect(headers: &HeaderMap, parsed: &ParsedRequest, public_hosts: &[String]) -> Response {
     let (scheme, host) = forwarded(headers, public_hosts);
     let target = if parsed.prefix.is_empty() {
@@ -2175,8 +2170,8 @@ fn redirect(headers: &HeaderMap, parsed: &ParsedRequest, public_hosts: &[String]
 
 // ── Helpers ───────────────────────────────────────────────────────────────
 
-/// A CORS decision for one request Origin against the configured allowlist
-/// (DEV-6061). The single chokepoint every CORS site (`iiif`'s image/file
+/// A CORS decision for one request Origin against the configured allowlist.
+/// The single chokepoint every CORS site (`iiif`'s image/file
 /// stream, [`json_response`]'s knora.json path, [`cors_preflight_response`],
 /// [`push_cors`]) reads through [`cors_allow`] — the four sites differ only in
 /// which headers they attach on `Allow`, not in whether they attach them.
@@ -2189,14 +2184,13 @@ enum CorsDecision {
     /// so the caller must still emit `Vary: Origin` (with no other CORS
     /// headers) to keep a shared cache from serving a cached deny to a later
     /// allowed origin. In the default (empty-allowlist) mode `vary` is always
-    /// `false`, keeping that path byte-identical to pre-DEV-6061 behaviour.
+    /// `false`.
     Deny { vary: bool },
     /// Emit the site's CORS headers for the presented Origin. `vary` is `true`
     /// only in allowlist mode (the allowlist is non-empty) — a shared cache
     /// must not serve one origin's `Access-Control-Allow-Origin` to another,
     /// so the caller should also emit `Vary: Origin`. In the default
-    /// (empty-allowlist) mode `vary` is always `false`, keeping that path
-    /// byte-identical to pre-DEV-6061 behaviour.
+    /// (empty-allowlist) mode `vary` is always `false`.
     Allow { vary: bool },
 }
 
@@ -2204,7 +2198,7 @@ enum CorsDecision {
 /// `allowlist` (`SIPI_ALLOWED_ORIGINS`, [`crate::config::allowed_origins_from_env`]).
 ///
 /// An empty `allowlist` is the opt-out default: any presented Origin is
-/// allowed (today's reflect-any-origin behaviour, unchanged). A non-empty
+/// allowed. A non-empty
 /// `allowlist` switches the instance into allowlist mode: only an exact,
 /// listed origin is allowed; anything else — including no Origin header at
 /// all — is denied.
@@ -2355,12 +2349,12 @@ fn json_response(
 /// plain HTTP behind Traefik, so the real scheme is in `X-Forwarded-Proto`). Host
 /// falls back from `X-Forwarded-Host` to `Host`.
 ///
-/// The host is validated against `public_hosts` (`SIPI_PUBLIC_HOSTS`, S2-17)
-/// before it reaches the canonical `@id`, the 303 `Location`, the `Link`
-/// header, the cache key, or the Lua `server.host`: an empty allowlist is the
-/// opt-out sentinel (the candidate host is returned verbatim, today's
-/// behaviour); a non-empty allowlist returns the candidate unchanged when it
-/// is on the list, else substitutes the first allowlisted host.
+/// The host is validated against `public_hosts` (`SIPI_PUBLIC_HOSTS`) before it
+/// reaches the canonical `@id`, the 303 `Location`, the `Link` header, the
+/// cache key, or the Lua `server.host`: an empty allowlist is the opt-out
+/// sentinel and the candidate host is returned verbatim; a non-empty allowlist
+/// returns the candidate unchanged when it is on the list, else substitutes the
+/// first allowlisted host.
 fn forwarded(headers: &HeaderMap, public_hosts: &[String]) -> (String, String) {
     let scheme = if header_str(headers, "x-forwarded-proto").as_deref() == Some("https") {
         "https"
@@ -2593,8 +2587,7 @@ mod tests {
         );
         assert!(h.get(header::ACCESS_CONTROL_ALLOW_ORIGIN).is_none());
         assert!(h.get(header::ACCESS_CONTROL_ALLOW_CREDENTIALS).is_none());
-        // Empty allowlist (default/reflect mode) — no Vary, byte-identical to
-        // pre-DEV-6061 behaviour.
+        // Empty allowlist (default/reflect mode): no Vary.
         assert!(h.get(header::VARY).is_none());
     }
 
@@ -2647,7 +2640,7 @@ mod tests {
 
     #[test]
     fn cors_allow_reflects_any_origin_when_allowlist_empty() {
-        // Default (opt-out) posture: unchanged from pre-DEV-6061 behaviour.
+        // Default (opt-out) posture: any presented Origin is allowed.
         assert!(matches!(
             cors_allow(Some("https://example.org"), &[]),
             CorsDecision::Allow { vary: false }
@@ -2889,7 +2882,7 @@ mod tests {
     #[test]
     fn parse_byte_range_rejects_inverted_and_out_of_bounds() {
         // Inverted range (end < start) → None, so the caller 500s instead of
-        // underflowing `end - start + 1` (the adversarial-review finding).
+        // underflowing `end - start + 1`.
         assert_eq!(parse_byte_range("bytes=100-50", 1000), None);
         assert_eq!(parse_byte_range("bytes=999-0", 1000), None);
         // start at/after EOF → None (C++ sendFile throws → 500).

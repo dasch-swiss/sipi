@@ -778,9 +778,10 @@ pub fn prefix_as_path() -> Result<bool, i32> {
     Ok(v != 0)
 }
 
-/// The configured max POST body size in bytes (`max_post_size`). `0` means
-/// unlimited — the shell then imposes no Lua-route body cap. `Err` carries the
-/// FFI status (500 if `sipi_init` has not run).
+/// The configured max POST body size in bytes (`max_post_size`), as the engine
+/// holds it; `0` means the config left it unset. The shell maps that to a finite
+/// default rather than to "unlimited" (see `routes::AppState::load`). `Err`
+/// carries the FFI status (500 if `sipi_init` has not run).
 pub fn max_post_size() -> Result<usize, i32> {
     let mut v: usize = 0;
     // SAFETY: `out` is a valid pointer; the seam guards exceptions.
@@ -1405,9 +1406,8 @@ mod domain_seam_mapping {
     use super::{SipiFormatType, SipiQualityType, SipiRegionType, SipiSizeType};
 
     // Every domain enum variant must map to the seam enum with the matching
-    // discriminant — the `From` impls are the coupling guard the parser used to
-    // provide by emitting the FFI enums directly. An exhaustive per-variant
-    // check plus the `bool → c_int` flag mapping below.
+    // discriminant. An exhaustive per-variant check plus the `bool → c_int`
+    // flag mapping below.
 
     #[test]
     fn region_kind_maps_every_variant() {

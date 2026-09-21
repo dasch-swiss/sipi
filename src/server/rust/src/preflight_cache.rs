@@ -51,12 +51,9 @@
 //!   its own response (`direct_response`) is request-specific and is never cached
 //!   (the caller only inserts a plain `outcome`).
 //!
-//! The table is a fixed set of slots allocated once at startup and reused in place
-//! (per-request key bytes are still allocated by [`make_key`]): `NUM_SHARDS` shards
-//! (each a `Mutex<Box<[Option<Slot>]>>`), open addressing with a short linear
-//! probe, evicting the earliest-expiring slot when a probe window is full. The live
-//! working set (distinct `(image, user)` pairs in a burst) is tiny, so the table is
-//! sized for the hot set, not to fill L3.
+//! The table is a fixed set of slots allocated once at startup and reused in
+//! place, sized for the live working set (distinct `(image, user)` pairs in a
+//! burst), which is tiny.
 
 use std::collections::hash_map::DefaultHasher;
 use std::hash::{Hash, Hasher};
@@ -185,11 +182,12 @@ struct Slot {
     decision: CachedDecision,
 }
 
-/// A fixed-slot, sharded, TTL cache for preflight decisions. Allocated once; slots
-/// are reused in place. Cheap to share behind an `Arc` (stored in `AppState`).
 /// One shard of the table: a fixed slab of open-addressing slots behind a lock.
 type Shard = Mutex<Box<[Option<Slot>]>>;
 
+/// A fixed-slot, sharded, TTL cache for preflight decisions. Allocated once;
+/// slots are reused in place. Cheap to share behind an `Arc` (stored in
+/// `AppState`).
 pub struct PreflightCache {
     shards: Box<[Shard]>,
     slots_per_shard: usize,

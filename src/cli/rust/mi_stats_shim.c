@@ -5,9 +5,9 @@
  * the `mi_stats_get` contract — signature, `mi_stats_t` layout, and the
  * caller-filled `size`/`version` handshake — is checked by the C compiler
  * instead of being hand-mirrored in Rust, where a declaration drifting from
- * the pinned mimalloc version is a runtime SIGSEGV on the metrics thread
- * (SIPI-1R), not a build error. A mimalloc bump that changes the stats API
- * must break this file's compile, never production.
+ * the pinned mimalloc version is a runtime SIGSEGV on the metrics thread, not a
+ * build error (docs/adr/0019-mimalloc-production-allocator.md). A mimalloc bump
+ * that changes the stats API must break this file's compile, never production.
  */
 
 #include <stdbool.h>
@@ -20,8 +20,8 @@
  * field mapping lives with the Rust caller): live normal/huge malloc bytes
  * from `mi_stats_get`, and the process resident set size from
  * `mi_process_info`. RSS is the true OS-resident figure the `sipi.malloc.*`
- * gauges report, unlike mimalloc's `committed` (which ratchets and reads far
- * above RSS, so it misleads as an OOM/RSS proxy — SIPI RSS-ratchet learning).
+ * gauges report, unlike mimalloc's `committed`, which ratchets and reads far
+ * above RSS, so it misleads as an OOM/RSS proxy.
  * Returns false when `mi_stats_get` rejects the size/version handshake —
  * impossible while shim and allocator compile from the same tree, but it is
  * the documented contract, so surface it instead of returning zeros. */

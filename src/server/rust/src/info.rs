@@ -103,7 +103,7 @@ pub fn image_info_json(id: &str, dims: &SipiImageDims) -> Value {
     // Derive one pyramid from the tile grid and feed both arrays from it, so
     // `sizes` and `scaleFactors` can never drift apart. Untiled images fall back
     // to a reference tile size. Depth comes from the tile grid, not a
-    // resolution-level count (the ordinal count was the source of the old bug).
+    // resolution-level count.
     let (tw, th) = if dims.tile_width > 0 && dims.tile_height > 0 {
         (dims.tile_width, dims.tile_height)
     } else {
@@ -419,15 +419,15 @@ mod tests {
             };
             let v = image_info_json("http://h/id", &d);
 
-            // §5.4: exactly one tile object; width/height are the stored tile size,
-            // passed through unchanged (criterion 4, no regression of finding 1).
+            // §5.4: exactly one tile object; width/height are the stored tile
+            // size, passed through unchanged.
             let tiles = v["tiles"].as_array().unwrap();
             assert_eq!(tiles.len(), 1, "single tile object (§5.4)");
             assert_eq!(tiles[0]["width"], c.tw);
             assert_eq!(tiles[0]["height"], c.th);
 
-            // Criteria 1 + 5 + §5.4 uniqueness: the exact power-of-two, ascending,
-            // once-each factor list.
+            // §5.4 uniqueness: the exact power-of-two, ascending, once-each
+            // factor list.
             assert_eq!(
                 tiles[0]["scaleFactors"],
                 json!(c.sf),
@@ -438,8 +438,7 @@ mod tests {
                 c.th
             );
 
-            // Criteria 2 + 5: same pyramid — one size per factor, ascending, native
-            // included.
+            // The same pyramid: one size per factor, ascending, native included.
             let expected_sizes: Vec<Value> = c
                 .sizes
                 .iter()
@@ -460,8 +459,8 @@ mod tests {
                 "sizes.length == scaleFactors.length"
             );
 
-            // Criterion 3: the deepest scale factor puts the whole image within a
-            // single tile on both axes.
+            // The deepest scale factor puts the whole image within a single tile
+            // on both axes.
             let deepest = *c.sf.last().unwrap();
             assert!(
                 c.w.div_ceil(deepest) <= c.tw,

@@ -26,7 +26,7 @@
 //! opentelemetry 0.31 has no batch-observer API (`register_callback` was
 //! removed), so each instrument carries its own callback and each snapshots the
 //! singleton. The read is a cheap singleton copy and collection runs at the
-//! reader interval (60s), so the ~22 reads per cycle are immaterial.
+//! reader interval, so the per-cycle cost is immaterial.
 //!
 //! Two instruments are **synchronous** rather than observable, because they
 //! record a distribution over individual requests that no end-of-interval poll

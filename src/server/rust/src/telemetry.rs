@@ -179,8 +179,8 @@ pub fn deployment_environment() -> String {
 /// to a release.
 ///
 /// Deliberately *not* `SIPI_SENTRY_RELEASE`: that names the deploy bundle, not
-/// SIPI, so reporting it as `service.version` left telemetry unable to say which
-/// SIPI build was running. Sentry keeps reading `SIPI_SENTRY_RELEASE` for its own
+/// SIPI, so reporting it as `service.version` would leave telemetry unable to
+/// say which SIPI build is running. Sentry keeps reading `SIPI_SENTRY_RELEASE` for its own
 /// `release` (`main.rs`); a deploy that wants its bundle version in telemetry too
 /// can add it via `OTEL_RESOURCE_ATTRIBUTES`.
 pub fn service_version() -> Option<String> {
