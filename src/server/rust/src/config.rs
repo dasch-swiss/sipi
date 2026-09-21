@@ -37,10 +37,9 @@ pub(crate) const DEFAULT_LARGE_DECODE_THRESHOLD_BYTES: u64 = 32 * 1024 * 1024;
 /// concern and never crosses the FFI seam into the engine, unlike the
 /// codec/limit overrides above.
 ///
-/// DEV-6061 (opt-in hardening): unset or empty is the "no restriction
-/// configured" sentinel — `cors_allow` then falls back to today's
-/// reflect-any-origin behaviour, byte-identical to a build predating this
-/// knob. Setting the var switches an instance into allowlist mode.
+/// Unset or empty is the "no restriction configured" sentinel: `cors_allow`
+/// then reflects any origin. Setting the var switches an instance into
+/// allowlist mode.
 pub fn allowed_origins_from_env() -> Vec<String> {
     parse_csv_list(std::env::var("SIPI_ALLOWED_ORIGINS").ok().as_deref())
 }
@@ -54,17 +53,15 @@ pub fn allowed_origins_from_env() -> Vec<String> {
 /// crosses the FFI seam (`config.hostname` is Lua-config-only and is not the
 /// validation source here).
 ///
-/// S2-17 (opt-in hardening): unset or empty is the "no restriction
-/// configured" sentinel — `forwarded` then falls back to today's
-/// reflect-any-host behaviour, byte-identical to a build predating this knob.
-/// Setting the var switches an instance into allowlist mode: a header host on
-/// the list passes through unchanged, any other host is replaced by the first
-/// allowlisted host.
+/// Unset or empty is the "no restriction configured" sentinel: `forwarded`
+/// then returns any host verbatim. Setting the var switches an instance into
+/// allowlist mode: a header host on the list passes through unchanged, any
+/// other host is replaced by the first allowlisted host.
 pub fn public_hosts_from_env() -> Vec<String> {
     parse_csv_list(std::env::var("SIPI_PUBLIC_HOSTS").ok().as_deref())
 }
 
-/// The handler-wall-clock-timeout default (S2-18): 60 seconds.
+/// The handler wall-clock timeout default.
 pub const DEFAULT_REQUEST_TIMEOUT_SECS: u64 = 60;
 
 /// Parses `SIPI_REQUEST_TIMEOUT` — an integer number of seconds — into the
@@ -74,9 +71,9 @@ pub const DEFAULT_REQUEST_TIMEOUT_SECS: u64 = 60;
 /// [`public_hosts_from_env`]: the handler timeout is a Rust-shell-only serve
 /// knob and never crosses the FFI seam.
 ///
-/// Unset, unparseable, or `0` all fall back to [`DEFAULT_REQUEST_TIMEOUT_SECS`]
-/// (S2-18) — a `0`-second timeout would answer every request with 408, which
-/// is never the intent of an accidental empty/zero value.
+/// Unset, unparseable, or `0` all fall back to [`DEFAULT_REQUEST_TIMEOUT_SECS`]:
+/// a `0`-second timeout would answer every request with 408, which is never the
+/// intent of an accidental empty or zero value.
 pub fn request_timeout_from_env() -> std::time::Duration {
     let secs = std::env::var("SIPI_REQUEST_TIMEOUT")
         .ok()
@@ -86,13 +83,13 @@ pub fn request_timeout_from_env() -> std::time::Duration {
     std::time::Duration::from_secs(secs)
 }
 
-/// The Lua-route body-admission size default (S2-19) when the Lua config
-/// leaves `max_post_size` unset (0): 256 MiB. A previous `unwrap_or(0)` treated
-/// `0` as "unlimited", which read an unbounded request body fully into RAM
-/// before admission; every Lua-route body cap is now finite.
+/// The Lua-route body-admission size default when the Lua config leaves
+/// `max_post_size` unset (`0`). `0` does not mean unlimited: every Lua-route
+/// body cap is finite, so no unbounded request body is read into RAM before
+/// admission.
 pub const DEFAULT_MAX_POST_SIZE: usize = 256 * 1024 * 1024;
 
-/// The Lua-route body-read-timeout default (S2-19): 10 seconds.
+/// The Lua-route body-read timeout default.
 pub const DEFAULT_BODY_READ_TIMEOUT_SECS: u64 = 10;
 
 /// Parses `SIPI_BODY_READ_TIMEOUT` — an integer number of seconds — into the
@@ -105,9 +102,9 @@ pub const DEFAULT_BODY_READ_TIMEOUT_SECS: u64 = 10;
 /// seam.
 ///
 /// Unset, unparseable, or `0` all fall back to
-/// [`DEFAULT_BODY_READ_TIMEOUT_SECS`] (S2-19) — a `0`-second timeout would
-/// fail every request body read, which is never the intent of an accidental
-/// empty/zero value. Bounding the body read by time (in addition to
+/// [`DEFAULT_BODY_READ_TIMEOUT_SECS`]: a `0`-second timeout would fail every
+/// request body read, which is never the intent of an accidental empty or zero
+/// value. Bounding the body read by time (in addition to
 /// [`DEFAULT_MAX_POST_SIZE`]'s bound by size) means a slow/trickling client
 /// cannot hold a body-read connection open indefinitely before an admission
 /// permit is even acquired.
@@ -830,10 +827,9 @@ mod body_read_timeout_tests {
     }
 }
 
-/// Shipped-defaults regression (S2-33): the other half of "shipped defaults
-/// are safe" — the finite-mapping behavior of `max_post_size` itself is
-/// covered by the S2-19 body-limit e2e; this just pins the constant so a
-/// future edit can't silently make the shipped default unbounded again.
+/// Pins the constant so a future edit cannot make the shipped default
+/// unbounded. The finite-mapping behaviour of `max_post_size` itself is
+/// covered by the body-limit e2e.
 #[cfg(test)]
 mod tests {
     use super::DEFAULT_MAX_POST_SIZE;

@@ -276,7 +276,7 @@ pub fn serve_streaming<F>(
         // The head (status + headers) already went out over `outcome_tx` before
         // the body callback failed, so the status on the wire can't change — a
         // clean channel close here would end the chunked body as an
-        // indistinguishable-from-complete 200 (Sentry SIPI-1Q). Push an abort
+        // indistinguishable-from-complete 200. Push an abort
         // item instead so `stream_response`'s body stream errors and hyper
         // resets the connection. `blocking_send` erring means the client (and
         // thus the receiver) is already gone, which is fine to ignore.

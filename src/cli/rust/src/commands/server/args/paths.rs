@@ -1,8 +1,7 @@
 //! Filesystem path + path-resolution flags (the "Paths" `--help` heading).
 //!
-//! `pathprefix` has an effect — `routes.rs` reads `prefix_as_path` off the engine
-//! context to decide whether the IIIF prefix is a path component under imgroot
-//! (the previously-untested `prefix_as_path = false` branch). `pathprefix` is
+//! `routes.rs` reads `prefix_as_path` off the engine context to decide whether
+//! the IIIF prefix is a path component under imgroot. `pathprefix` is
 //! flag-shaped (a bare `--pathprefix` means "true"), so it takes an optional
 //! value here (`--pathprefix` → true, `--pathprefix=false` → false, absent →
 //! fall through to the config).

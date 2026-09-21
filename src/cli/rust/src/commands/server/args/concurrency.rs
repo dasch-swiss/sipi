@@ -1,15 +1,9 @@
 //! Concurrency flags (the "Concurrency" `--help` heading).
 //!
-//! All are Rust-owned serve knobs handed to `sipi::run` (the Lua config does not
-//! set them). The first three configure the engine-work pool from CLI/env
-//! (`SIPI_NTHREADS`/`SIPI_MAX_WAITING`/`SIPI_QUEUE_TIMEOUT`): `nthreads` sizes the
-//! pool (0 or unset = auto-detect from CPU cores), `max_waiting` bounds the wait
-//! queue in front of it (default 2×nthreads), `queue_timeout` bounds how long each
-//! request waits before a 503 (default 5s). The last two configure the shell's
-//! opt-in preflight access-cache (`SIPI_PREFLIGHT_CACHE_TTL`/
-//! `SIPI_PREFLIGHT_CACHE_SLOTS`), disabled unless a TTL is set. See
-//! `server/rust/routes.rs`'s `AppState::load` and the `Admission` classify/acquire
-//! call sites (`//src/throttling/rust:admission`), and `server/rust/preflight_cache.rs`.
+//! All are Rust-owned serve knobs handed to `sipi::run`; the Lua config does not
+//! set them. See `server/rust/routes.rs`'s `AppState::load` and the `Admission`
+//! classify/acquire call sites (`//src/throttling/rust:admission`), and
+//! `server/rust/preflight_cache.rs`.
 
 use clap::Args;
 

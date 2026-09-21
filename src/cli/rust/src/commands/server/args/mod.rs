@@ -1,24 +1,20 @@
 //! The `server` verb's argument set, assembled from per-domain flatten groups.
 //!
 //! [`ServerArgs`] is the clap `Parser`; each `#[derive(Args)]` group is
-//! flattened in so `--help` renders sectioned and a reader finds every flag by
-//! domain. Group structs are crate-internal — only `ServerArgs` is the public
-//! surface (the binary owns the CLI, the `sipi` library takes a
-//! Rust-native `ServerOverrides`).
+//! flattened in so `--help` renders sectioned. Group structs are crate-internal:
+//! only `ServerArgs` is the public surface, because the binary owns the CLI and
+//! the `sipi` library takes a Rust-native `ServerOverrides`.
 //!
-//! The full ~40-flag server surface parses here (so e.g. `server --imgroot X`
-//! no longer exits 2), with each overridable flag an `Option<T>` carrying its
-//! `SIPI_*` env var — NO `default_value`, so an unset flag stays `None` and
-//! falls through to the loaded Lua config (an unset flag never overrides;
-//! precedence `config < env < CLI`). Every engine-behaviour flag forwards into
-//! `ServerOverrides` (see `mod.rs`'s `From<&ServerArgs>`); the transport flags
-//! the Rust shell owns (`sslport`/`sslcert`/`sslkey`, `keepalive`,
-//! `max-waiting`/`queue-timeout`, `hostname`, `nthreads`, `logfile`) are
-//! accepted for CLI compatibility but stay unforwarded, doc-commented per
-//! group.
+//! Each overridable flag is an `Option<T>` carrying its `SIPI_*` env var, with
+//! NO `default_value`, so an unset flag stays `None` and falls through to the
+//! loaded Lua config; precedence is `config < env < CLI`. Every engine-behaviour
+//! flag forwards into `ServerOverrides` (see `mod.rs`'s `From<&ServerArgs>`);
+//! the transport flags the Rust shell owns (`sslport`/`sslcert`/`sslkey`,
+//! `keepalive`, `max-waiting`/`queue-timeout`, `hostname`, `nthreads`,
+//! `logfile`) are accepted for CLI compatibility but stay unforwarded.
 //!
 //! Two fields stay top-level rather than in a group:
-//! - `config` is bootstrap — it *selects* the base Lua config the overrides
+//! - `config` is bootstrap: it *selects* the base Lua config the overrides
 //!   layer onto; it is not itself an override.
 //! - `drain_timeout` is a Rust-owned serve knob (the graceful-drain deadline),
 //!   not a config override, so it is handed straight to `sipi::run`.
@@ -85,13 +81,10 @@ mod tests {
     use clap::Parser;
 
     /// Every override-bearing field must parse to `None` when neither CLI nor
-    /// env provides it, so it falls through to the loaded Lua config.
-    /// A `default_value` on any overridable field would silently clobber
-    /// the config value — this pins one representative field per group against
-    /// that regression, plus `pathprefix`'s optional-value flag, where the
-    /// `default_value`-vs-`default_missing_value` distinction is easiest to get
-    /// wrong. The argv starts at `"server"` because that is what
-    /// `commands::server::run` hands `try_parse_from` after the verb dispatch.
+    /// env provides it, so it falls through to the loaded Lua config: a
+    /// `default_value` on an overridable field would silently clobber it. The
+    /// argv starts at `"server"` because that is what `commands::server::run`
+    /// hands `try_parse_from` after the verb dispatch.
     #[test]
     fn bare_server_invocation_sets_no_overrides() {
         let args = ServerArgs::try_parse_from(["server"]).unwrap();
@@ -110,11 +103,8 @@ mod tests {
         assert_eq!(args.logging.loglevel, None);
     }
 
-    /// The flags route into their groups and parse to the expected types — a
-    /// canary that the flatten wiring and the long-flag names hold across all
-    /// eight groups, that the top-level `config`/`--nthreads` `-c`/`-t` short
-    /// forms resolve, and that `--pathprefix` (an optional-value flag)
-    /// resolves to `Some(true)` when given without a value.
+    /// The flatten wiring and the long-flag names hold across all eight groups,
+    /// including the `-c`/`-t` short forms on the two top-level fields.
     #[test]
     fn server_flags_parse_into_their_groups() {
         let args = ServerArgs::try_parse_from([

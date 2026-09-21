@@ -1,13 +1,11 @@
 //! Cache flags (the "Cache" `--help` heading).
 //!
-//! `cache_size` is a sized string ("-1" unlimited, "0" disabled, or e.g.
-//! "200M") parsed engine-side. The deprecated `--cachedir` / `--cachesize` /
-//! `--cachenfiles` aliases are declared here as hidden fields (a
-//! `visible_alias` doesn't apply: they differ in hyphen shape from the
-//! canonical long names) and collapsed onto the canonical field in
-//! `commands/server/mod.rs`'s `From<&ServerArgs>` (canonical wins if both are
-//! set). `--cachehysteresis` is intentionally never declared — rejecting it as
-//! an unknown flag is deliberate, as it has no effect on the serve path.
+//! The deprecated `--cachedir` / `--cachesize` / `--cachenfiles` aliases are
+//! declared here as hidden fields (a `visible_alias` doesn't apply: they differ
+//! in hyphen shape from the canonical long names) and collapsed onto the
+//! canonical field in `commands/server/mod.rs`'s `From<&ServerArgs>` (canonical
+//! wins if both are set). `--cachehysteresis` is intentionally never declared:
+//! it has no effect on the serve path, so rejecting it as unknown is correct.
 
 use clap::Args;
 

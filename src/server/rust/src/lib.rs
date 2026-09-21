@@ -140,9 +140,7 @@ pub fn run(
     // retiring an idle `spawn_blocking` thread (routes.rs runs every image
     // decode/encode there) after its keep-alive timeout trips the same
     // "Joining already joined thread" false-positive abort as Kakadu's own
-    // worker-thread pool (SipiIOJ2k.cpp) — confirmed via a long-lived test
-    // server that died while idle, with no request in flight, well after
-    // its one and only image request. A keep-alive far longer than any
+    // worker-thread pool (SipiIOJ2k.cpp). A keep-alive far longer than any
     // realistic process lifetime means tokio never proactively retires (and
     // joins) a blocking-pool thread. `ASAN_OPTIONS` is set only by the
     // asan-instrumented test/CI config, never in dev or production.
@@ -336,8 +334,8 @@ async fn server_main(
     // The Rust-hosted Lua environment: hardened runtime + init script + the
     // config-table values, built from the resolved config. The boot probe runs
     // the init script under the request-VM limit profile; an init-script error
-    // refuses startup (fail closed — the old probes failed open, silently
-    // disabling authorization). A hook genuinely not defined is the legitimate
+    // refuses startup, failing closed rather than silently disabling
+    // authorization. A hook genuinely not defined is the legitimate
     // no-preflight mode. Probe results are boot-frozen.
     let (lua_env, hook_probes) = if configured_routes.is_some() {
         let limits = match scripting::LimitConfig::from_env() {
@@ -506,7 +504,7 @@ pub fn app(state: Arc<routes::AppState>) -> Router {
         // Outermost, so the recorded duration spans the whole in-router path
         // (tracing layers included) rather than just the handler.
         .layer(axum::middleware::from_fn(metrics::record_http_duration))
-        // Handler wall-clock timeout (S2-18): `tower_http::timeout::TimeoutLayer`
+        // Handler wall-clock timeout: `tower_http::timeout::TimeoutLayer`
         // (not `tower::timeout::TimeoutLayer` — its `BoxError` error type is
         // incompatible with axum 0.8's `Infallible` router requirement) answers
         // 408 once `SIPI_REQUEST_TIMEOUT` elapses. This bounds the handler future
@@ -559,10 +557,10 @@ async fn serve(
             preflight_cache_ttl,
             preflight_cache_slots,
             // Read directly (like `SIPI_RS_PORT` below): CORS is a Rust-shell
-            // knob, never a `ServerOverrides`/FFI concern (DEV-6061).
+            // knob, never a `ServerOverrides`/FFI concern.
             config::allowed_origins_from_env(),
             // Same rationale: the public-host allowlist is a Rust-shell knob,
-            // never a `ServerOverrides`/FFI concern (S2-17).
+            // never a `ServerOverrides`/FFI concern.
             config::public_hosts_from_env(),
         )
         .map_err(|e| std::io::Error::new(std::io::ErrorKind::InvalidInput, e.to_string()))?,
@@ -600,13 +598,9 @@ async fn serve(
     // `with_graceful_shutdown` yields an `IntoFuture`, not a `Future`; resolve it
     // so the select arm can poll `&mut server`.
     //
-    // `axum::serve` exposes no hyper builder, so it cannot enforce a
-    // header-read timeout or cap concurrent connections directly. The chosen
-    // option (S2-18) is (b): keep `axum::serve` and enforce both at the edge in
-    // Traefik (a Phase 11 operator change). Option (a) — a hyper-util accept
-    // loop with `header_read_timeout` plus a connection `Semaphore` — is
-    // deferred to a Linear follow-up if a slow-header incident is ever
-    // observed.
+    // `axum::serve` exposes no hyper builder, so it cannot enforce a header-read
+    // timeout or cap concurrent connections directly; both are enforced at the
+    // edge in Traefik instead.
     let server = axum::serve(listener, app(state))
         .with_graceful_shutdown(graceful)
         .into_future();

@@ -5,9 +5,8 @@
 //! `From<&ServerArgs> for ServerOverrides` mapping — the binary knows the CLI
 //! shape, the `sipi` library takes the Rust-native overrides bag.
 //!
-//! Every forwarded `server` flag maps into `ServerOverrides`; the override
-//! channel into the engine (the `repr(C)` struct + the `sipi_init` apply block)
-//! lives in `server/rust/config.rs`.
+//! The override channel into the engine (the `repr(C)` struct + the `sipi_init`
+//! apply block) lives in `server/rust/config.rs`.
 
 mod args;
 
@@ -152,11 +151,6 @@ pub fn run(server_argv: &[String]) -> ExitCode {
         }
     };
 
-    // `--drain-timeout` and the concurrency knobs (`--nthreads`,
-    // `--tiles-thread-ratio`, `--max-waiting`, `--queue-timeout`,
-    // `--preflight-cache-ttl`, `--preflight-cache-slots`) are Rust-owned serve
-    // knobs, not config overrides, so they are handed straight to `sipi::run`
-    // rather than layered onto the engine config.
     let overrides = ServerOverrides::from(&args);
     sipi::run(
         args.config,
