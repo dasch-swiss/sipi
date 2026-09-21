@@ -13,8 +13,7 @@ The **Rust axum shell** (`src/server/rust` + `src/cli/rust`) is the sole product
 
 Consequences for production code:
 
-- Comments describe current, working behavior on their own terms. Do **not** frame the Rust shell relative to the removed C++ server / oracle / transport ("matches the oracle", "the transport's X", "at the cutover", "reconstructs shttps' Y"). Referencing the C++ **engine** (the production FFI callee) is fine — that is what the shell calls into.
-- Do not describe roadmap or in-flight history ("not yet wired", "previously", "now uses"); state what the code does today.
+- Do **not** frame the Rust shell relative to the removed C++ server / oracle / transport ("matches the oracle", "the transport's X", "at the cutover", "reconstructs shttps' Y"). Referencing the C++ **engine** (the production FFI callee) is fine: that is what the shell calls into. The general rule is [Comments](#comments).
 
 ## Stack
 
@@ -86,6 +85,19 @@ The codebase has mixed naming styles. For new code, prefer the C++23 style guide
 | Functions / Methods | Mixed `camelCase` / `snake_case` | `imgroot()`, `send_error()`, `build_canonical_url()` |
 | Private members | `_leading_underscore` | `_imgroot`, `_nthreads` |
 | Namespaces | `PascalCase` | `Sipi::`, `shttps::` |
+
+## Comments
+
+- A comment states what the reader must not break, never what the session discovered. Test: would it still be true and useful for someone who never saw the change that added it?
+- Keep: an invariant a reader would otherwise break, a non-obvious third-party contract (lifetime, ownership, error/return semantics), the public API contract. One or two sentences each.
+- Move out: what a change fixed or a test caught → commit body or PR; probe tables, benchmarks, corpus counts → `docs/` or a learning; a rejected alternative → a docs page or ADR, leaving one line and a link in the source.
+- Delete: restatements of the code below, history ("previously", "now uses", "was changed to"), and any REQ id, user story, or plan-phase reference. A `TODO` without an issue id belongs in the tracker. A doc comment on an item a caller reaches is not a restatement: it is API surface, measured against what a caller needs rather than against the line below it.
+- A PR description describes the code and the diff, never the commit history. "Commit 1 did X, commit 2 fixed Y" describes the journey.
+- A "why" longer than about five lines belongs in a file; the comment becomes a pointer to it. A block past ~12 lines is a routing signal.
+- Delete by default, when adding and when trimming: per sentence, name what a reader breaks without it, cut the ones with no answer, unclear included, and hold each survivor to one or two sentences.
+- Rust doc comments use `///` for items and `//!` for modules, `//` inline.
+- C++ doc comments use `///` on public API functions and classes, per [`docs/src/development/cpp-style-guide.md`](docs/src/development/cpp-style-guide.md). No Doxygen build renders them, so they are a reading convention.
+- Lua, Bazel/Starlark, YAML, shell and TOML have no doc-comment tool: `--` and `#` comments only, held to the bullets above.
 
 ## Module Layout
 

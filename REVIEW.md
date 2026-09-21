@@ -4,8 +4,8 @@
 
 ### Production surface
 - The Rust shell (`src/server/rust`, `src/cli/rust`) is the sole production server; it drives the C++ image engine (`libsipi`) over the FFI seam. There is no C++ server (the shttps oracle was removed, ADR-0020); the C++ `//src/cli:sipi` binary provides only the offline verbs.
-- Flag comments in production code that frame it relative to the removed C++ server / oracle / transport ("matches the oracle", "the transport's X", "at the cutover"). Comments should state current behavior. Referencing the C++ **engine** (the FFI callee) is fine.
-- Flag roadmap / in-flight-history comments ("not yet wired", "previously", "now uses") — describe what the code does today.
+- Flag comments in production code that frame it relative to the removed C++ server / oracle / transport ("matches the oracle", "the transport's X", "at the cutover"). Referencing the C++ **engine** (the FFI callee) is fine.
+- Comments otherwise follow [`CONVENTIONS.md` § Comments](CONVENTIONS.md#comments). Flag what it deletes: restatements of the line below, history ("previously", "now uses"), roadmap ("not yet wired"), REQ ids and plan-phase references, and a `TODO` with no issue id.
 
 ### Security (input validation)
 - IIIF identifiers validated for path traversal (`..`, `%2e%2e`, encoded variants) before any filesystem operation
