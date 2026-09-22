@@ -1,5 +1,19 @@
 # Changelog
 
+## [9.1.1](https://github.com/dasch-swiss/sipi/compare/v9.1.0...v9.1.1) (2026-09-22)
+
+
+### Bug Fixes
+
+* **deps:** Raise rustls to 0.23.45, repair the dev-shell hook, run audit locally ([7a8e42c](https://github.com/dasch-swiss/sipi/commit/7a8e42cb389dc007ab218bef51fdf80028bfa50c))
+
+
+### Documentation
+
+* **docs:** Adopt the shared comment convention (DEV-7123) ([a2db7a6](https://github.com/dasch-swiss/sipi/commit/a2db7a672ffeab28190e39f283bee8c71efc3538))
+* **server,cli:** Trim the Rust shell's comments to the convention (DEV-7123) ([a61fb63](https://github.com/dasch-swiss/sipi/commit/a61fb634b8098cd852adae2de6d9712103115aef))
+* **specs:** Close out the asset-access plan and its journals ([9f9f8f2](https://github.com/dasch-swiss/sipi/commit/9f9f8f22f8388d29d59a0960d9f157bc8d806f80))
+
 ## [9.1.0](https://github.com/dasch-swiss/sipi/compare/v9.0.1...v9.1.0) (2026-09-12)
 
 
