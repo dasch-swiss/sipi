@@ -176,7 +176,7 @@ jobs:
         run: just bazel-docker-push-${{ matrix.arch }} ${{ steps.setup.outputs.flags }}
 
       - name: Docker Scout — record production
-        uses: docker/scout-action@bacf462e8d090c09660de30a6ccc718035f961e3 # v1
+        uses: docker/scout-action@7c6b6c3f7844478ace1ffd4e7aef649053d1f87d # v1.24.0
         with:
           command: environment
           image: registry://daschswiss/sipi:${{ github.ref_name }}-${{ matrix.arch }}
@@ -189,7 +189,7 @@ jobs:
       # packages in the layer graph, not the linked C/C++ dependency tree.
       # `exit-code: true` fails this step (and the job) on any Critical CVE.
       - name: Docker Scout — CVE gate (fail on Critical)
-        uses: docker/scout-action@bacf462e8d090c09660de30a6ccc718035f961e3 # v1
+        uses: docker/scout-action@7c6b6c3f7844478ace1ffd4e7aef649053d1f87d # v1.24.0
         with:
           command: cves
           image: registry://daschswiss/sipi:${{ github.ref_name }}-${{ matrix.arch }}
@@ -198,7 +198,7 @@ jobs:
           organization: daschswiss
 
       - name: Docker Scout — generate SBOM
-        uses: docker/scout-action@bacf462e8d090c09660de30a6ccc718035f961e3 # v1
+        uses: docker/scout-action@7c6b6c3f7844478ace1ffd4e7aef649053d1f87d # v1.24.0
         with:
           command: sbom
           image: registry://daschswiss/sipi:${{ github.ref_name }}-${{ matrix.arch }}
@@ -250,7 +250,7 @@ jobs:
         with:
           username: ${{ secrets.DOCKER_USER }}
           password: ${{ secrets.DOCKER_HUB_TOKEN }}
-      - uses: imjasonh/setup-crane@31b88efe9de28ae0ffa220711af4b60be9435f6e # v0.4
+      - uses: imjasonh/setup-crane@feee3b6bb0d4c68370f256a4502498c9227e5c6b # v0.7
       - uses: extractions/setup-just@f8a3cce218d9f83db3a2ecd90e41ac3de6cdfd9b # v3
       # `bazel-docker-publish-manifest` shells out to `crane index append`;
       # no bazel invocation, so no RBE/Bazel setup is needed here.
