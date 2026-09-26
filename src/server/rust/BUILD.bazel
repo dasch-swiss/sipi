@@ -87,7 +87,7 @@ rust_library(
         # the C++ CLI.
         "//src/ffi:sipi_ffi",
     ],
-    # Excluded from the sanitizer build (sanitizer.yml filters `-no-sanitizer`):
+    # Excluded from the sanitizer build (ci.yml's `sanitizer` job filters `-no-sanitizer`):
     # this library is the carrier of the transitive C++ dep (protobuf/abseil)
     # whose source includes a <sanitizer/*.h> header the hermetic LLVM toolchain
     # does not ship under --config=asan. It is a top-level target in the

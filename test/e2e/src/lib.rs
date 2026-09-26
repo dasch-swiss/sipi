@@ -2,10 +2,11 @@ use nix::sys::signal::{self, Signal};
 use nix::unistd::Pid;
 use std::io::{BufRead, BufReader};
 use std::net::TcpStream;
+use std::os::unix::process::ExitStatusExt as _;
 use std::path::{Path, PathBuf};
 use std::process::{Child, Command, Stdio};
 use std::sync::atomic::{AtomicU16, Ordering};
-use std::sync::{Arc, Mutex, OnceLock};
+use std::sync::{Arc, Mutex, Once, OnceLock};
 use std::time::{Duration, Instant};
 
 pub mod jwt;
@@ -33,13 +34,136 @@ pub fn allocate_ports() -> (u16, u16) {
     (http, ssl)
 }
 
-/// Manages a sipi server process for testing.
-pub struct SipiServer {
+/// A spawned server's `Child` plus everything a shutdown check needs: the
+/// captured output buffers (for a failure message) and the drain threads'
+/// EOF signals (so the final lines -- e.g. a LeakSanitizer report printed
+/// just before exit -- are captured before the buffers are read). Owned by
+/// [`LIVE`] from [`spawn`] until [`stop_entry`] consumes it.
+struct RegistryEntry {
     child: Child,
+    stdout_buf: Arc<Mutex<String>>,
+    stderr_buf: Arc<Mutex<String>>,
+    stdout_done: std::sync::mpsc::Receiver<()>,
+    stderr_done: std::sync::mpsc::Receiver<()>,
+}
+
+/// Every spawned server not yet stopped, keyed by nothing but linear scan
+/// (test binaries run at most a handful of servers concurrently). A
+/// `SipiServer` held in a test's `static OnceLock` is never dropped, so its
+/// entry would otherwise never be stopped or checked for a sanitizer
+/// finding; [`atexit_stop_remaining_servers`] sweeps whatever is still here
+/// when the test binary exits.
+static LIVE: Mutex<Vec<RegistryEntry>> = Mutex::new(Vec::new());
+
+static ATEXIT_ONCE: Once = Once::new();
+
+/// Register [`atexit_stop_remaining_servers`] with `libc::atexit` exactly
+/// once per process.
+fn ensure_atexit_registered() {
+    ATEXIT_ONCE.call_once(|| unsafe {
+        libc::atexit(atexit_stop_remaining_servers);
+    });
+}
+
+/// Stop one registry entry: SIGTERM, wait up to [`GRACEFUL_STOP_TIMEOUT`],
+/// then judge the exit. A server that had to be SIGKILLed after the
+/// deadline is not judged (escalation means we gave up waiting, not that
+/// the server misbehaved). A clean exit (status 0) or death by our own
+/// SIGTERM passes. Anything else -- a non-zero exit, or death by any other
+/// signal (e.g. SIGSEGV/SIGABRT/SIGBUS from a crash, or the shell aborting
+/// on a sanitizer finding) -- is a failure, and the returned message
+/// carries the captured stdout+stderr so the report is visible in the
+/// failure.
+fn stop_entry(mut entry: RegistryEntry) -> Result<(), String> {
+    signal::kill(
+        Pid::from_raw(i32::try_from(entry.child.id()).expect("PID overflows i32")),
+        Signal::SIGTERM,
+    )
+    .ok();
+
+    let deadline = Instant::now() + GRACEFUL_STOP_TIMEOUT;
+    let status = loop {
+        match entry.child.try_wait() {
+            Ok(Some(status)) => break Some(status),
+            Ok(None) if Instant::now() < deadline => {
+                std::thread::sleep(Duration::from_millis(100));
+            }
+            _ => break None,
+        }
+    };
+
+    let Some(status) = status else {
+        let pid = entry.child.id();
+        entry.child.kill().ok();
+        entry.child.wait().ok();
+        eprintln!(
+            "[test-harness] sipi (pid {pid}) did not exit within {:?} of SIGTERM; SIGKILLed",
+            GRACEFUL_STOP_TIMEOUT
+        );
+        return Ok(());
+    };
+
+    // Give the drain threads a chance to reach EOF so a report printed just
+    // before exit (e.g. LeakSanitizer's) lands in the buffer before it's
+    // read below.
+    let _ = entry.stdout_done.recv_timeout(Duration::from_secs(2));
+    let _ = entry.stderr_done.recv_timeout(Duration::from_secs(2));
+
+    if status.success() || status.signal() == Some(libc::SIGTERM) {
+        Ok(())
+    } else {
+        Err(format!(
+            "sipi exited with {} after our SIGTERM\nstdout:\n{}\nstderr:\n{}",
+            status,
+            dump(&entry.stdout_buf),
+            dump(&entry.stderr_buf)
+        ))
+    }
+}
+
+/// Runs at process exit (via `libc::atexit`) to stop and judge every sipi
+/// server still in [`LIVE`] -- the servers held in a test's `static
+/// OnceLock`, whose `Drop` never runs. Must never panic: this runs outside
+/// Rust's unwind machinery. Exits the process non-zero if any remaining
+/// server had a failed exit (non-zero, or death by a signal other than our
+/// SIGTERM), so the sanitizer finding or crash fails the test binary (and
+/// thus the Bazel test) instead of going unnoticed.
+extern "C" fn atexit_stop_remaining_servers() {
+    let entries = {
+        let mut reg = LIVE.lock().unwrap_or_else(|e| e.into_inner());
+        std::mem::take(&mut *reg)
+    };
+    let mut any_failed = false;
+    for entry in entries {
+        if let Err(msg) = stop_entry(entry) {
+            eprintln!("[test-harness] {msg}");
+            any_failed = true;
+        }
+    }
+    if any_failed {
+        // SAFETY: called from `atexit`; skipping any later-registered
+        // atexit handlers is fine since this is the only one this crate
+        // registers.
+        unsafe { libc::_exit(1) };
+    }
+}
+
+/// How long [`stop_entry`] waits for a graceful exit after SIGTERM before
+/// escalating to SIGKILL. Covers the `--drain-timeout 2` shutdown plus the
+/// up-to-2s wait for the drain threads to reach EOF, with margin under
+/// ASan's runtime overhead.
+const GRACEFUL_STOP_TIMEOUT: Duration = Duration::from_secs(15);
+
+/// Manages a sipi server process for testing. Registered in [`LIVE`] from
+/// [`spawn`] until stopped (by `Drop` or, for a server held in a `static
+/// OnceLock`, by [`atexit_stop_remaining_servers`]).
+pub struct SipiServer {
+    pid: u32,
     pub http_port: u16,
     pub base_url: String,
     stdout_buf: Arc<Mutex<String>>,
     stderr_buf: Arc<Mutex<String>>,
+    stopped: bool,
 }
 
 impl SipiServer {
@@ -95,21 +219,14 @@ impl SipiServer {
         );
 
         // `--drain-timeout 2` keeps every test's sipi shutdown bounded to ~2s
-        // (default is 30s). With `stop()`'s 5s deadline, this leaves a 2.5×
-        // margin even under ASan's runtime overhead, so SIGKILL never fires
-        // on a still-draining server. Placed before `extra_args` so an
-        // individual test can still override it (last-wins).
+        // (default is 30s). `stop()`'s 15s graceful deadline covers that
+        // drain plus the up-to-2s wait for the drain threads to reach EOF
+        // (so a report printed just before exit, e.g. LeakSanitizer's, lands
+        // in the captured buffer), with ample margin even under ASan's
+        // runtime overhead, so SIGKILL never fires on a still-draining
+        // server. Placed before `extra_args` so an individual test can still
+        // override it (last-wins).
         let mut cmd = Command::new(&bin);
-        // `.bazelrc`'s `test:asan` sets ASAN_OPTIONS' `log_path` to a file
-        // under `$TEST_UNDECLARED_OUTPUTS_DIR`, inherited here by default —
-        // a sanitizer report for a spawned server then lands in a file this
-        // harness never reads, so a crashed server surfaces only as
-        // "Connection refused" with no indication why. Drop `log_path` for
-        // the spawned process specifically, routing any report into this
-        // process's own stdout/stderr pipes instead, where `captured_output`
-        // (used by every test that asserts on server exit/liveness) can see
-        // it. A no-op when ASAN_OPTIONS isn't set (non-sanitizer builds).
-        strip_asan_log_path(&mut cmd);
         cmd.arg("server")
             .arg("--config")
             .arg(config)
@@ -126,6 +243,7 @@ impl SipiServer {
             .current_dir(working_dir)
             .stdout(Stdio::piped())
             .stderr(Stdio::piped());
+        apply_sanitizer_env(&mut cmd);
 
         // Coverage support: when sipi is built with --coverage (gcov/llvm-cov),
         // .gcda paths are embedded in the binary at compile time.
@@ -167,12 +285,12 @@ impl SipiServer {
         // a hard requirement.
         let ready_signal = "SIPI Rust shell listening";
         let (tx, rx) = std::sync::mpsc::channel();
-        let stderr_buf = spawn_log_drain(
+        let (stderr_buf, stderr_done) = spawn_log_drain(
             child.stderr.take().expect("stderr captured"),
             ready_signal,
             tx.clone(),
         );
-        let stdout_buf = spawn_log_drain(
+        let (stdout_buf, stdout_done) = spawn_log_drain(
             child.stdout.take().expect("stdout captured"),
             ready_signal,
             tx,
@@ -278,12 +396,25 @@ impl SipiServer {
             );
         }
 
+        let pid = child.id();
+        ensure_atexit_registered();
+        LIVE.lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .push(RegistryEntry {
+                child,
+                stdout_buf: stdout_buf.clone(),
+                stderr_buf: stderr_buf.clone(),
+                stdout_done,
+                stderr_done,
+            });
+
         SipiServer {
-            child,
+            pid,
             http_port,
             base_url,
             stdout_buf,
             stderr_buf,
+            stopped: false,
         }
     }
 
@@ -327,53 +458,74 @@ impl SipiServer {
 
     /// Get the OS PID of the server process.
     pub fn pid(&self) -> u32 {
-        self.child.id()
+        self.pid
     }
 
     /// Check if the server process has exited. Returns the exit status if so.
     pub fn try_wait(&mut self) -> std::io::Result<Option<std::process::ExitStatus>> {
-        self.child.try_wait()
+        let mut reg = LIVE.lock().unwrap_or_else(|e| e.into_inner());
+        match reg.iter_mut().find(|e| e.child.id() == self.pid) {
+            Some(entry) => entry.child.try_wait(),
+            // Already stopped and removed from the registry.
+            None => Ok(None),
+        }
     }
 
-    /// Gracefully stop the server via SIGTERM.
-    pub fn stop(&mut self) {
-        let pid = Pid::from_raw(i32::try_from(self.child.id()).expect("PID overflows i32"));
-        signal::kill(pid, Signal::SIGTERM).ok();
+    /// Gracefully stop the server via SIGTERM and judge its exit -- see
+    /// [`stop_entry`] for the pass/fail rule. Idempotent: a second call (from
+    /// `Drop`, after a test called this directly) is a no-op.
+    pub fn stop(&mut self) -> Result<(), String> {
+        if self.stopped {
+            return Ok(());
+        }
+        self.stopped = true;
 
-        // Wait up to 5 seconds for graceful shutdown
-        let deadline = Instant::now() + Duration::from_secs(5);
-        loop {
-            match self.child.try_wait() {
-                Ok(Some(_)) => return,
-                Ok(None) if Instant::now() < deadline => {
-                    std::thread::sleep(Duration::from_millis(100));
-                }
-                _ => {
-                    self.child.kill().ok();
-                    self.child.wait().ok();
-                    return;
-                }
-            }
+        let entry = {
+            let mut reg = LIVE.lock().unwrap_or_else(|e| e.into_inner());
+            reg.iter()
+                .position(|e| e.child.id() == self.pid)
+                .map(|idx| reg.remove(idx))
+        };
+        match entry {
+            Some(entry) => stop_entry(entry),
+            None => Ok(()),
         }
     }
 }
 
 impl Drop for SipiServer {
+    /// Stops the server if a test hasn't already called [`Self::stop`]. A
+    /// failed exit fails loudly (`panic!`) so a sanitizer finding or crash
+    /// caught after the test body already returned isn't silently
+    /// swallowed; during unwinding (a test already failed) it only
+    /// `eprintln!`s, since panicking again would abort the process instead
+    /// of reporting the original failure.
     fn drop(&mut self) {
-        self.stop();
+        if let Err(msg) = self.stop() {
+            if std::thread::panicking() {
+                eprintln!("[test-harness] {msg}");
+            } else {
+                panic!("{msg}");
+            }
+        }
     }
 }
 
-/// Drain a child stream on a background thread: capture lines for
-/// diagnostics (ring-capped at 64 KiB → 32 KiB) and signal `tx` on the
-/// first line containing `ready_signal`. Returns the shared capture buffer.
+/// Drain a child stream on a background thread: capture the whole stream
+/// for diagnostics and signal `tx` on the first line containing
+/// `ready_signal`. The capture is unbounded because a sanitizer report
+/// printed at process exit must reach the failure output whole. Returns the
+/// shared capture buffer and a receiver signalled once the stream reaches
+/// EOF (the process exited and closed it), so a caller can bound how long
+/// it waits for the final lines before reading the buffer.
 fn spawn_log_drain(
     stream: impl std::io::Read + Send + 'static,
     ready_signal: &'static str,
     tx: std::sync::mpsc::Sender<()>,
-) -> Arc<Mutex<String>> {
+) -> (Arc<Mutex<String>>, std::sync::mpsc::Receiver<()>) {
     let buf = Arc::new(Mutex::new(String::new()));
     let buf_clone = Arc::clone(&buf);
+    let (done_tx, done_rx) = std::sync::mpsc::channel();
     std::thread::spawn(move || {
         let reader = BufReader::new(stream);
         for line in reader.lines() {
@@ -381,22 +533,56 @@ fn spawn_log_drain(
             if let Ok(mut captured) = buf_clone.lock() {
                 captured.push_str(&l);
                 captured.push('\n');
-                if captured.len() > 65536 {
-                    let drain = captured.len() - 32768;
-                    captured.drain(..drain);
-                }
             }
             if l.contains(ready_signal) {
                 let _ = tx.send(());
             }
         }
+        let _ = done_tx.send(());
     });
-    buf
+    (buf, done_rx)
 }
 
 /// Snapshot a capture buffer for inclusion in a panic message.
 fn dump(buf: &Arc<Mutex<String>>) -> String {
     buf.lock().map(|s| s.clone()).unwrap_or_default()
+}
+
+/// The current process's `LSAN_OPTIONS`, with any `suppressions=<relative
+/// path>` entry rewritten to an absolute path resolved against this
+/// process's cwd, or `None` if `LSAN_OPTIONS` is unset.
+///
+/// `sipi_e2e_test.bzl`'s macro sets `LSAN_OPTIONS` to a runfiles-relative
+/// path, valid only when resolved from the runfiles root — this test
+/// process's cwd. A spawned sipi given a different `current_dir` can't
+/// resolve that relative path; LeakSanitizer then refuses to run the leak
+/// check and the process exits non-zero.
+fn sanitizer_env() -> Option<String> {
+    let options = std::env::var("LSAN_OPTIONS").ok()?;
+    let cwd = std::env::current_dir().ok()?;
+    Some(
+        options
+            .split(':')
+            .map(|opt| match opt.strip_prefix("suppressions=") {
+                Some(rel) if !Path::new(rel).is_absolute() => {
+                    let abs = cwd.join(rel);
+                    let abs = abs.canonicalize().unwrap_or(abs);
+                    format!("suppressions={}", abs.display())
+                }
+                _ => opt.to_string(),
+            })
+            .collect::<Vec<_>>()
+            .join(":"),
+    )
+}
+
+/// Sets `LSAN_OPTIONS` on `cmd` from [`sanitizer_env`], if present. Apply to
+/// every `Command` that spawns the sipi binary with a `current_dir` other
+/// than the test's own.
+pub fn apply_sanitizer_env(cmd: &mut Command) {
+    if let Some(lsan_options) = sanitizer_env() {
+        cmd.env("LSAN_OPTIONS", lsan_options);
+    }
 }
 
 /// Path to the sipi repository root.
@@ -570,27 +756,6 @@ pub fn test_data_dir() -> PathBuf {
 // identical.
 // =============================================================================
 
-/// Drop `log_path` from `ASAN_OPTIONS` for a spawned sipi subprocess.
-///
-/// `.bazelrc`'s `test:asan` sets
-/// `ASAN_OPTIONS=...:log_path=$TEST_UNDECLARED_OUTPUTS_DIR/asan-e2e`. The
-/// sanitizer e2e leg does not shell-expand `$TEST_UNDECLARED_OUTPUTS_DIR` for a
-/// spawned subprocess, so ASan tries to create a directory named literally
-/// `$TEST_UNDECLARED_OUTPUTS_DIR` and aborts. Stripping `log_path` routes any
-/// sanitizer report into this harness's captured stdout/stderr instead. A no-op
-/// when `ASAN_OPTIONS` isn't set (non-sanitizer builds). Shared by the server
-/// spawn and the CLI `convert`/`verify` spawns.
-fn strip_asan_log_path(cmd: &mut Command) {
-    if let Ok(asan_options) = std::env::var("ASAN_OPTIONS") {
-        let without_log_path = asan_options
-            .split(':')
-            .filter(|opt| !opt.starts_with("log_path="))
-            .collect::<Vec<_>>()
-            .join(":");
-        cmd.env("ASAN_OPTIONS", without_log_path);
-    }
-}
-
 /// Run `sipi convert <input> <output> --format <format>` from the test-data
 /// dir and return the process output.
 pub fn cli_convert(input: &str, output: &str, format: &str) -> std::process::Output {
@@ -601,7 +766,7 @@ pub fn cli_convert(input: &str, output: &str, format: &str) -> std::process::Out
         .arg("--format")
         .arg(format)
         .current_dir(test_data_dir());
-    strip_asan_log_path(&mut cmd);
+    apply_sanitizer_env(&mut cmd);
     cmd.output()
         .unwrap_or_else(|e| panic!("Failed to run sipi CLI: {}", e))
 }
@@ -610,7 +775,7 @@ pub fn cli_convert(input: &str, output: &str, format: &str) -> std::process::Out
 pub fn cli_run(args: &[&str]) -> std::process::Output {
     let mut cmd = Command::new(sipi_bin_path());
     cmd.args(args).current_dir(test_data_dir());
-    strip_asan_log_path(&mut cmd);
+    apply_sanitizer_env(&mut cmd);
     cmd.output()
         .unwrap_or_else(|e| panic!("Failed to run sipi {:?}: {}", args, e))
 }

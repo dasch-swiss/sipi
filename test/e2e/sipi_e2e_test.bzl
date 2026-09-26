@@ -42,7 +42,12 @@ What the macro injects:
       - `LSAN_OPTIONS`           `suppressions=$(rootpath //:lsan_suppressions)`.
                                  Cheap (~80 B) and unconditional — the
                                  file only takes effect when LSan is
-                                 active (`--config=asan`).
+                                 active (`--config=asan`). This path is
+                                 runfiles-relative, valid only from the test
+                                 binary's own cwd; `sipi_e2e::apply_sanitizer_env()`
+                                 absolutises it before it's passed to any
+                                 spawned sipi process run with a different
+                                 `current_dir`.
       - `ASAN_SYMBOLIZER_PATH`   `$(rootpath //bazel:llvm-symbolizer)`, set only
                                  under `--config=asan`. Points LSan at the
                                  runfiles-relative symbolizer so it works

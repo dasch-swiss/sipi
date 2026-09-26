@@ -4,7 +4,9 @@ use common::{client, client_no_redirect, server};
 use image::GenericImageView as _;
 use serde_json::json;
 use sipi_e2e::jwt::{alg_none_token, create_jwt, tamper_payload};
-use sipi_e2e::{allocate_ports, http_client, sipi_bin_path, test_data_dir, SipiServer};
+use sipi_e2e::{
+    allocate_ports, apply_sanitizer_env, http_client, sipi_bin_path, test_data_dir, SipiServer,
+};
 use std::io::{Read as _, Write as _};
 use std::net::TcpStream;
 use std::process::Command;
@@ -159,15 +161,15 @@ routes = {}
     std::fs::write(&config_path, config_content).expect("write empty jwt config");
 
     let (http_port, _) = allocate_ports();
-    let output = Command::new(sipi_bin_path())
-        .arg("server")
+    let mut cmd = Command::new(sipi_bin_path());
+    cmd.arg("server")
         .arg("--config")
         .arg("config/sipi.empty-jwt.lua")
         .arg("--serverport")
         .arg(http_port.to_string())
-        .current_dir(&test_data)
-        .output()
-        .expect("spawn sipi");
+        .current_dir(&test_data);
+    apply_sanitizer_env(&mut cmd);
+    let output = cmd.output().expect("spawn sipi");
 
     let _ = std::fs::remove_file(&config_path);
 

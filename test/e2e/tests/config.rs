@@ -1,6 +1,6 @@
 mod common;
 
-use sipi_e2e::{http_client, test_data_dir, SipiServer};
+use sipi_e2e::{apply_sanitizer_env, http_client, test_data_dir, SipiServer};
 use std::process::Command;
 
 // =============================================================================
@@ -25,12 +25,12 @@ fn invalid_config_startup() {
 
     let sipi_bin = sipi_e2e::sipi_bin_path();
 
-    let output = Command::new(&sipi_bin)
-        .arg("--config")
+    let mut cmd = Command::new(&sipi_bin);
+    cmd.arg("--config")
         .arg("config/sipi.invalid-syntax.lua")
-        .current_dir(&test_data)
-        .output()
-        .expect("failed to spawn sipi");
+        .current_dir(&test_data);
+    apply_sanitizer_env(&mut cmd);
+    let output = cmd.output().expect("failed to spawn sipi");
 
     let _ = std::fs::remove_file(&config_path);
 

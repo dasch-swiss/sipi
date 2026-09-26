@@ -58,6 +58,7 @@ _E2E_LIB_DEPS = [
     "@crates//:image",
     "@crates//:insta",
     "@crates//:jsonwebtoken",
+    "@crates//:libc",
     "@crates//:nix",
     "@crates//:proptest",
     "@crates//:rand",

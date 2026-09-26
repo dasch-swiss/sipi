@@ -200,12 +200,14 @@ test:macos --test_env=LC_ALL=C
 common --repo_env=ANDROID_HOME=
 
 # ── Sanitizers — opt-in via --config=asan and/or --config=ubsan ─────────────
-# Replaces the deleted `.#sanitized` Nix variant. CI's sanitizer.yml uses
-# both together via `just bazel-build-sanitized`
-# (`bazel build --config=asan --config=ubsan //src:sipi`); the e2e step then
-# runs the suite against `bazel-bin/src/sipi` with `.lsan_suppressions.txt`
-# and `ASAN_OPTIONS=log_path=/tmp/asan-e2e`. The two configs are kept
-# separate so a developer can isolate a finding to ASan vs UBSan.
+# Replaces the deleted `.#sanitized` Nix variant. CI's `sanitizer` job (in
+# ci.yml) runs both together in one invocation, `just bazel-test-sanitized
+# --config=asan --config=ubsan`, covering unit and e2e tests; e2e tests pick
+# up LSan suppressions via the `//:lsan_suppressions` target
+# (`.lsan_suppressions.txt`), wired into `LSAN_OPTIONS` by the e2e test rule.
+# `just bazel-build-sanitized` builds `//src/cli:sipi`
+# (`bazel-bin/src/cli/sipi`) for local dev. The two configs are kept separate
+# so a developer can isolate a finding to ASan vs UBSan.
 #
 # `--compilation_mode=dbg` matches the prior Nix variant's `Debug` cmake
 # build and gives us `-g -O0` (clearer ASan stack traces and no compiler
@@ -259,16 +261,15 @@ build:asan --compilation_mode=dbg
 build:asan --strip=never
 build:asan --@llvm//config:asan=true
 
-# ASan runtime env for `bazel test --config=asan`.
-# `log_path=$TEST_UNDECLARED_OUTPUTS_DIR/asan-e2e` lands findings under
-# `bazel-testlogs/<pkg>/<target>/test.outputs/asan-e2e.<pid>` — the
-# directory is Bazel-guaranteed inside test actions and is automatically
-# uploaded as a test-output artefact. `sanitizer.yml` greps for
-# `SUMMARY:` lines under that glob.
-#
-# `detect_leaks=1` keeps LSan on; `halt_on_error=0` lets a test surface
-# every leak in one report rather than needing N reruns.
-test:asan --test_env=ASAN_OPTIONS=detect_leaks=1:halt_on_error=0:log_path=$TEST_UNDECLARED_OUTPUTS_DIR/asan-e2e
+# ASan runtime env for `bazel test --config=asan`. `detect_leaks=1` keeps
+# LSan on; LSan runs at process exit and a detected leak makes the process
+# exit non-zero, so Bazel fails the test. The report goes to stderr, i.e.
+# the test's test.log (`--test_output=errors` prints it in CI). Do not set
+# `halt_on_error=0` — that switches ASan to a recoverable leak check that
+# reports and exits 0. Do not set `log_path` — Bazel does not expand `$VAR`
+# in `--test_env`, so the path is literal and the report never lands in
+# `test.outputs`.
+test:asan --test_env=ASAN_OPTIONS=detect_leaks=1
 # The Lua request deadline (default 5s) assumes production-speed engine calls;
 # under ASan's 10-20x slowdown a TIFF->JP2 upload conversion outlives it and
 # the post-call deadline check kills the route (upload e2e all-500). The
@@ -289,6 +290,32 @@ build:ubsan --copt=-fno-stack-protector
 build:ubsan --compilation_mode=dbg
 build:ubsan --strip=never
 build:ubsan --@llvm//config:ubsan=true
+
+# openssl (crypto/stack/stack.c's OPENSSL_sk_pop_free) and xz
+# (liblzma/common/filter_common.c's encoder_find) both call through a
+# function pointer cast to a differently-typed prototype — the standard C
+# idiom for a generic callback slot, not a SIPI defect — which trips UBSan's
+# `function` check (clang >= 17 enables it under `undefined`). Both are BCR
+# deps fetched read-only (`bazel_dep` on openssl/xz), so there is no BUILD
+# file of ours to attach a per-target `copts` override to, unlike the
+# first-party-vendored `bazel/lcms2.BUILD.bazel`/`bazel/kakadu.BUILD.bazel`
+# pattern. `--per_file_copt` reaches into their compile actions by source
+# path instead; only the `function` subcheck is dropped for these two
+# repos, everything else stays on for them and for the rest of the build.
+# Split into its own config so every config that turns on UBSan
+# (`--config=ubsan`, `--config=fuzz`) can pull it in rather than duplicate it.
+build:ubsan_thirdparty --per_file_copt=external/openssl[+]/.*[.]c$,external/xz[+]/.*[.]c$@-fno-sanitize=function
+build:ubsan --config=ubsan_thirdparty
+
+# UBSan runtime env for `bazel test --config=ubsan`. UBSan recovers by
+# default (prints the report and continues), so a finding would never fail
+# its test. `halt_on_error=1` makes the first finding exit the process
+# non-zero, failing a unit test directly, and making an e2e test's spawned
+# sipi exit non-zero (the e2e harness fails on that and prints its captured
+# stderr); spawned processes inherit the test env. `print_stacktrace=1` puts
+# a stack in the report. No suppressions file is used here — a third-party
+# finding is fixed at the build level instead.
+test:ubsan --test_env=UBSAN_OPTIONS=halt_on_error=1:print_stacktrace=1
 
 # ── Tracy profiler — opt-in via --config=tracy ─────────────────────────────
 # Local-dev only, never CI-gated (like `just bench` / `just valgrind`).
@@ -362,6 +389,11 @@ build:fuzz --compilation_mode=opt
 build:fuzz --@llvm//config:fuzzer=true
 build:fuzz --@llvm//config:ubsan=true
 
+# Same openssl/xz `function`-check exclusion as `build:ubsan` — see
+# `build:ubsan_thirdparty` above; `--config=fuzz` arms UBSan independently of
+# `--config=ubsan` (it does not compose with it) so it needs its own pull-in.
+build:fuzz --config=ubsan_thirdparty
+
 # SanitizerCoverage for the Rust crate graph — all stable rustc flags (no
 # `-Zsanitizer`, no nightly). The **singular** `extra_rustc_flag` is required:
 # it accumulates across occurrences, whereas each `extra_rustc_flags` (plural)
@@ -415,8 +447,9 @@ test --test_output=errors
 # regressions. `--flaky_test_attempts` is `accumulate_value` (one entry per
 # target) and matches the target label as a regex; a no-op for invocations that
 # don't include the target. Living in `.bazelrc` (not a per-workflow flag)
-# means ci.yml, sanitizer.yml, and local `just bazel-test` all inherit it —
-# single source of truth (sanitizer.yml carries no inline retry flags of its own).
+# means ci.yml's test and `sanitizer` jobs and local `just bazel-test` all
+# inherit it — single source of truth (the `sanitizer` job carries no inline
+# retry flags of its own).
 test --flaky_test_attempts=//test/e2e:latency@3
 test --flaky_test_attempts=//test/e2e:iiif_compliance@3
 test --flaky_test_attempts=//test/e2e:resource_limits@3
