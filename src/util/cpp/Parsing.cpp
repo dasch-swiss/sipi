@@ -3,8 +3,10 @@
  * contributors. SPDX-License-Identifier: AGPL-3.0-or-later
  */
 
+#include <memory>
 #include <regex>
 #include <sstream>
+#include <utility>
 
 #include "Error.h"
 #include "Parsing.h"
@@ -145,31 +147,29 @@ std::pair<std::string, std::string> parseMimetype(const std::string &mimestr)
 }
 //=============================================================================================================
 
+namespace {
+using MagicHandle = std::unique_ptr<magic_set, decltype(&magic_close)>;
+}// namespace
+
 std::pair<std::string, std::string> getFileMimetype(const std::string &fpath)
 {
-  // `magic_t` is not concurrency-safe across threads (`magic_file` mutates the
-  // handle), so the loaded handle is cached per worker thread rather than
-  // shared. Loading the embedded DB is the expensive part; caching it here
-  // means it happens once per thread instead of once per call. Never closed
-  // per-call; leaking it at process/thread exit is fine, it is the same DB
-  // the process needs for its whole life. A failed load is not cached so the
-  // next call retries.
-  thread_local magic_t handle = nullptr;
-  if (handle == nullptr) {
-    magic_t new_handle = magic_open(MAGIC_MIME);
-    if (new_handle == nullptr) { throw Error("magic_open() failed"); }
+  // `magic_t` is not safe to share across threads (`magic_file` mutates it), so the
+  // loaded handle is cached per thread. Loading the embedded DB is the expensive part,
+  // so a reused thread loads it once. Callers may run on short-lived threads, so the
+  // handle is closed on thread exit. A failed load is not cached so the next call retries.
+  thread_local MagicHandle handle(nullptr, &magic_close);
+  if (!handle) {
+    MagicHandle new_handle(magic_open(MAGIC_MIME), &magic_close);
+    if (!new_handle) { throw Error("magic_open() failed"); }
 
     void *bufs[] = { magic_mgc };
     size_t sizes[] = { magic_mgc_len };
-    if (magic_load_buffers(new_handle, bufs, sizes, 1) != 0) {
-      std::string err = magic_error(new_handle);
-      magic_close(new_handle);
-      throw Error(err);
-    }
-    handle = new_handle;
+    // magic_error's string lives in the handle; Error copies it before unwinding closes it.
+    if (magic_load_buffers(new_handle.get(), bufs, sizes, 1) != 0) { throw Error(magic_error(new_handle.get())); }
+    handle = std::move(new_handle);
   }
 
-  std::string mimestr(magic_file(handle, fpath.c_str()));
+  std::string mimestr(magic_file(handle.get(), fpath.c_str()));
   return parseMimetype(mimestr);
 }
 //=============================================================================================================
