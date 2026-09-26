@@ -294,10 +294,9 @@ jobs:
   # and points the env at their runfiles paths — so both resolve when the test
   # executes on the RBE worker. The symbolizer lets ASan/LSan resolve
   # `sipi+0xOFFSET` frames into function names, needed for the name-based
-  # suppressions in `.lsan_suppressions.txt` (`leak:lua*`) to match.
-  # `ASAN_OPTIONS log_path` is set by `.bazelrc`'s `test:asan` block to
-  # `$TEST_UNDECLARED_OUTPUTS_DIR/asan-e2e`, surfaced by Bazel under
-  # `bazel-testlogs/**/test.outputs/asan-e2e.<pid>` for every layer.
+  # suppressions in `.lsan_suppressions.txt` (`leak:lua*`) to match. A
+  # sanitizer finding fails its test (non-zero exit), and
+  # `--test_output=errors` prints the report in this job's log.
   #
   # `--config=asan` / `--config=ubsan` set `--@llvm//config:{asan,ubsan}=true`,
   # which makes the toolchain build + link the compiler-rt ASan/UBSan runtimes
@@ -341,11 +340,7 @@ jobs:
       - name: Run unit + e2e tests under ASan + UBSan
         env:
           GH_TOKEN: ${{ secrets.DASCHBOT_PAT }}
-        run: just bazel-test-sanitized --config=asan --config=ubsan --build_tag_filters=-no-sanitizer --test_tag_filters=-no-sanitizer ${{ steps.setup.outputs.flags }} --build_event_json_file=bep-sanitizer.json
-
-      - name: Check for sanitizer findings
-        if: always()
-        run: bash tools/check_sanitizer_findings.sh
+        run: just bazel-test-sanitized --config=asan --config=ubsan --build_tag_filters=-no-sanitizer --test_tag_filters=-no-sanitizer ${{ steps.setup.outputs.flags }} --build_event_json_file=bep-sanitizer.json --test_output=errors
 
       # BEP for cache-hit-rate analysis (see the `test` job's upload step).
       # The instrumented sanitizer build has its own cache behavior worth
@@ -357,14 +352,6 @@ jobs:
           name: bep-sanitizer
           retention-days: 30
           path: bep-sanitizer.json
-
-      - name: Upload sanitizer reports
-        if: failure()
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
-        with:
-          name: sanitizer-reports
-          retention-days: 30
-          path: bazel-testlogs/**/test.outputs/asan-e2e.*
 
       # Persist the repository cache even when the job fails — the paired
       # save for ci-setup's restore-only cache step (rationale there).

@@ -163,7 +163,7 @@ rust_binary(
     crate_name = "sipi_cli",
     edition = "2021",
     rustc_flags = _CPP_STDLIB_LINK,
-    # Excluded from the sanitizer build (sanitizer.yml filters `-no-sanitizer`):
+    # Excluded from the sanitizer build (ci.yml's `sanitizer` job filters `-no-sanitizer`):
     # the transitive C++ dep (protobuf) includes <sanitizer/asan_interface.h>
     # under --config=asan, which the hermetic LLVM toolchain does not ship.
     tags = ["no-sanitizer"],

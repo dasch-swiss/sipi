@@ -12,7 +12,9 @@
 //! (unique filenames — tests in this binary may run concurrently).
 
 use reqwest::blocking::Client;
-use sipi_e2e::{allocate_ports, http_client, sipi_bin_path, test_data_dir, SipiServer};
+use sipi_e2e::{
+    allocate_ports, apply_sanitizer_env, http_client, sipi_bin_path, test_data_dir, SipiServer,
+};
 use std::process::Command;
 use std::sync::OnceLock;
 use std::time::Duration;
@@ -309,15 +311,15 @@ fn broken_init_script_refuses_startup() {
     .expect("write config");
 
     let (http_port, _) = allocate_ports();
-    let output = Command::new(sipi_bin_path())
-        .arg("server")
+    let mut cmd = Command::new(sipi_bin_path());
+    cmd.arg("server")
         .arg("--config")
         .arg(config_rel)
         .arg("--serverport")
         .arg(http_port.to_string())
-        .current_dir(&test_data)
-        .output()
-        .expect("spawn sipi");
+        .current_dir(&test_data);
+    apply_sanitizer_env(&mut cmd);
+    let output = cmd.output().expect("spawn sipi");
 
     assert!(
         !output.status.success(),
@@ -368,15 +370,15 @@ routes = {}
     .expect("write config");
 
     let (http_port, _) = allocate_ports();
-    let output = Command::new(sipi_bin_path())
-        .arg("server")
+    let mut cmd = Command::new(sipi_bin_path());
+    cmd.arg("server")
         .arg("--config")
         .arg(config_rel)
         .arg("--serverport")
         .arg(http_port.to_string())
-        .current_dir(&test_data)
-        .output()
-        .expect("spawn sipi");
+        .current_dir(&test_data);
+    apply_sanitizer_env(&mut cmd);
+    let output = cmd.output().expect("spawn sipi");
 
     assert!(
         !output.status.success(),

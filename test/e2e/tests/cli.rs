@@ -1,5 +1,8 @@
 use insta::assert_snapshot;
-use sipi_e2e::{cli_convert, cli_run, cli_tmp_path, repo_root, sipi_bin_path, test_data_dir};
+use sipi_e2e::{
+    apply_sanitizer_env, cli_convert, cli_run, cli_tmp_path, repo_root, sipi_bin_path,
+    test_data_dir,
+};
 use std::process::Command;
 
 // =============================================================================
@@ -62,16 +65,17 @@ fn cli_version_flag() {
 // =============================================================================
 
 fn sipi_convert_quality(input: &str, output: &str, quality: u32) -> std::process::Output {
-    Command::new(sipi_bin_path())
-        .arg("convert")
+    let mut cmd = Command::new(sipi_bin_path());
+    cmd.arg("convert")
         .arg("--quality")
         .arg(quality.to_string())
         .arg("--format")
         .arg("jpg")
         .arg(input)
         .arg(output)
-        .current_dir(test_data_dir())
-        .output()
+        .current_dir(test_data_dir());
+    apply_sanitizer_env(&mut cmd);
+    cmd.output()
         .unwrap_or_else(|e| panic!("Failed to run sipi CLI: {}", e))
 }
 
@@ -256,7 +260,8 @@ fn cli_convert_watermark_changes_output_bytes() {
         String::from_utf8_lossy(&r_plain.stderr)
     );
 
-    let r_wm = Command::new(sipi_bin_path())
+    let mut r_wm_cmd = Command::new(sipi_bin_path());
+    r_wm_cmd
         .arg("convert")
         .arg("--watermark")
         .arg(watermark.to_str().unwrap())
@@ -264,7 +269,9 @@ fn cli_convert_watermark_changes_output_bytes() {
         .arg("jpg")
         .arg(input.to_str().unwrap())
         .arg(watermarked.to_str().unwrap())
-        .current_dir(test_data_dir())
+        .current_dir(test_data_dir());
+    apply_sanitizer_env(&mut r_wm_cmd);
+    let r_wm = r_wm_cmd
         .output()
         .unwrap_or_else(|e| panic!("Failed to run sipi CLI: {}", e));
     assert!(
