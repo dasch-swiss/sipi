@@ -47,6 +47,10 @@ fn main() -> ExitCode {
     // start would fall through to `run_cli(&argv)` with the
     // `--crash-reporter-server=...` flag as its sole argument, which
     // `sipi_cli_main` doesn't recognize as any option or subcommand.
+    //
+    // Gated by the `minidump` crate feature (BUILD.bazel) — a build without
+    // it never spawns a reporter child, so this argv entry never appears.
+    #[cfg(feature = "minidump")]
     if std::env::args().any(|a| a.starts_with("--crash-reporter-server")) {
         let _sentry_guard = init_sentry();
         if let Some(client) = sentry::Hub::current().client() {
@@ -63,6 +67,8 @@ fn main() -> ExitCode {
         .skip(1)
         .find(|(_, a)| !a.starts_with('-'))
         .map(|(i, _)| i);
+    // Only read below when the `minidump` feature (BUILD.bazel) is on.
+    #[cfg_attr(not(feature = "minidump"), allow(unused_variables))]
     let verb = verb_idx.map(|idx| argv[idx].as_str());
 
     // Sentry client — panics + handled events, uniformly for every verb
@@ -79,6 +85,9 @@ fn main() -> ExitCode {
     // `Hub::current().client()` is `Some` only when `init_sentry` actually
     // called `sentry::init` (a valid DSN was configured) — a DSN-less run
     // never forks a reporter child or installs crash-signal handlers.
+    //
+    // Gated by the `minidump` crate feature (BUILD.bazel).
+    #[cfg(feature = "minidump")]
     let _minidump_guard = if verb == Some("server") {
         sentry::Hub::current()
             .client()

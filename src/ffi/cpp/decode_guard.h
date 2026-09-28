@@ -39,19 +39,6 @@ namespace Sipi::ffi {
 template<class F> std::optional<std::invoke_result_t<F>> run_with_deadline(std::chrono::milliseconds timeout, F producer)
 {
   using T = std::invoke_result_t<F>;
-#if defined(__SANITIZE_ADDRESS__) || (defined(__has_feature) && __has_feature(address_sanitizer))
-  // Run the producer INLINE under ASan — no worker thread, no join. ASan's
-  // thread registry falsely reports "Joining already joined thread, aborting"
-  // when a short-lived worker thread's slot ID is reused across the Rust
-  // shell's heavy thread-creation history (the same false positive the Kakadu
-  // worker-pool guards in SipiIOJ2k.cpp disable MT for). The deadline is a
-  // production availability guard for the unpatchable Kakadu decode hang
-  // (DEV-7080), and ASan builds never ship, so dropping the watchdog thread
-  // under ASan only forgoes a test-only timeout while keeping the decode itself
-  // fully exercised under the sanitizer.
-  (void)timeout;
-  return std::optional<T>(producer());
-#else
   auto task = std::make_shared<std::packaged_task<T()>>(std::move(producer));
   std::future<T> fut = task->get_future();
   std::thread worker([task] { (*task)(); });
@@ -62,7 +49,6 @@ template<class F> std::optional<std::invoke_result_t<F>> run_with_deadline(std::
   worker.detach();
   observability::Metrics::instance().wedged_threads.Increment();
   return std::nullopt;
-#endif
 }
 
 // The outcome of consulting the full-lane memory budget for one decode

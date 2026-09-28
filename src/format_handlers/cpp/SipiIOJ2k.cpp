@@ -285,14 +285,6 @@ Result<bool> SipiIOJ2k::read(SipiImage *img,
 
   int num_threads;
   if ((num_threads = kdu_get_num_processors()) < 2) num_threads = 0;
-#if defined(__SANITIZE_ADDRESS__) || (defined(__has_feature) && __has_feature(address_sanitizer))
-  // Same ASan "Joining already joined thread" false positive as the encode path
-  // (see the guard in write() for the full rationale): Kakadu's worker-thread
-  // pool trips ASan's thread registry when this engine is linked into the Rust
-  // shell. Single-threaded decode sidesteps it; ASan builds never ship, so the
-  // throughput cost is test-only.
-  num_threads = 0;
-#endif
 
   // Custom messaging services
   kdu_customize_warnings(&kdu_sipi_warn);
@@ -1183,18 +1175,6 @@ Result<void> SipiIOJ2k::write(SipiImage *img, const OutputSink &sink, const Sipi
   kdu_membroker membroker;
 
   if ((num_threads = kdu_get_num_processors()) < 2) num_threads = 0;
-#if defined(__SANITIZE_ADDRESS__) || (defined(__has_feature) && __has_feature(address_sanitizer))
-  // Kakadu's own worker-thread pool (kdu_thread_env::create/add_thread,
-  // below) trips ASan's "Joining already joined thread" abort when this
-  // engine is linked into a binary with a different thread-creation history
-  // early in process life (confirmed: reproduces only when linked into the
-  // Rust shell, not the C++ CLI, which shares this exact encoder). This
-  // looks like ASan's thread-registry slot IDs being reused across an
-  // earlier, unrelated thread and one of Kakadu's own worker threads, not a
-  // real double-join in Kakadu. Single-threaded encode sidesteps it; ASan
-  // builds never ship, so the throughput cost is test-only.
-  num_threads = 0;
-#endif
 
   // Declared outside the try so the catch below can read `http->client_aborted`
   // to distinguish client aborts from genuine Kakadu failures. sink_stream
