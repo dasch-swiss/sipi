@@ -664,23 +664,6 @@ Result<void> SipiIOPng::write(SipiImage *img, const OutputSink &sink, const Sipi
       "Error writing PNG file \"" + filepath + "\": png_create_info_struct !" });
   }
 
-  // setjmp error recovery for write — sipi_error_fn calls longjmp
-  if (setjmp(png_jmpbuf(png_ptr))) {
-    if (http_ctx.client_aborted) {
-      return std::unexpected(
-        SipiValueError{ ErrorCode::kClientAbort, "Client aborted HTTP response during PNG write" });
-    }
-    return std::unexpected(SipiValueError{ ErrorCode::kWriteFailed, "PNG write failed for \"" + filepath + "\"" });
-  }
-
-  if (outfile != nullptr) png_init_io(png_ptr, outfile);
-
-  png_set_filter(png_ptr, 0, PNG_FILTER_NONE);
-
-  /* set the zlib compression level */
-  png_set_compression_level(png_ptr, Z_BEST_COMPRESSION);
-
-
   // PNG does not support alpha channels, so we have to remove them if they are present
   if ((img->getNc() > 3) && (img->getNalpha() > 0)) {// we have an alpha channel and possibly a CMYK image
     if (auto r = processing::removeExtraSamples(*img); !r) { return std::unexpected(r.error()); }
@@ -708,21 +691,13 @@ Result<void> SipiIOPng::write(SipiImage *img, const OutputSink &sink, const Sipi
         + "), expected 1, 2, 3, or 4" });
   }
 
-  png_set_IHDR(png_ptr,
-    info_ptr,
-    img->getNx(),
-    img->getNy(),
-    img->getBps(),
-    color_type,
-    PNG_INTERLACE_NONE,
-    PNG_COMPRESSION_TYPE_DEFAULT,
-    PNG_FILTER_TYPE_DEFAULT);
-
   //
   // ICC profile handfling is special...
   //
   Essentials es = img->essential_metadata();
   std::shared_ptr<Icc> icc = img->getIcc();
+  std::vector<unsigned char> icc_buf;
+  bool have_icc_buf = false;
   if ((icc != nullptr) || es.fields().use_icc) {
     if ((icc != nullptr) && (icc->getProfileType() == icc_LAB)) {
       if (auto r = processing::convertToIcc(*img, Icc(Sipi::PredefinedProfiles::icc_sRGB), img->getBps()); !r) {
@@ -730,14 +705,13 @@ Result<void> SipiIOPng::write(SipiImage *img, const OutputSink &sink, const Sipi
       }
       icc = img->getIcc();
     }
-    std::vector<unsigned char> icc_buf;
     try {
       if (es.fields().use_icc) {
         icc_buf = es.fields().icc_profile;
       } else {
         icc_buf = icc->iccBytes();
       }
-      png_set_iCCP(png_ptr, info_ptr, "ICC", PNG_COMPRESSION_TYPE_BASE, icc_buf.data(), icc_buf.size());
+      have_icc_buf = true;
     } catch (SipiError &err) {
       log_err("Error writing ICC profile in PNG: %s", err.what());
     }
@@ -753,10 +727,7 @@ Result<void> SipiIOPng::write(SipiImage *img, const OutputSink &sink, const Sipi
   // keeps the pointer handed to png_set_eXIf_1 rather than copying it.
   std::vector<unsigned char> exif_buf;
   std::shared_ptr<Exif> exif = img->getExif();
-  if (exif) {
-    exif_buf = exif->exifBytes();
-    if (!exif_buf.empty()) { png_set_eXIf_1(png_ptr, info_ptr, (png_uint_32)exif_buf.size(), exif_buf.data()); }
-  }
+  if (exif) { exif_buf = exif->exifBytes(); }
 
   // iptc_profile must likewise outlive png_write_info()/png_write_png().
   std::vector<unsigned char> iptc_buf;
@@ -778,15 +749,11 @@ Result<void> SipiIOPng::write(SipiImage *img, const OutputSink &sink, const Sipi
   }
 
   // PNG is an Access File format per ADR-0009 — it MUST NOT carry the
-  // Essentials packet. The legacy `Essentials es = img->essential_metadata()`
-  // declaration above (line 548) still feeds the ICC fallback branch
-  // (lines 549-564) but the iTXt SIPI-chunk emission has been removed
-  // (DEV-6379).
+  // Essentials packet. `es` above feeds only the ICC fallback branch.
 
-  if (chunk_ptr.num() > 0) { png_set_text(png_ptr, info_ptr, chunk_ptr.ptr(), chunk_ptr.num()); }
-
-  png_bytep *row_pointers = (png_bytep *)png_malloc(png_ptr, img->getNy() * sizeof(png_byte *));
-
+  // row_pointers must outlive png_write_png() below — libpng keeps the
+  // pointer handed to png_set_rows rather than copying it.
+  std::vector<png_bytep> row_pointers(img->getNy());
   png_bytep pixel_data = img->pixels_writable().data();
   if (img->getBps() == 8) {
     for (size_t i = 0; i < img->getNy(); i++) { row_pointers[i] = (pixel_data + i * img->getNx() * img->getNc()); }
@@ -794,13 +761,46 @@ Result<void> SipiIOPng::write(SipiImage *img, const OutputSink &sink, const Sipi
     for (size_t i = 0; i < img->getNy(); i++) { row_pointers[i] = (pixel_data + 2 * i * img->getNx() * img->getNc()); }
   }
 
-  png_set_rows(png_ptr, info_ptr, row_pointers);
+  // setjmp error recovery for write — sipi_error_fn calls longjmp. A longjmp
+  // out of libpng unwinds the C stack without running C++ destructors, so
+  // nothing with a destructor may be constructed past this point.
+  if (setjmp(png_jmpbuf(png_ptr))) {
+    if (http_ctx.client_aborted) {
+      return std::unexpected(
+        SipiValueError{ ErrorCode::kClientAbort, "Client aborted HTTP response during PNG write" });
+    }
+    return std::unexpected(SipiValueError{ ErrorCode::kWriteFailed, "PNG write failed for \"" + filepath + "\"" });
+  }
+
+  if (outfile != nullptr) png_init_io(png_ptr, outfile);
+
+  png_set_filter(png_ptr, 0, PNG_FILTER_NONE);
+
+  /* set the zlib compression level */
+  png_set_compression_level(png_ptr, Z_BEST_COMPRESSION);
+
+  png_set_IHDR(png_ptr,
+    info_ptr,
+    img->getNx(),
+    img->getNy(),
+    img->getBps(),
+    color_type,
+    PNG_INTERLACE_NONE,
+    PNG_COMPRESSION_TYPE_DEFAULT,
+    PNG_FILTER_TYPE_DEFAULT);
+
+  if (have_icc_buf) {
+    png_set_iCCP(png_ptr, info_ptr, "ICC", PNG_COMPRESSION_TYPE_BASE, icc_buf.data(), icc_buf.size());
+  }
+
+  if (!exif_buf.empty()) { png_set_eXIf_1(png_ptr, info_ptr, (png_uint_32)exif_buf.size(), exif_buf.data()); }
+
+  if (chunk_ptr.num() > 0) { png_set_text(png_ptr, info_ptr, chunk_ptr.ptr(), chunk_ptr.num()); }
+
+  png_set_rows(png_ptr, info_ptr, row_pointers.data());
 
   png_write_png(png_ptr, info_ptr, PNG_TRANSFORM_SWAP_ENDIAN,
     nullptr);// we expect the data to be little endian...
-
-  png_free(png_ptr, row_pointers);
-  row_pointers = nullptr;
 
   return {};
 }
