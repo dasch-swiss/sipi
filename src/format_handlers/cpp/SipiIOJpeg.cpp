@@ -1110,14 +1110,179 @@ Result<void> SipiIOJpeg::write(SipiImage *img, const OutputSink &sink, const Sip
   jpeg_create_compress(&cinfo);  // errors → longjmp → setjmp handler below
 
   //
-  // setjmp error handler — ALL libjpeg errors from this point longjmp here;
-  // C++ exceptions must never cross libjpeg's C frames.
+  // Photometric validation and color-space selection happen here, after
+  // jpeg_create_compress() but before the setjmp below — see the note there.
+  // The chosen color spaces land in locals; the setjmp landing block only
+  // assigns them to cinfo.
   //
-  // NOTE on RAII: longjmp does NOT call C++ destructors. Between setjmp and
-  // longjmp, the following RAII objects may leak on the error path:
-  // - exifchunk, xmpchunk, iccchunk, iptcchunk (make_unique, each <65KB)
-  // That allocation is leaked — its destructor never runs — but the leak is
-  // accepted: it is bounded (<65KB) and confined to an error path.
+  J_COLOR_SPACE in_color_space;
+  J_COLOR_SPACE jpeg_color_space;
+  switch (img->getPhoto()) {
+  case PhotometricInterpretation::MINISWHITE:
+  case PhotometricInterpretation::MINISBLACK: {
+    if (img->getNc() != 1) {
+      jpeg_destroy_compress(&cinfo);
+      return std::unexpected(SipiValueError{ ErrorCode::kUnsupportedFormat,
+        "Cannot write JPEG: grayscale (MINISBLACK) requires 1 channel, got " + std::to_string(img->getNc())
+          + " (dimensions: " + std::to_string(img->getNx()) + "x" + std::to_string(img->getNy())
+          + ", bps: " + std::to_string(img->getBps()) + ")" });
+    }
+    in_color_space = JCS_GRAYSCALE;
+    jpeg_color_space = JCS_GRAYSCALE;
+    break;
+  }
+  case PhotometricInterpretation::RGB: {
+    if (img->getNc() != 3) {
+      jpeg_destroy_compress(&cinfo);
+      return std::unexpected(SipiValueError{ ErrorCode::kUnsupportedFormat,
+        "Cannot write JPEG: RGB requires 3 channels, got " + std::to_string(img->getNc()) + " (dimensions: "
+          + std::to_string(img->getNx()) + "x" + std::to_string(img->getNy()) + ", bps: "
+          + std::to_string(img->getBps()) + ")" });
+    }
+    in_color_space = JCS_RGB;
+    jpeg_color_space = JCS_RGB;
+    break;
+  }
+  case PhotometricInterpretation::SEPARATED: {
+    if (img->getNc() != 4) {
+      jpeg_destroy_compress(&cinfo);
+      return std::unexpected(SipiValueError{ ErrorCode::kUnsupportedFormat,
+        "Cannot write JPEG: CMYK (SEPARATED) requires 4 channels, got " + std::to_string(img->getNc())
+          + " (dimensions: " + std::to_string(img->getNx()) + "x" + std::to_string(img->getNy()) + ", bps: "
+          + std::to_string(img->getBps()) + ")" });
+    }
+    in_color_space = JCS_CMYK;
+    jpeg_color_space = JCS_CMYK;
+    break;
+  }
+  case PhotometricInterpretation::YCBCR: {
+    if (img->getNc() != 3) {
+      jpeg_destroy_compress(&cinfo);
+      return std::unexpected(SipiValueError{ ErrorCode::kUnsupportedFormat,
+        "Cannot write JPEG: YCbCr requires 3 channels, got " + std::to_string(img->getNc()) + " (dimensions: "
+          + std::to_string(img->getNx()) + "x" + std::to_string(img->getNy()) + ", bps: "
+          + std::to_string(img->getBps()) + ")" });
+    }
+    in_color_space = JCS_YCbCr;
+    jpeg_color_space = JCS_YCbCr;
+    break;
+  }
+  case PhotometricInterpretation::CIELAB: {
+    if (auto r = processing::convertToIcc(*img, Icc(Sipi::PredefinedProfiles::icc_sRGB), 8); !r) {
+      jpeg_destroy_compress(&cinfo);
+      return std::unexpected(r.error());
+    }
+    in_color_space = JCS_RGB;
+    jpeg_color_space = JCS_RGB;
+    break;
+  }
+  default: {
+    jpeg_destroy_compress(&cinfo);
+    return std::unexpected(SipiValueError{ ErrorCode::kUnsupportedFormat,
+      "Cannot write JPEG: unsupported colorspace " + to_string(img->getPhoto()) + " (dimensions: "
+        + std::to_string(img->getNx()) + "x" + std::to_string(img->getNy())
+        + ", channels: " + std::to_string(img->getNc()) + ", bps: " + std::to_string(img->getBps()) + ")" });
+  }
+  }
+
+  //
+  // Markers must be written in sequence: APP0, APP1, APP2, ..., APP15. Their
+  // payloads are built here, before the setjmp below, into function-scope
+  // buffers — see the note there.
+  //
+
+  std::vector<unsigned char> exif_marker_payload;
+  std::shared_ptr<Exif> exif = img->getExif();
+  if (exif != nullptr) {
+    std::vector<unsigned char> buf = exif->exifBytes();
+    char start[] = "Exif\000\000";
+    size_t start_l = sizeof(start) - 1;
+    if (start_l + buf.size() <= 65533) {
+      exif_marker_payload.resize(start_l + buf.size());
+      memcpy(exif_marker_payload.data(), start, start_l);
+      if (!buf.empty()) memcpy(exif_marker_payload.data() + start_l, buf.data(), buf.size());
+    }
+  }
+
+  std::vector<unsigned char> xmp_marker_payload;
+  std::shared_ptr<Xmp> xmp = img->getXmp();
+  if (xmp != nullptr) {
+    std::string buf = xmp->xmpBytes();
+    char start[] = "http://ns.adobe.com/xap/1.0/\000";
+    size_t start_l = sizeof(start) - 1;
+    if ((!buf.empty()) && (start_l + buf.size() <= 65533)) {
+      xmp_marker_payload.resize(start_l + buf.size());
+      memcpy(xmp_marker_payload.data(), start, start_l);
+      memcpy(xmp_marker_payload.data() + start_l, buf.data(), buf.size());
+    }
+  }
+
+  Essentials es = img->essential_metadata();
+  std::shared_ptr<Icc> image_icc = img->getIcc();
+  std::vector<std::vector<unsigned char>> icc_marker_chunks;
+  if ((image_icc != nullptr) || es.fields().use_icc) {
+    std::vector<unsigned char> buf;
+    try {
+      if (es.fields().use_icc) {
+        buf = es.fields().icc_profile;
+      } else {
+        buf = image_icc->iccBytes();
+      }
+    } catch (SipiError &err) {
+      log_err("Error writing ICC profile in JPEG: %s", err.what());
+    }
+    unsigned char start[14] = {
+      0x49, 0x43, 0x43, 0x5F, 0x50, 0x52, 0x4F, 0x46, 0x49, 0x4C, 0x45, 0x0
+    };
+    size_t start_l = 14;
+    unsigned int n = buf.size() / (65533 - start_l + 1) + 1;
+
+    unsigned int n_towrite = buf.size();
+    unsigned int n_nextwrite = 65533 - start_l;
+    unsigned int n_written = 0;
+    for (unsigned int i = 0; i < n; i++) {
+      start[12] = (unsigned char)(i + 1);
+      start[13] = (unsigned char)n;
+      if (n_nextwrite > n_towrite) n_nextwrite = n_towrite;
+      std::vector<unsigned char> chunk(start_l + n_nextwrite);
+      memcpy(chunk.data(), start, start_l);
+      memcpy(chunk.data() + start_l, buf.data() + n_written, n_nextwrite);
+      icc_marker_chunks.push_back(std::move(chunk));
+      n_towrite -= n_nextwrite;
+      n_written += n_nextwrite;
+    }
+    if (n_towrite != 0) { log_warn("Incomplete JPEG ICC write: %u bytes remaining", n_towrite); }
+  }
+
+  std::vector<unsigned char> iptc_marker_payload;
+  std::shared_ptr<Iptc> iptc = img->getIptc();
+  if (iptc != nullptr) {
+    std::vector<unsigned char> buf = iptc->iptcBytes();
+    char start[] = " Photoshop 3.0\0008BIM\004\004\000\000";
+    size_t start_l = sizeof(start) - 1;
+    if (start_l + 4 + buf.size() <= 65533) {
+      unsigned char siz[4];
+      siz[0] = (unsigned char)((buf.size() >> 24) & 0x000000ff);
+      siz[1] = (unsigned char)((buf.size() >> 16) & 0x000000ff);
+      siz[2] = (unsigned char)((buf.size() >> 8) & 0x000000ff);
+      siz[3] = (unsigned char)(buf.size() & 0x000000ff);
+
+      iptc_marker_payload.resize(start_l + 4 + buf.size());
+      memcpy(iptc_marker_payload.data(), start, start_l);
+      memcpy(iptc_marker_payload.data() + start_l, siz, 4);
+      if (!buf.empty()) memcpy(iptc_marker_payload.data() + start_l + 4, buf.data(), buf.size());
+    }
+  }
+
+  // JPEG is an Access File format per ADR-0009 — it MUST NOT carry the
+  // Essentials packet. `es` above feeds only the ICC fallback branch; the
+  // COM marker emission has been removed (DEV-6379).
+
+  //
+  // setjmp error handler — ALL libjpeg errors from this point longjmp here;
+  // C++ exceptions must never cross libjpeg's C frames. A longjmp out of
+  // libjpeg skips C++ destructors, so nothing with a destructor may be
+  // constructed past this point.
   //
   if (setjmp(jerr.error_jmp)) {
     // longjmp landed here — clean up and return the error in C++ context
@@ -1143,73 +1308,8 @@ Result<void> SipiIOJpeg::write(SipiImage *img, const OutputSink &sink, const Sip
   cinfo.image_width = (int)img->getNx();
   cinfo.image_height = (int)img->getNy();
   cinfo.input_components = (int)img->getNc();
-  switch (img->getPhoto()) {
-  case PhotometricInterpretation::MINISWHITE:
-  case PhotometricInterpretation::MINISBLACK: {
-    if (img->getNc() != 1) {
-      jpeg_destroy_compress(&cinfo);
-      return std::unexpected(SipiValueError{ ErrorCode::kUnsupportedFormat,
-        "Cannot write JPEG: grayscale (MINISBLACK) requires 1 channel, got " + std::to_string(img->getNc())
-          + " (dimensions: " + std::to_string(img->getNx()) + "x" + std::to_string(img->getNy())
-          + ", bps: " + std::to_string(img->getBps()) + ")" });
-    }
-    cinfo.in_color_space = JCS_GRAYSCALE;
-    cinfo.jpeg_color_space = JCS_GRAYSCALE;
-    break;
-  }
-  case PhotometricInterpretation::RGB: {
-    if (img->getNc() != 3) {
-      jpeg_destroy_compress(&cinfo);
-      return std::unexpected(SipiValueError{ ErrorCode::kUnsupportedFormat,
-        "Cannot write JPEG: RGB requires 3 channels, got " + std::to_string(img->getNc()) + " (dimensions: "
-          + std::to_string(img->getNx()) + "x" + std::to_string(img->getNy()) + ", bps: "
-          + std::to_string(img->getBps()) + ")" });
-    }
-    cinfo.in_color_space = JCS_RGB;
-    cinfo.jpeg_color_space = JCS_RGB;
-    break;
-  }
-  case PhotometricInterpretation::SEPARATED: {
-    if (img->getNc() != 4) {
-      jpeg_destroy_compress(&cinfo);
-      return std::unexpected(SipiValueError{ ErrorCode::kUnsupportedFormat,
-        "Cannot write JPEG: CMYK (SEPARATED) requires 4 channels, got " + std::to_string(img->getNc())
-          + " (dimensions: " + std::to_string(img->getNx()) + "x" + std::to_string(img->getNy()) + ", bps: "
-          + std::to_string(img->getBps()) + ")" });
-    }
-    cinfo.in_color_space = JCS_CMYK;
-    cinfo.jpeg_color_space = JCS_CMYK;
-    break;
-  }
-  case PhotometricInterpretation::YCBCR: {
-    if (img->getNc() != 3) {
-      jpeg_destroy_compress(&cinfo);
-      return std::unexpected(SipiValueError{ ErrorCode::kUnsupportedFormat,
-        "Cannot write JPEG: YCbCr requires 3 channels, got " + std::to_string(img->getNc()) + " (dimensions: "
-          + std::to_string(img->getNx()) + "x" + std::to_string(img->getNy()) + ", bps: "
-          + std::to_string(img->getBps()) + ")" });
-    }
-    cinfo.in_color_space = JCS_YCbCr;
-    cinfo.jpeg_color_space = JCS_YCbCr;
-    break;
-  }
-  case PhotometricInterpretation::CIELAB: {
-    if (auto r = processing::convertToIcc(*img, Icc(Sipi::PredefinedProfiles::icc_sRGB), 8); !r) {
-      jpeg_destroy_compress(&cinfo);
-      return std::unexpected(r.error());
-    }
-    cinfo.in_color_space = JCS_RGB;
-    cinfo.jpeg_color_space = JCS_RGB;
-    break;
-  }
-  default: {
-    jpeg_destroy_compress(&cinfo);
-    return std::unexpected(SipiValueError{ ErrorCode::kUnsupportedFormat,
-      "Cannot write JPEG: unsupported colorspace " + to_string(img->getPhoto()) + " (dimensions: "
-        + std::to_string(img->getNx()) + "x" + std::to_string(img->getNy())
-        + ", channels: " + std::to_string(img->getNc()) + ", bps: " + std::to_string(img->getBps()) + ")" });
-  }
-  }
+  cinfo.in_color_space = in_color_space;
+  cinfo.jpeg_color_space = jpeg_color_space;
   cinfo.write_Adobe_marker = TRUE;
   cinfo.write_JFIF_header = TRUE;
 
@@ -1229,100 +1329,21 @@ Result<void> SipiIOJpeg::write(SipiImage *img, const OutputSink &sink, const Sip
   cinfo.optimize_coding = TRUE;
   jpeg_start_compress(&cinfo, TRUE);
 
-  //
-  // Markers must be written in sequence: APP0, APP1, APP2, ..., APP15
-  //
-
-  std::shared_ptr<Exif> exif = img->getExif();
-  if (exif != nullptr) {
-    std::vector<unsigned char> buf = exif->exifBytes();
-    char start[] = "Exif\000\000";
-    size_t start_l = sizeof(start) - 1;
-    if (start_l + buf.size() <= 65533) {
-      // NOTE: make_unique leak on longjmp is acceptable (see comment above setjmp)
-      auto exifchunk = std::make_unique<unsigned char[]>(buf.size() + start_l);
-      memcpy(exifchunk.get(), start, (size_t)start_l);
-      if (buf.size() > 0) memcpy(exifchunk.get() + start_l, buf.data(), (size_t)buf.size());
-      jpeg_write_marker(&cinfo, JPEG_APP0 + 1, (JOCTET *)exifchunk.get(), start_l + buf.size());
-    }
+  if (!exif_marker_payload.empty()) {
+    jpeg_write_marker(
+      &cinfo, JPEG_APP0 + 1, exif_marker_payload.data(), static_cast<unsigned int>(exif_marker_payload.size()));
   }
-
-  std::shared_ptr<Xmp> xmp = img->getXmp();
-  if (xmp != nullptr) {
-    std::string buf = xmp->xmpBytes();
-    char start[] = "http://ns.adobe.com/xap/1.0/\000";
-    size_t start_l = sizeof(start) - 1;
-    if ((!buf.empty()) && (start_l + buf.size() <= 65533)) {
-      auto xmpchunk = std::make_unique<char[]>(buf.size() + start_l);
-      memcpy(xmpchunk.get(), start, (size_t)start_l);
-      memcpy(xmpchunk.get() + start_l, buf.data(), (size_t)buf.size());
-      jpeg_write_marker(&cinfo, JPEG_APP0 + 1, (JOCTET *)xmpchunk.get(), start_l + buf.size());
-    }
+  if (!xmp_marker_payload.empty()) {
+    jpeg_write_marker(
+      &cinfo, JPEG_APP0 + 1, xmp_marker_payload.data(), static_cast<unsigned int>(xmp_marker_payload.size()));
   }
-
-  Essentials es = img->essential_metadata();
-
-  std::shared_ptr<Icc> image_icc = img->getIcc();
-  if ((image_icc != nullptr) || es.fields().use_icc) {
-    std::vector<unsigned char> buf;
-    try {
-      if (es.fields().use_icc) {
-        buf = es.fields().icc_profile;
-      } else {
-        buf = image_icc->iccBytes();
-      }
-    } catch (SipiError &err) {
-      log_err("Error writing ICC profile in JPEG: %s", err.what());
-    }
-    unsigned char start[14] = {
-      0x49, 0x43, 0x43, 0x5F, 0x50, 0x52, 0x4F, 0x46, 0x49, 0x4C, 0x45, 0x0
-    };
-    size_t start_l = 14;
-    unsigned int n = buf.size() / (65533 - start_l + 1) + 1;
-
-    auto iccchunk = std::make_unique<unsigned char[]>(65533);
-
-    unsigned int n_towrite = buf.size();
-    unsigned int n_nextwrite = 65533 - start_l;
-    unsigned int n_written = 0;
-    for (unsigned int i = 0; i < n; i++) {
-      start[12] = (unsigned char)(i + 1);
-      start[13] = (unsigned char)n;
-      if (n_nextwrite > n_towrite) n_nextwrite = n_towrite;
-      memcpy(iccchunk.get(), start, (size_t)start_l);
-      memcpy(iccchunk.get() + start_l, buf.data() + n_written, (size_t)n_nextwrite);
-      jpeg_write_marker(&cinfo, ICC_MARKER, iccchunk.get(), n_nextwrite + start_l);
-      n_towrite -= n_nextwrite;
-      n_written += n_nextwrite;
-    }
-    if (n_towrite != 0) { log_warn("Incomplete JPEG ICC write: %u bytes remaining", n_towrite); }
+  for (const auto &chunk : icc_marker_chunks) {
+    jpeg_write_marker(&cinfo, ICC_MARKER, chunk.data(), static_cast<unsigned int>(chunk.size()));
   }
-
-  std::shared_ptr<Iptc> iptc = img->getIptc();
-  if (iptc != nullptr) {
-    std::vector<unsigned char> buf = iptc->iptcBytes();
-    char start[] = " Photoshop 3.0\0008BIM\004\004\000\000";
-    size_t start_l = sizeof(start) - 1;
-    if (start_l + 4 + buf.size() <= 65533) {
-      unsigned char siz[4];
-      siz[0] = (unsigned char)((buf.size() >> 24) & 0x000000ff);
-      siz[1] = (unsigned char)((buf.size() >> 16) & 0x000000ff);
-      siz[2] = (unsigned char)((buf.size() >> 8) & 0x000000ff);
-      siz[3] = (unsigned char)(buf.size() & 0x000000ff);
-
-      auto iptcchunk = std::make_unique<char[]>(start_l + 4 + buf.size());
-      memcpy(iptcchunk.get(), start, (size_t)start_l);
-      memcpy(iptcchunk.get() + start_l, siz, (size_t)4);
-      if (buf.size() > 0) memcpy(iptcchunk.get() + start_l + 4, buf.data(), (size_t)buf.size());
-      jpeg_write_marker(&cinfo, JPEG_APP0 + 13, (JOCTET *)iptcchunk.get(), start_l + 4 + buf.size());
-    }
+  if (!iptc_marker_payload.empty()) {
+    jpeg_write_marker(
+      &cinfo, JPEG_APP0 + 13, iptc_marker_payload.data(), static_cast<unsigned int>(iptc_marker_payload.size()));
   }
-
-  // JPEG is an Access File format per ADR-0009 — it MUST NOT carry the
-  // Essentials packet. The legacy `Essentials es = img->essential_metadata()`
-  // declaration above (line 1226) still feeds the ICC fallback branch
-  // (lines 1228-1261) but the COM marker emission has been removed
-  // (DEV-6379).
 
   row_stride = img->getNx() * img->getNc();
   byte *pixel_data = img->pixels_writable().data();

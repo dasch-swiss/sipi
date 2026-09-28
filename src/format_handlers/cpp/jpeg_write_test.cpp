@@ -5,11 +5,14 @@
 
 #include <gtest/gtest.h>
 
+#include <cstdint>
 #include <cstdio>
 #include <fcntl.h>
 #include <sys/stat.h>
 #include <unistd.h>
 
+#include "error/SipiValueError.h"
+#include "format_handlers/output_sink.h"
 #include "image/SipiImage.h"
 #include "image/SipiImageError.h"
 #include "image/SipiIO.h"
@@ -114,6 +117,47 @@ TEST(JpegWrite, ReadWriteRoundtripPreservesDimensions)
   EXPECT_EQ(img_rt.getNy(), orig_ny);
 
   std::remove(dst.c_str());
+}
+
+namespace {
+// A CallbackSink ctx that fails every write — simulating a client that
+// aborts mid-stream (conn_write_data -> ERREXIT -> longjmp). libjpeg's HTML
+// destination manager batches the whole encode into one internal 64KB
+// buffer for images this small, so the first (and only) sink write is where
+// the abort must land.
+struct AlwaysFailCtx
+{
+  int calls{ 0 };
+};
+
+extern "C" int always_fail_write(void *raw_ctx, const uint8_t *, size_t)
+{
+  auto *ctx = static_cast<AlwaysFailCtx *>(raw_ctx);
+  ++ctx->calls;
+  return 1;
+}
+}// namespace
+
+TEST(JpegWrite, ClientAbortMidWriteReturnsClientAbort)
+{
+  const std::string src = test_images + "unit/palette.tif";
+  ASSERT_TRUE(file_exists(src));
+
+  Sipi::SipiImage img;
+  ASSERT_TRUE(img.read(src).has_value());
+  ASSERT_NE(img.getIcc(), nullptr);
+  // The refcount before the aborted write is the real regression check: a
+  // longjmp that skips the shared_ptr<Icc>'s destructor leaves it elevated.
+  const long icc_refs_before = img.getIcc().use_count();
+
+  AlwaysFailCtx ctx;
+  const Sipi::OutputSink sink{ Sipi::CallbackSink{ &always_fail_write, &ctx } };
+  const auto result = img.write("jpg", sink);
+
+  ASSERT_FALSE(result.has_value());
+  EXPECT_EQ(result.error().code(), Sipi::ErrorCode::kClientAbort);
+  EXPECT_GT(ctx.calls, 0);
+  EXPECT_EQ(img.getIcc().use_count(), icc_refs_before);
 }
 
 // --- A2: JPEG read error-path tests ---
