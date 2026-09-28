@@ -55,6 +55,7 @@ SIPI-specific extensions on the same URL surface:
 - image format conversion are supported between TIFF, JPEG2000, JPG and PNG. SIPI can
   be used either as standalone command line tool or in server mode using [LUA](https://www.lua.org) scripting.
 - SIPI preserves most embedded metadata (EXIF, IPTC, TIFF, XMP) and is preserving and/or converting ICC color profiles.
+  Malformed embedded metadata makes the read or conversion fail rather than being silently dropped.
 
 #### Preservation metadata (SIPI specific)
 

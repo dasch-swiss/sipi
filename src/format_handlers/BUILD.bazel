@@ -131,7 +131,8 @@ cc_binary(
 # JPEG marker parsing + write, J2K palette + oversized-dimension + embedded-
 # metadata decode, the shared `SipiImgInfo`/`read_shape` surface across all
 # four handlers, the error paths each codec throws on truncated/malformed
-# input, and the crafted-malformed-TIFF decode-path regressions).
+# input, the crafted-malformed-TIFF decode-path regressions, and EXIF
+# rational zero-denominator validation on TIFF write).
 cc_test(
     name = "formats_test",
     srcs = [
@@ -147,6 +148,7 @@ cc_test(
         "cpp/png_metadata_roundtrip_test.cpp",
         "cpp/select_pyramid_level_test.cpp",
         "cpp/tiff_bilevel_regression_test.cpp",
+        "cpp/tiff_exif_rational_test.cpp",
     ],
     data = ["//test/_test_data:images"],
     env = {"SIPI_WORKSPACE_ROOT": "."},
