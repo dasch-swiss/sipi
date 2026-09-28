@@ -87,6 +87,25 @@ void BM_ParseQualityFormat(benchmark::State &state)
 }
 BENCHMARK(BM_ParseQualityFormat);
 
+void BM_GetSizePercent(benchmark::State &state)
+{
+  // pct:50 on a 4000x3000 source — the PERCENTS branch of get_size, including
+  // the float-domain clamp guarding the size_t conversion.
+  Sipi::SipiSize size("pct:50");
+  for (auto _ : state) {
+    size_t w, h;
+    int reduce = 10000;
+    bool reduce_only;
+    size.get_size(4000, 3000, w, h, reduce, reduce_only);
+    benchmark::DoNotOptimize(w);
+    benchmark::DoNotOptimize(h);
+    benchmark::DoNotOptimize(reduce);
+    benchmark::DoNotOptimize(reduce_only);
+    benchmark::ClobberMemory();
+  }
+}
+BENCHMARK(BM_GetSizePercent);
+
 // Full per-request parse: all five components in sequence, mirroring what the
 // IIIF handler does on every image request. This is the number that actually
 // gates request latency at the parser front door.

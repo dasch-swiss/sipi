@@ -130,3 +130,19 @@ TEST(SipiSize, PercentExactPowerOfTwoIsReduceOnly)
     EXPECT_TRUE(reduce_only);
   }
 }
+
+// parse_float's regex accepts an unbounded run of decimal digits, so a huge
+// digit string overflows the float; without a pre-cast clamp, converting that
+// non-finite float to size_t is undefined behavior. get_size must clamp to
+// the dimension cap instead.
+TEST(SipiSize, PercentHugeValueIsClampedNotUB)
+{
+  size_t w, h;
+  int reduce = 10000;
+  bool reduce_only = false;
+  std::string huge_percent = "^pct:99999999999999999999999999999999999999999999999999";
+  EXPECT_TRUE(Sipi::SipiSize(huge_percent).get_size(400, 300, w, h, reduce, reduce_only)
+              == Sipi::SipiSize::PERCENTS);
+  EXPECT_EQ(w, 32000u);
+  EXPECT_EQ(h, 32000u);
+}
