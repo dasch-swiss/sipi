@@ -25,6 +25,16 @@ experiment, after which two more reports of the same detector appeared and confi
 mechanism. The transferable lesson: **ASan's container-overflow detector has a precondition that
 the fuzz binaries in this repo do not meet, so its reports from them are not evidence of a bug.**
 
+> **Correction (2026-09-28):** the "ASan's thread registry (short-lived threads in the Rust
+> shell)" false-positive class referenced below (§ Prevention) was misdiagnosed at the time of
+> this writing. The actual cause was `crash-handler` (via `sentry-rust-minidump`) defining a
+> strong `pthread_create` that overrode ASan's weak interceptor in `//src/cli/rust:sipi`, so ASan
+> never registered the Rust shell's threads and the intercepted `pthread_join` aborted on them.
+> The fix was to stop linking the minidump reporter into ASan builds (commit "build(cli): keep
+> the minidump reporter out of AddressSanitizer builds"); the workarounds built on the
+> slot-id-reuse theory have since been removed. This container-overflow
+> finding and its root cause are unaffected by the correction.
+
 ## Problem
 
 The `tiff_roundtrip` ASan leg reported:

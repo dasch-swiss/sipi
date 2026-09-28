@@ -144,13 +144,8 @@ sipi_e2e_test(name = "lua_hardening", deps = _e2e_test_deps)
 
 # SIPI-1R regression gate: several OTel metric collections — the path that
 # segfaulted 6.3.0's mis-declared `mi_stats_get` FFI — must run without
-# killing the server. `no-sanitizer` because it activates the OTLP exporter
-# (see `tracing` below for the ASan thread-registry rationale).
-sipi_e2e_test(
-    name = "metrics_export",
-    deps = _e2e_test_deps,
-    extra_tags = ["no-sanitizer"],
-)
+# killing the server.
+sipi_e2e_test(name = "metrics_export", deps = _e2e_test_deps)
 
 sipi_e2e_test(name = "option_matrix", deps = _e2e_test_deps)
 
@@ -172,19 +167,9 @@ sipi_e2e_test(name = "smoke", deps = _e2e_test_deps)
 
 sipi_e2e_test(name = "toml_config", deps = _e2e_test_deps)
 
-# `no-sanitizer`: activates the OTLP exporter (sets
-# `OTEL_EXPORTER_OTLP_ENDPOINT` so the shell produces span contexts to propagate).
-# Under ASan the exporter's tonic/tokio background threads trip the known
-# thread-registry false positive (`sanitizer_thread_arg_retval.cpp` CHECK), which
-# aborts the server at startup — an ASan-runtime artifact, not a real bug, and
-# ASan is not a production config. The propagation code itself is ASan-covered by
-# the `logger` unit test (validation) and by every other e2e test exercising
-# `CurlConnection`; only the OTLP-exporter-active path is excluded here.
-sipi_e2e_test(
-    name = "tracing",
-    deps = _e2e_test_deps,
-    extra_tags = ["no-sanitizer"],
-)
+# Activates the OTLP exporter (sets `OTEL_EXPORTER_OTLP_ENDPOINT` so the shell
+# produces span contexts to propagate).
+sipi_e2e_test(name = "tracing", deps = _e2e_test_deps)
 
 sipi_e2e_test(name = "upload", deps = _e2e_test_deps)
 

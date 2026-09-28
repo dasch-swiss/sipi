@@ -277,10 +277,6 @@ TEST(CmdConvertServiceFile, FailsOnMissingInput)
 // here (the production default is 120s).
 TEST(CmdConvertServiceFile, WedgedDecodeFailsAtDeadline)
 {
-#if defined(__SANITIZE_ADDRESS__) || (defined(__has_feature) && __has_feature(address_sanitizer))
-  GTEST_SKIP() << "run_with_deadline runs inline under ASan (no watchdog thread — see ffi/decode_guard.h); the "
-                  "deadline never fires, so the hang fixture cannot be exercised under ASan.";
-#endif
   const std::string src = materialize_fixture("hang/nightly_j2k_read_shape_hang.jp2", "_sfo_hang.jp2");
   const std::string dst = tmp_dir + "_sfo_hang_out.jp2";
 

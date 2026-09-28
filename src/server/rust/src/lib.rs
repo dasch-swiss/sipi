@@ -135,18 +135,6 @@ pub fn run(
 ) -> ExitCode {
     let mut builder = tokio::runtime::Builder::new_multi_thread();
     builder.enable_all();
-    // Under ASan (this binary links the sanitizer runtime via the C++
-    // engine, so its pthread interceptors apply process-wide), tokio
-    // retiring an idle `spawn_blocking` thread (routes.rs runs every image
-    // decode/encode there) after its keep-alive timeout trips the same
-    // "Joining already joined thread" false-positive abort as Kakadu's own
-    // worker-thread pool (SipiIOJ2k.cpp). A keep-alive far longer than any
-    // realistic process lifetime means tokio never proactively retires (and
-    // joins) a blocking-pool thread. `ASAN_OPTIONS` is set only by the
-    // asan-instrumented test/CI config, never in dev or production.
-    if std::env::var_os("ASAN_OPTIONS").is_some() {
-        builder.thread_keep_alive(Duration::from_secs(365 * 24 * 3600));
-    }
     let rt = match builder.build() {
         Ok(rt) => rt,
         Err(e) => {
@@ -411,26 +399,6 @@ async fn server_main(
             1
         }
     };
-
-    // Under ASan (this binary links the sanitizer runtime via the C++ engine,
-    // so its pthread interceptors apply process-wide, not just to
-    // instrumented code), tearing down the tokio runtime and the process's
-    // other persistent thread pools (e.g. the blocking pool behind
-    // `flush_telemetry`'s `spawn_blocking`) trips the same "Joining already
-    // joined thread" abort as Kakadu's own worker-thread pool (see
-    // `SipiIOJ2k.cpp`) — this time during teardown, after `serve()` has
-    // already returned and telemetry has already flushed. Exiting via
-    // `_exit` skips atexit handlers, C++ static destructors, and Rust drops
-    // entirely, so no teardown-time join runs; the same tradeoff
-    // `cli_app.cpp`'s `--version` fast-path already makes for the C++ CLI.
-    // `ASAN_OPTIONS` is set only by the asan-instrumented test/CI config
-    // (`.bazelrc`'s `test:asan`), never in dev or production.
-    if std::env::var_os("ASAN_OPTIONS").is_some() {
-        // SAFETY: `_exit` is async-signal-safe and always valid to call; the
-        // server has already produced its result and flushed telemetry, so
-        // skipping further teardown loses no state.
-        unsafe { libc::_exit(code) };
-    }
 
     if code == 0 {
         ExitCode::SUCCESS

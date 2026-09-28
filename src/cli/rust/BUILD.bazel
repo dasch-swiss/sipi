@@ -130,10 +130,36 @@ _ALLOCATOR_FEATURE = select({
     "//conditions:default": [],
 })
 
+# `crash-handler` (a `sentry-rust-minidump` dependency) interposes
+# `pthread_create` with a strong, `dlsym(RTLD_NEXT, ...)`-forwarding symbol to
+# install its per-thread alternate signal stack. ASan's own `pthread_create`
+# interceptor is a weak alias, so in a static link crash-handler's strong
+# symbol wins and ASan's `InterceptFunction` fails silently: spawned threads
+# never register with ASan/LSan, and ASan's (still-intercepted) `pthread_join`
+# then aborts on those threads with "Joining already joined thread". The
+# `minidump` crate feature carries the same condition into the Rust source, so
+# the minidump init call drops out together with the dep — under ASan, native
+# faults are reported by ASan itself instead.
+config_setting(
+    name = "sans_asan",
+    flag_values = {"@llvm//config:asan": "false"},
+    visibility = ["//visibility:private"],
+)
+
+_CRASH_REPORTER = select({
+    ":sans_asan": ["@crates//:sentry-rust-minidump"],
+    "//conditions:default": [],
+})
+
+_CRASH_REPORTER_FEATURE = select({
+    ":sans_asan": ["minidump"],
+    "//conditions:default": [],
+})
+
 rust_binary(
     name = "sipi",
     srcs = _SRCS,
-    crate_features = _ALLOCATOR_FEATURE,
+    crate_features = _ALLOCATOR_FEATURE + _CRASH_REPORTER_FEATURE,
     crate_name = "sipi_cli",
     edition = "2021",
     rustc_flags = _CPP_STDLIB_LINK,
@@ -150,8 +176,7 @@ rust_binary(
         "@crates//:libc",
         "@crates//:rustls",
         "@crates//:sentry",
-        "@crates//:sentry-rust-minidump",
-    ] + _DEPS + _ALLOCATOR,
+    ] + _DEPS + _ALLOCATOR + _CRASH_REPORTER,
 )
 
 # Compiles the binary crate with --cfg test; it performs the same final link of
@@ -160,7 +185,7 @@ rust_binary(
 rust_test(
     name = "sipi_unit_test",
     crate = ":sipi",
-    crate_features = _ALLOCATOR_FEATURE,
+    crate_features = _ALLOCATOR_FEATURE + _CRASH_REPORTER_FEATURE,
     edition = "2021",
     rustc_flags = _CPP_STDLIB_LINK,
     tags = ["no-sanitizer"],

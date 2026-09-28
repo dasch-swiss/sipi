@@ -15,6 +15,18 @@ issue: "DEV-7131"
 
 # A test failing after an unrelated change is usually the test, not the code
 
+> **Correction (2026-09-28):** the "Joining already joined thread" reports described below as
+> ASan thread-registry slot-id reuse were misdiagnosed. The actual cause was `crash-handler` (via
+> `sentry-rust-minidump`) defining a strong `pthread_create` that overrode ASan's weak interceptor
+> in `//src/cli/rust:sipi`, so ASan never registered the Rust shell's threads and the intercepted
+> `pthread_join` aborted on them. The fix was to stop linking the minidump reporter into
+> ASan builds (commit "build(cli): keep the minidump reporter out of AddressSanitizer builds"),
+> not to work around the join. The asan-inline branch of
+> `run_with_deadline`, the Kakadu `num_threads = 0` guards under `__SANITIZE_ADDRESS__`, and the
+> `GTEST_SKIP()`s that existed only because the deadline ran inline under ASan have all been
+> removed. The investigation narrative below is kept as-is for the debugging-process lesson; treat
+> its "Failure 2" root cause and the final "Sanitizer false positives" bullet as superseded.
+
 This is the "goose chase" from the SIPI security-hardening wave-2 work (DEV-7131, PR #800):
 several days of escalating diagnoses that were each disproven by one cheap primary-evidence
 probe. The production code was correct throughout. Every real root cause was a **test-isolation
@@ -125,11 +137,10 @@ expects a `nullopt` timeout) then hung forever because the deadline could never 
 
 **Sanitizer false positives (SIPI-specific but transferable):**
 
-- A short-lived `std::thread` create+join in the C++ engine, when linked into the **Rust shell**,
-  trips ASan's "Joining already joined thread" (slot-id reuse). Any new per-op thread needs the same
-  `__SANITIZE_ADDRESS__` inline guard as the Kakadu pool and `run_with_deadline`, or the asan-ubsan
-  leg goes red with a server-won't-start signature. Local ASan is broken on darwin, so this only
-  shows on CI.
+- If ASan reports "Joining already joined thread" or logs "failed to intercept" for a symbol,
+  suspect a competing strong definition overriding ASan's weak interceptor before suspecting the
+  thread logic itself — find the competing definition with `nm` on the linked binary. Local ASan
+  is broken on darwin, so this only shows on CI.
 
 ## References
 
