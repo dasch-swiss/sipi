@@ -18,8 +18,10 @@
 #include "gtest/gtest.h"
 
 #include <cmath>
+#include <limits>
 #include <memory>
 #include <sstream>
+#include <utility>
 #include <vector>
 
 namespace {
@@ -155,4 +157,39 @@ TEST(SipiIccCreateRgb, ChromaticAdaptationMatrixIsFiniteAndBradford)
   EXPECT_TRUE(std::isfinite(white_point_tag->X));
   EXPECT_TRUE(std::isfinite(white_point_tag->Y));
   EXPECT_TRUE(std::isfinite(white_point_tag->Z));
+}
+
+// createRGB must reject colorimetry whose synthesised profile cannot be
+// represented in ICC (s15Fixed16) rather than let lcms2 hit undefined
+// behaviour when the profile is later serialized.
+struct SipiIccCreateRgbRejectsNonRepresentable : ::testing::TestWithParam<std::pair<float, float>>
+{
+};
+
+TEST_P(SipiIccCreateRgbRejectsNonRepresentable, RejectsDegenerateWhitePoint)
+{
+  float white_point[2] = { GetParam().first, GetParam().second };
+  float primaries[6] = { 0.64f, 0.33f, 0.30f, 0.60f, 0.15f, 0.06f };// sRGB R/G/B
+
+  auto icc = Sipi::Icc::createRGB(white_point, primaries);
+  ASSERT_FALSE(icc.has_value());
+  EXPECT_EQ(icc.error().code(), Sipi::ErrorCode::kMetadataParseFailed);
+}
+
+INSTANTIATE_TEST_SUITE_P(DegenerateWhitePoints,
+  SipiIccCreateRgbRejectsNonRepresentable,
+  ::testing::Values(std::make_pair(0.3127f, 0.0f),// y = 0: division by zero in cmsxyY2XYZ
+    std::make_pair(std::numeric_limits<float>::quiet_NaN(), 0.3290f)// x = NaN
+    ));
+
+// A non-finite primary propagates through the same colorant-tag computation
+// as a degenerate white point.
+TEST(SipiIccCreateRgb, RejectsNonFinitePrimary)
+{
+  float white_point[2] = { 0.3127f, 0.3290f };// D65
+  float primaries[6] = { std::numeric_limits<float>::quiet_NaN(), 0.33f, 0.30f, 0.60f, 0.15f, 0.06f };
+
+  auto icc = Sipi::Icc::createRGB(white_point, primaries);
+  ASSERT_FALSE(icc.has_value());
+  EXPECT_EQ(icc.error().code(), Sipi::ErrorCode::kMetadataParseFailed);
 }

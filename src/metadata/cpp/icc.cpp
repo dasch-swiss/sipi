@@ -7,6 +7,7 @@
 #include "metadata/internal/icc_normalization.h"
 
 #include <cerrno>
+#include <cmath>
 #include <cstdlib>
 #include <ctime>
 #include <optional>
@@ -63,6 +64,54 @@ std::string icc_profile_info(cmsHPROFILE profile, cmsInfoType type)
   auto buf = std::make_unique<char[]>(len);
   cmsGetProfileInfoASCII(profile, type, cmsNoLanguage, cmsNoCountry, buf.get(), len);
   return std::string(buf.get());
+}
+
+// lcms2 serialises the XYZType and s15Fixed16ArrayType tags below by casting
+// through _cmsDoubleTo15Fixed16 (floor(v*65536+0.5) truncated to int32); a
+// non-finite value, or one outside the representable s15Fixed16 range, is
+// undefined behaviour in that cast.
+bool is_s15Fixed16_representable(double v)
+{
+  constexpr double kS15Fixed16Min = -32768.0;
+  constexpr double kS15Fixed16Max = 32767.0 + 65535.0 / 65536.0;
+  return std::isfinite(v) && v >= kS15Fixed16Min && v <= kS15Fixed16Max;
+}
+
+// Reads back the tags cmsCreateRGBProfileTHR derives from the caller-supplied
+// white point and primaries, and reports the first one that lcms2 cannot
+// represent in an ICC s15Fixed16 value. Reading here — before
+// cmsSaveProfileToMem serialises the tags — catches the degenerate input
+// (e.g. a zero-y white point) before it reaches the undefined-behaviour cast.
+std::optional<std::string> find_non_representable_rgb_tag(cmsHPROFILE profile)
+{
+  struct XyzTag
+  {
+    cmsTagSignature sig;
+    const char *name;
+  };
+  static constexpr XyzTag xyz_tags[] = { { cmsSigMediaWhitePointTag, "media white point" },
+    { cmsSigRedColorantTag, "red colorant" },
+    { cmsSigGreenColorantTag, "green colorant" },
+    { cmsSigBlueColorantTag, "blue colorant" } };
+
+  for (const auto &tag : xyz_tags) {
+    auto *xyz = static_cast<cmsCIEXYZ *>(cmsReadTag(profile, tag.sig));
+    if (xyz == nullptr) continue;
+    if (!is_s15Fixed16_representable(xyz->X) || !is_s15Fixed16_representable(xyz->Y)
+        || !is_s15Fixed16_representable(xyz->Z)) {
+      return std::string("ICC ") + tag.name + " tag is not representable as an s15Fixed16 ICC value";
+    }
+  }
+
+  auto *chad = static_cast<cmsFloat64Number *>(cmsReadTag(profile, cmsSigChromaticAdaptationTag));
+  if (chad != nullptr) {
+    for (int i = 0; i < 9; ++i) {
+      if (!is_s15Fixed16_representable(chad[i])) {
+        return std::string("ICC chromatic adaptation tag is not representable as an s15Fixed16 ICC value");
+      }
+    }
+  }
+  return std::nullopt;
 }
 
 }// namespace
@@ -220,6 +269,9 @@ Result<std::shared_ptr<Icc>>
   cmsDeleteContext(context);
   if (profile == nullptr) {
     return std::unexpected(SipiValueError{ ErrorCode::kMetadataParseFailed, "cmsCreateRGBProfileTHR failed" });
+  }
+  if (auto bad_tag = find_non_representable_rgb_tag(profile.get()); bad_tag.has_value()) {
+    return std::unexpected(SipiValueError{ ErrorCode::kMetadataParseFailed, *bad_tag });
   }
   return std::shared_ptr<Icc>(new Icc(std::move(profile), icc_RGB));
 }
