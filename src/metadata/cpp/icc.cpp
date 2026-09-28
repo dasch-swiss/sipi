@@ -189,7 +189,8 @@ Result<std::shared_ptr<Icc>>
   cmsCIExyY white_point;
   white_point.x = white_point_p[0];
   white_point.y = white_point_p[1];
-  // white_point.Y = 1.0;
+  // lcms2 scales the white point by Y when deriving the chad tag.
+  white_point.Y = 1.0;
 
   cmsCIExyYTRIPLE primaries;
   primaries.Red.x = primaries_p[0];
