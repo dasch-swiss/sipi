@@ -21,6 +21,7 @@
  * -c opt binary (ADR-0003; docs/src/development/benchmarking.md).
  */
 
+#include <algorithm>
 #include <assert.h>
 #include <cmath>
 #include <cstddef>
@@ -69,6 +70,15 @@ using namespace kdu_supp;
 
 namespace {
 constexpr std::int64_t kMaxMetadataBytes = 64 * 1024 * 1024;// 64 MiB cap on any single embedded metadata box
+
+// Kakadu's thread group holds at most KDU_MAX_THREADS threads; add_thread()
+// indexes past its per-thread arrays for any count beyond that.
+[[nodiscard]] int kakadu_thread_count()
+{
+  const int processors = kdu_get_num_processors();
+  if (processors < 2) return 0;
+  return std::min(processors, KDU_MAX_THREADS);
+}
 }// namespace
 
 namespace Sipi {
@@ -283,8 +293,7 @@ Result<bool> SipiIOJ2k::read(SipiImage *img,
   SIPI_ZONE_N("SipiIOJ2k::read");
   if (!is_jpx(filepath.c_str())) return false;// It's not a JPGE2000....
 
-  int num_threads;
-  if ((num_threads = kdu_get_num_processors()) < 2) num_threads = 0;
+  int num_threads = kakadu_thread_count();
 
   // Custom messaging services
   kdu_customize_warnings(&kdu_sipi_warn);
@@ -728,8 +737,8 @@ Result<bool> SipiIOJ2k::read(SipiImage *img,
   try {
     // Multi-threaded decode: one worker per core (mirroring the encode path in
     // write()), so the inverse DWT and sample processing run across all cores.
-    // num_threads is 0 on a single-core host (and under ASan), in which case
-    // env_ref stays NULL and decode falls back to the single-threaded path.
+    // num_threads is 0 on a single-core host, in which case env_ref stays
+    // NULL and decode falls back to the single-threaded path.
     if (num_threads > 0) {
       env.create();
       for (int nt = 1; nt < num_threads; nt++) {
@@ -1170,11 +1179,9 @@ Result<void> SipiIOJ2k::write(SipiImage *img, const OutputSink &sink, const Sipi
   kdu_customize_warnings(&kdu_sipi_warn);
   kdu_customize_errors(&kdu_sipi_error);
 
-  int num_threads;
+  int num_threads = kakadu_thread_count();
 
   kdu_membroker membroker;
-
-  if ((num_threads = kdu_get_num_processors()) < 2) num_threads = 0;
 
   // Declared outside the try so the catch below can read `http->client_aborted`
   // to distinguish client aborts from genuine Kakadu failures. sink_stream
