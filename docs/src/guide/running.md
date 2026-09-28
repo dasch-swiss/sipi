@@ -458,6 +458,7 @@ and the error message. This is the diagnostic surface for CLI failures —
 | ICC profile incompatible | The ICC profile does not match the channel count (e.g., CMYK profile on a 3-channel image). |
 | Corrupt or truncated file | The input file is incomplete or damaged. |
 | Unsupported TIFF tiling | The TIFF tile configuration is inconsistent or uses unsupported bit depths. |
+| EXIF rational with zero denominator | A TIFF-format conversion embeds an EXIF rational tag (e.g. `ExposureTime`, `FNumber`) whose value is `n/0` with `n != 0`. The source metadata is corrupt; a `0/0` ("no value") rational is skipped rather than failing the write. |
 
 ### Integration Notes for Calling Services
 

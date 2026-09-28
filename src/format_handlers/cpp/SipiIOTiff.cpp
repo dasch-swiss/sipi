@@ -2171,7 +2171,8 @@ Result<void> SipiIOTiff::write(SipiImage *img, const OutputSink &sink, const Sip
   //
   if (exif != nullptr) {
     TIFFWriteDirectory(tif);
-    writeExif(img, tif);
+    Result<void> exif_result = writeExif(img, tif);
+    if (!exif_result.has_value()) { return std::unexpected(std::move(exif_result).error()); }
   }
   // Close (and thereby flush) the TIFF before consuming the MEMTIFF buffer.
   tif_guard.reset();
@@ -2467,7 +2468,21 @@ void SipiIOTiff::readExif(SipiImage *img, TIFF *tif, toff_t exif_offset)
 //============================================================================
 
 
-void SipiIOTiff::writeExif(SipiImage *img, TIFF *tif)
+namespace {
+
+// A 0-denominator EXIF rational with a non-zero numerator has no valid
+// float representation and cannot be handed to TIFFSetField.
+Result<void> zero_denominator_error(uint16_t tag_id)
+{
+  char hex[8];
+  std::snprintf(hex, sizeof(hex), "0x%04x", tag_id);
+  return std::unexpected(
+    SipiValueError{ ErrorCode::kMetadataParseFailed, "EXIF tag " + std::string(hex) + ": zero denominator" });
+}
+
+}// namespace
+
+Result<void> SipiIOTiff::writeExif(SipiImage *img, TIFF *tif)
 {
   // add EXIF tags to the set of tags that libtiff knows about
   // necessary if we want to set EXIFTAG_DATETIMEORIGINAL, for example
@@ -2483,9 +2498,15 @@ void SipiIOTiff::writeExif(SipiImage *img, TIFF *tif)
       Exiv2::Rational r;
 
       if (exif->getValByKey(exiftag_list[i].tag_id, "Photo", r)) {
-        float f = (float)r.first / (float)r.second;
-        TIFFSetField(tif, exiftag_list[i].tag_id, f);
-        count++;
+        // 0/0 is EXIF's "no value" marker (e.g. an unmeasured BrightnessValue);
+        // n/0 with n != 0 has no valid float representation.
+        if (r.second == 0) {
+          if (r.first != 0) { return zero_denominator_error(exiftag_list[i].tag_id); }
+        } else {
+          float f = (float)r.first / (float)r.second;
+          TIFFSetField(tif, exiftag_list[i].tag_id, f);
+          count++;
+        }
       }
 
       break;
@@ -2550,16 +2571,28 @@ void SipiIOTiff::writeExif(SipiImage *img, TIFF *tif)
             exiftag_list[i].len);
           break;
         }
-        auto f = std::make_unique<float[]>(len);
-        for (size_t j = 0; j < len; j++) {
-          f[j] = static_cast<float>(vr[j].first) / static_cast<float>(vr[j].second);
+        // A fixed-count tag is written all-or-nothing: any n/0 element (n != 0)
+        // is malformed for the whole tag; any 0/0 element ("no value") skips
+        // the whole tag, since libtiff has no per-element "unknown" encoding.
+        bool has_no_value = false;
+        for (const auto &rat : vr) {
+          if (rat.second == 0) {
+            if (rat.first != 0) { return zero_denominator_error(exiftag_list[i].tag_id); }
+            has_no_value = true;
+          }
         }
-        if (exiftag_list[i].len == 0) {
-          TIFFSetField(tif, exiftag_list[i].tag_id, static_cast<uint16_t>(len), f.get());
-        } else {
-          TIFFSetField(tif, exiftag_list[i].tag_id, f.get());
+        if (!has_no_value) {
+          auto f = std::make_unique<float[]>(len);
+          for (size_t j = 0; j < len; j++) {
+            f[j] = static_cast<float>(vr[j].first) / static_cast<float>(vr[j].second);
+          }
+          if (exiftag_list[i].len == 0) {
+            TIFFSetField(tif, exiftag_list[i].tag_id, static_cast<uint16_t>(len), f.get());
+          } else {
+            TIFFSetField(tif, exiftag_list[i].tag_id, f.get());
+          }
+          count++;
         }
-        count++;
       }
       break;
     }
@@ -2623,6 +2656,7 @@ void SipiIOTiff::writeExif(SipiImage *img, TIFF *tif)
     TIFFSetField(tif, TIFFTAG_EXIFIFD, exif_dir_offset);
   }
   // TIFFCheckpointDirectory(tif);
+  return {};
 }
 //============================================================================
 

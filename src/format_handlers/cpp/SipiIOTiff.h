@@ -54,8 +54,10 @@ private:
    * Write the EXIF data to the TIFF file
    * \param img Pointer to SipiImage instance
    * \param[in] tif Pointer to TIFF file handle
+   * \returns Success, or a value error if a rational tag has a non-zero
+   *          numerator and a zero denominator (malformed, not "no value")
    */
-  static void writeExif(SipiImage *img, TIFF *tif);
+  [[nodiscard]] static Result<void> writeExif(SipiImage *img, TIFF *tif);
 
   static void write_basic_tags(const SipiImage &img,
     TIFF *tif,

@@ -84,6 +84,22 @@ IPTC, and EXIF — whether parsed from an embedded blob or synthesized by
 (JPEG, J2K, PNG, TIFF), including PNG's "Raw profile type exif" text
 chunk (`src/format_handlers/cpp/SipiIOPng.cpp`).
 
+### EXIF rationals on TIFF write
+
+`SipiIOTiff::writeExif` applies the same fatal-on-corruption stance to the
+write path. libtiff converts an EXIF rational tag to a `float` before
+storing it, so a scalar rational `n/0` with `n != 0` has no valid float
+representation; SIPI treats it as corrupt metadata and rejects the write
+with `kMetadataParseFailed` rather than silently dropping it. A scalar
+`0/0`, by contrast, is EXIF's own "no value" convention (e.g. an
+unmeasured `BrightnessValue`) and carries no value to reject — it is
+skipped, and the tag is simply omitted from the output. The
+`LensSpecification` tag (`EXIF_DT_RATIONAL_PTR`, a fixed four-rational
+array) is written all-or-nothing: any `n/0` element rejects the whole
+write, and otherwise any `0/0` element skips the whole tag, since
+libtiff's fixed-count `TIFFSetField` call has no per-element "unknown"
+encoding.
+
 ## Legacy mechanisms and their disposition
 
 | Mechanism | Package | Status |
