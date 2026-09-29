@@ -1,5 +1,33 @@
 # Changelog
 
+## [9.1.1](https://github.com/dasch-swiss/sipi/compare/v9.1.0...v9.1.1) (2026-09-29)
+
+
+### Bug Fixes
+
+* **deps:** Raise rustls to 0.23.45, repair the dev-shell hook, run audit locally ([7a8e42c](https://github.com/dasch-swiss/sipi/commit/7a8e42cb389dc007ab218bef51fdf80028bfa50c))
+* **format_handlers:** Cap Kakadu worker threads at the thread group's limit ([25305f3](https://github.com/dasch-swiss/sipi/commit/25305f31c0327891ca8e5faa5aec7e9347128d9b))
+* **format_handlers:** Keep zero-denominator EXIF rationals away from libtiff ([6dddc75](https://github.com/dasch-swiss/sipi/commit/6dddc75fa86a46a41ccfe48d0ff0e89c631a11e2))
+* **format_handlers:** Stop a failed PNG or JPEG write from skipping destructors ([7d2e71f](https://github.com/dasch-swiss/sipi/commit/7d2e71ffd2e89a06efa03e678a4494c00fa957de))
+* **iiifparser:** Clamp a percent size before converting it to an integer ([f729db4](https://github.com/dasch-swiss/sipi/commit/f729db4ec79dd2afe982249b156b23d5faea2cc2))
+* **metadata:** Initialise the white point luminance in synthesised RGB profiles ([b2a28e7](https://github.com/dasch-swiss/sipi/commit/b2a28e75cbff123257075c29efab8c218cb478e4))
+* **metadata:** Reject TIFF colorimetry that no ICC profile can represent ([cd03ddd](https://github.com/dasch-swiss/sipi/commit/cd03ddd722e936d1dba7d0e46a5f2c6ab1a4975f))
+* **util:** Close the per-thread libmagic handle on thread exit ([ff43648](https://github.com/dasch-swiss/sipi/commit/ff43648d84f5fe02f069f2b9071f6850a04b8260))
+
+
+### Documentation
+
+* **docs:** Adopt the shared comment convention (DEV-7123) ([a2db7a6](https://github.com/dasch-swiss/sipi/commit/a2db7a672ffeab28190e39f283bee8c71efc3538))
+* **server,cli:** Trim the Rust shell's comments to the convention (DEV-7123) ([a61fb63](https://github.com/dasch-swiss/sipi/commit/a61fb634b8098cd852adae2de6d9712103115aef))
+* **specs:** Add the libmagic per-decode leak plan and its journal ([dc1dcc9](https://github.com/dasch-swiss/sipi/commit/dc1dcc9fe8c8db446c2e3f9d61c7fa35e3f679c7))
+* **specs:** Close out the asset-access plan and its journals ([9f9f8f2](https://github.com/dasch-swiss/sipi/commit/9f9f8f22f8388d29d59a0960d9f157bc8d806f80))
+
+
+### Miscellaneous Chores
+
+* **ci:** Make the sanitizer job fail on leaks and undefined behaviour ([a1b5c5e](https://github.com/dasch-swiss/sipi/commit/a1b5c5ec42b6ca73db9ab718ae27e6fdbdd6faef))
+* **ci:** Restore AddressSanitizer thread tracking in the Rust shell ([533d27a](https://github.com/dasch-swiss/sipi/commit/533d27aa130d8e858733de353cb725eba01ad521))
+
 ## [9.1.0](https://github.com/dasch-swiss/sipi/compare/v9.0.1...v9.1.0) (2026-09-12)
 
 
