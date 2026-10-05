@@ -2,5 +2,5 @@
 # unpinned floors mean every CI run pulls latest and silently changes
 # behaviour. Latest at time of pinning: PyPI as of 2026-04-30.
 mkdocs==1.6.1
-mkdocs-material==9.7.6
+mkdocs-material==9.7.7
 mkdocs-llmstxt==0.5.0
