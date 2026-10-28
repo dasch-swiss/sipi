@@ -209,6 +209,34 @@ fn lua_route_occupies_the_full_lane() {
         "a second concurrent Lua route must shed on the exhausted full sub-pool"
     );
 
+    // A full-size image through the same window sheds too, and its 503 must
+    // carry the CORS echo, or a cross-origin viewer sees status 0 instead.
+    let resp = http_client()
+        .get(format!(
+            "{}/unit/lena512.jp2/full/max/0/default.jpg",
+            srv.base_url
+        ))
+        .header("Origin", "https://example.org")
+        .send()
+        .expect("full image GET failed");
+    assert_eq!(
+        resp.status().as_u16(),
+        503,
+        "a full image must shed on the exhausted full sub-pool"
+    );
+    assert_eq!(
+        resp.headers()
+            .get("access-control-allow-origin")
+            .expect("missing ACAO on the 503"),
+        "https://example.org"
+    );
+    assert_eq!(
+        resp.headers()
+            .get("access-control-allow-credentials")
+            .expect("missing credentials on the 503"),
+        "true"
+    );
+
     // A tile through the same window: the tile_min floor stays reachable.
     let resp = http_client()
         .get(format!("{}/unit/lena512.jp2/info.json", srv.base_url))

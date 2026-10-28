@@ -580,6 +580,43 @@ fn cors_image_without_origin() {
 }
 
 #[test]
+fn cors_error_responses_with_origin() {
+    // A cross-origin client only sees a response carrying ACAO: without it a
+    // 400/401/403/404 reaches the browser as status 0. Every IIIF-route error
+    // must echo the Origin with credentials, like the success responses do.
+    let srv = server();
+    for (path, status) in [
+        // Parser rejection (before the engine) and engine rejection.
+        ("/unit/lena512.jp2/invalid/max/0/default.jpg", 400),
+        ("/unit/lena512.jp2/600,600,100,100/max/0/default.jpg", 400),
+        // `deny` from `pre_flight`, and from `file_pre_flight` (which denies
+        // only `unit/test2.csv`).
+        ("/tmp/lena512.jp2/full/max/0/default.jpg", 401),
+        ("/unit/test2.csv/file", 401),
+        // A bare `restrict` decision is refused. `file_pre_flight` never
+        // answers `restrict`, so `/file` has no 403 case here.
+        (
+            "/test_restrict_bare/lena512.jp2/full/max/0/default.jpg",
+            403,
+        ),
+        ("/test_restrict_bare/lena512.jp2/info.json", 403),
+        // File missing on disk.
+        ("/unit/missing.jp2/full/max/0/default.jpg", 404),
+        ("/unit/missing.jp2/info.json", 404),
+        ("/unit/missing.jp2/knora.json", 404),
+        ("/unit/missing.csv/file", 404),
+    ] {
+        let resp = client()
+            .get(format!("{}{path}", srv.base_url))
+            .header("Origin", "https://example.org")
+            .send()
+            .unwrap_or_else(|e| panic!("GET {path} failed: {e}"));
+        assert_eq!(resp.status().as_u16(), status, "{path}");
+        assert_credentialed_echo(&resp, "https://example.org");
+    }
+}
+
+#[test]
 fn cors_preflight() {
     // OPTIONS with all three required headers triggers CORS preflight
     let srv = server();

@@ -826,4 +826,50 @@ fn allowed_origins_allowlist_gates_info_json_cors() {
         "true"
     );
     assert!(varies_on_origin(&allowed), "Vary should contain Origin");
+
+    // An error response follows the same allowlist: a listed Origin gets the
+    // credentialed echo, an unlisted one gets no ACAO, and both vary on Origin.
+    let missing = format!("{}/unit/missing.jp2/full/max/0/default.jpg", srv.base_url);
+    let allowed_error = http_client()
+        .get(&missing)
+        .header("Origin", "https://allowed.example")
+        .send()
+        .expect("GET missing image with a listed Origin");
+    assert_eq!(allowed_error.status().as_u16(), 404);
+    assert_eq!(
+        allowed_error
+            .headers()
+            .get("access-control-allow-origin")
+            .expect("missing ACAO on a 404 for a listed Origin"),
+        "https://allowed.example"
+    );
+    assert_eq!(
+        allowed_error
+            .headers()
+            .get("access-control-allow-credentials")
+            .expect("missing credentials on a 404 for a listed Origin"),
+        "true"
+    );
+    assert!(
+        varies_on_origin(&allowed_error),
+        "Vary should contain Origin"
+    );
+
+    let denied_error = http_client()
+        .get(&missing)
+        .header("Origin", "https://evil.example")
+        .send()
+        .expect("GET missing image with an unlisted Origin");
+    assert_eq!(denied_error.status().as_u16(), 404);
+    assert!(
+        denied_error
+            .headers()
+            .get("access-control-allow-origin")
+            .is_none(),
+        "SECURITY: an unlisted Origin must get no ACAO on an error"
+    );
+    assert!(
+        varies_on_origin(&denied_error),
+        "Vary should contain Origin"
+    );
 }
