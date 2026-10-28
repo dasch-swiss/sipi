@@ -541,6 +541,9 @@ The following matrix maps every testable IIIF spec requirement to its test statu
 | Knora.json `Vary: Origin` with and without Origin | :white_check_mark: | `cors_knora_json_varies_on_origin` | `*` without Origin, echoed Origin + credentials with one |
 | Image ACAO with Origin | :white_check_mark: | `cors_image_with_origin` | |
 | Image ACAO without Origin | :white_check_mark: | `cors_image_without_origin` | |
+| Error ACAO with Origin (400/401/403/404) | :white_check_mark: | `cors_error_responses_with_origin` | Image, info.json, knora.json and `/file` (no `/file` 403: the test hook never restricts); echoed Origin + credentials |
+| Error ACAO on a 503 shed | :white_check_mark: | `lua_route_occupies_the_full_lane` | `admission_control.rs`; echoed Origin + credentials |
+| Error ACAO under `SIPI_ALLOWED_ORIGINS` | :white_check_mark: | `allowed_origins_allowlist_gates_info_json_cors` | `security.rs`; 404 echoes a listed Origin, an unlisted one gets only `Vary: Origin` |
 | OPTIONS preflight | :white_check_mark: | `cors_preflight` | |
 
 ### HTTP Behavior (Section 7)
@@ -698,11 +701,11 @@ Two Rust-shell features the C++-era gap list assumed are permanently **removed**
 | Rotation parameters | 9 | 0 | 100% |
 | Quality parameters | 6 | 0 | 100% |
 | Format parameters | 5 | 0 | 100% |
-| CORS | 10 | 0 | 100% |
+| CORS | 13 | 0 | 100% |
 | HTTP behavior | 13 | 0 | 100% |
 | Identifiers | 4 | 1 (ARK/URN) | 80% |
 | Sipi extensions | 100 | 7 | 93% |
-| **Total** | **197** | **8** | **96%** |
+| **Total** | **200** | **8** | **96%** |
 
 *(Three additional Sipi-extension rows — Prometheus `/metrics`, `/api/cache`, SSL/TLS — are excluded from this count entirely: they are removed-on-the-Rust-shell features, not gaps. See the N/A note above the extension matrix.)*
 

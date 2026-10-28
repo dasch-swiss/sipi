@@ -272,10 +272,31 @@ struct Access {
 /// — the one exception is a `pre_flight` hook that answers the request itself
 /// (`preflight_direct_response`), whose body is whatever the script wrote, by
 /// the script's own choice.
+///
+/// Every response this handler produces leaves through [`with_cors`], whatever
+/// its status: a cross-origin client only sees a response that carries
+/// `Access-Control-Allow-Origin`, so an error without it reaches the browser as
+/// status 0 instead of its real 400/401/403/404/503. Responses built outside
+/// the handler get no CORS: the `TimeoutLayer` 408 and axum's 405 for a method
+/// the route does not serve.
 pub async fn iiif(
     State(state): State<Arc<AppState>>,
     method: Method,
     OriginalUri(uri): OriginalUri,
+    headers: HeaderMap,
+) -> Response {
+    let origin = header_str(&headers, "origin");
+    let cors_decision = cors_allow(origin.as_deref(), &state.allowed_origins);
+    let response = iiif_response(state, method, uri, headers).await;
+    with_cors(response, origin.as_deref(), cors_decision)
+}
+
+/// The body of [`iiif`]: every early return and every engine outcome, before
+/// the CORS headers are applied.
+async fn iiif_response(
+    state: Arc<AppState>,
+    method: Method,
+    uri: Uri,
     headers: HeaderMap,
 ) -> Response {
     if !state.ready {
@@ -325,24 +346,8 @@ pub async fn iiif(
         Acquired::Admitted(permit) => permit,
         Acquired::Shed | Acquired::TimedOut => return busy_response(),
     };
-    // Shell-set headers on the streamed (success) response, captured before the
-    // request (and `state`) is moved onto the blocking thread: the CORS Origin
-    // echo + credentials (image + /file), gated by `cors_allow` against the
-    // configured allowlist (empty = the unconditional echo default), and, for a
-    // /file Range request, the identifier-derived Content-Disposition.
-    let origin = header_str(&headers, "origin");
-    let cors_decision = cors_allow(origin.as_deref(), &state.allowed_origins);
-    let cors_header = match cors_decision {
-        CorsDecision::Allow { vary } => origin
-            .as_deref()
-            .and_then(|o| HeaderValue::from_str(o).ok())
-            .map(|v| (v, vary)),
-        CorsDecision::Deny { .. } => None,
-    };
-    // Even on a deny, allowlist mode still varies the response by Origin (no
-    // Origin ⇒ default `*`/deny elsewhere, a listed Origin ⇒ allow) so a
-    // shared cache must not serve a cached deny to a later allowed origin.
-    let cors_vary_only = matches!(cors_decision, CorsDecision::Deny { vary: true });
+    // The shell-set Content-Disposition of a /file Range request, derived from
+    // the identifier before the request is moved onto the blocking thread.
     let content_disp = (parsed.kind == RequestKind::FileDownload
         && headers.contains_key(header::RANGE))
     .then(|| content_disposition(&parsed.identifier))
@@ -371,29 +376,12 @@ pub async fn iiif(
         // JSON / redirect / error / HEAD: a complete response, returned as built.
         Ok(Outcome::Complete(response)) => response,
         // Image / file: stream the body as the engine produces it, adding the
-        // shell-set CORS + Content-Disposition headers to the committed head.
+        // shell-set Content-Disposition header to the committed head.
         Ok(Outcome::StreamHead {
             status,
             headers: head,
         }) => {
             let mut response = sink::stream_response(status, head, body_rx);
-            if let Some((origin, vary)) = cors_header {
-                let h = response.headers_mut();
-                h.insert(header::ACCESS_CONTROL_ALLOW_ORIGIN, origin);
-                // Cookie auth: without credentials the browser withholds the
-                // DSP/Knora session cookie cross-origin.
-                h.insert(
-                    header::ACCESS_CONTROL_ALLOW_CREDENTIALS,
-                    HeaderValue::from_static("true"),
-                );
-                if vary {
-                    h.insert(header::VARY, HeaderValue::from_static("Origin"));
-                }
-            } else if cors_vary_only {
-                response
-                    .headers_mut()
-                    .insert(header::VARY, HeaderValue::from_static("Origin"));
-            }
             if let Some(cd) = content_disp {
                 if response.status().is_success() {
                     response
@@ -969,7 +957,7 @@ fn serve_image(
     let engine_start = SystemTime::now();
     // SAFETY: every pointer in `req` outlives this synchronous call; the seam
     // guards C++ exceptions (→ status code, never an unwind into Rust). The
-    // streamed head's CORS header is added by the caller (`iiif`).
+    // CORS headers are added by the caller (`iiif`).
     sink::serve_streaming(outcome_tx, body_tx, |resp: &SipiResponse| unsafe {
         ffi::sipi_serve_image(&req, resp)
     });
@@ -1024,9 +1012,9 @@ fn emit_engine_phase_spans(engine_start: SystemTime, timings: &ffi::SipiServeTim
     }
 }
 
-/// Raw `/file` passthrough via `sipi_serve_file` (Range/206). The CORS echo and,
-/// on a Range request, the identifier-derived Content-Disposition are added to
-/// the streamed head by the caller (`iiif`).
+/// Raw `/file` passthrough via `sipi_serve_file` (Range/206). The CORS headers
+/// and, on a Range request, the identifier-derived Content-Disposition are added
+/// by the caller (`iiif`).
 fn serve_file(
     resolved: &str,
     headers: &HeaderMap,
@@ -1958,6 +1946,46 @@ fn push_cors(headers: &mut Vec<(String, String)>, origin: Option<&str>, allowlis
     }
 }
 
+/// Apply the IIIF route's CORS decision to `response`, whatever its status.
+///
+/// A response that already carries `Access-Control-Allow-Origin` is left as
+/// built: info.json and knora.json set their own (`*` without an Origin, see
+/// [`json_cors`]), and a `pre_flight` hook that answers the request itself may
+/// set its own, which an echo would overwrite. Otherwise an allowed `origin` is echoed with
+/// `Access-Control-Allow-Credentials: true` (cookie auth: without it the
+/// browser withholds the DSP session cookie cross-origin), and allowlist mode
+/// adds `Origin` to `Vary` — on a deny too, so a shared cache does not serve a
+/// cached deny to a later allowed origin.
+fn with_cors(mut response: Response, origin: Option<&str>, decision: CorsDecision) -> Response {
+    let h = response.headers_mut();
+    if h.contains_key(header::ACCESS_CONTROL_ALLOW_ORIGIN) {
+        return response;
+    }
+    let vary = match decision {
+        CorsDecision::Allow { vary } => {
+            if let Some(acao) = origin.and_then(|o| HeaderValue::from_str(o).ok()) {
+                h.insert(header::ACCESS_CONTROL_ALLOW_ORIGIN, acao);
+                h.insert(
+                    header::ACCESS_CONTROL_ALLOW_CREDENTIALS,
+                    HeaderValue::from_static("true"),
+                );
+            }
+            vary
+        }
+        CorsDecision::Deny { vary } => vary,
+    };
+    let varies_on_origin = h
+        .get_all(header::VARY)
+        .iter()
+        .filter_map(|v| v.to_str().ok())
+        .flat_map(|v| v.split(','))
+        .any(|v| v.trim().eq_ignore_ascii_case("origin"));
+    if vary && !varies_on_origin {
+        h.append(header::VARY, HeaderValue::from_static("Origin"));
+    }
+    response
+}
+
 /// A head-only response (HEAD) carrying the static-serve headers, no body.
 fn head_only(status: StatusCode, headers: &[(String, String)]) -> Response {
     let mut builder = Response::builder().status(status);
@@ -2228,8 +2256,8 @@ fn json_cors(
 }
 
 /// A CORS decision for one request Origin against the configured allowlist.
-/// The single chokepoint every CORS site (`iiif`'s image/file
-/// stream, [`json_cors`] for info.json and knora.json, [`cors_preflight_response`],
+/// The single chokepoint every CORS site ([`with_cors`] for every `iiif`
+/// response, [`json_cors`] for info.json and knora.json, [`cors_preflight_response`],
 /// [`push_cors`]) reads through [`cors_allow`] — the four sites differ only in
 /// which headers they attach on `Allow`, not in whether they attach them.
 #[derive(Clone, Copy)]
@@ -2804,6 +2832,101 @@ mod tests {
         // Allowlist mode still varies by Origin on a deny, so a shared cache
         // doesn't serve this deny to a later allowed origin.
         assert_eq!(h.get(header::VARY).unwrap(), "Origin");
+    }
+
+    #[test]
+    fn with_cors_echoes_allowed_origin_on_error() {
+        for status in [
+            StatusCode::BAD_REQUEST,
+            StatusCode::UNAUTHORIZED,
+            StatusCode::FORBIDDEN,
+            StatusCode::NOT_FOUND,
+            StatusCode::SERVICE_UNAVAILABLE,
+        ] {
+            let resp = with_cors(
+                sink::error_response(status),
+                Some("https://example.org"),
+                CorsDecision::Allow { vary: false },
+            );
+            let h = resp.headers();
+            assert_eq!(resp.status(), status);
+            assert_eq!(
+                h.get(header::ACCESS_CONTROL_ALLOW_ORIGIN).unwrap(),
+                "https://example.org",
+                "{status}"
+            );
+            assert_eq!(
+                h.get(header::ACCESS_CONTROL_ALLOW_CREDENTIALS).unwrap(),
+                "true",
+                "{status}"
+            );
+            assert!(h.get(header::VARY).is_none(), "{status}");
+        }
+    }
+
+    #[test]
+    fn with_cors_varies_on_origin_in_allowlist_mode() {
+        let allowed = with_cors(
+            sink::error_response(StatusCode::NOT_FOUND),
+            Some("https://a.example"),
+            CorsDecision::Allow { vary: true },
+        );
+        assert_eq!(allowed.headers().get(header::VARY).unwrap(), "Origin");
+
+        let denied = with_cors(
+            sink::error_response(StatusCode::NOT_FOUND),
+            Some("https://evil.example"),
+            CorsDecision::Deny { vary: true },
+        );
+        let h = denied.headers();
+        assert!(h.get(header::ACCESS_CONTROL_ALLOW_ORIGIN).is_none());
+        assert!(h.get(header::ACCESS_CONTROL_ALLOW_CREDENTIALS).is_none());
+        assert_eq!(h.get(header::VARY).unwrap(), "Origin");
+
+        let no_origin = with_cors(
+            sink::error_response(StatusCode::NOT_FOUND),
+            None,
+            CorsDecision::Deny { vary: false },
+        );
+        assert!(no_origin.headers().is_empty());
+    }
+
+    #[test]
+    fn with_cors_keeps_a_json_response_cors_as_built() {
+        let value = serde_json::json!({ "ok": true });
+        // No Origin: info.json answers `*` without credentials, varying on
+        // Origin, Cookie and Authorization. `with_cors` must not add to it.
+        let resp = with_cors(
+            json_response(
+                StatusCode::OK,
+                &value,
+                &headers(&[]),
+                None,
+                Some("*"),
+                &["Origin", "Cookie", "Authorization"],
+                true,
+            ),
+            None,
+            CorsDecision::Deny { vary: true },
+        );
+        let h = resp.headers();
+        assert_eq!(h.get(header::ACCESS_CONTROL_ALLOW_ORIGIN).unwrap(), "*");
+        assert!(h.get(header::ACCESS_CONTROL_ALLOW_CREDENTIALS).is_none());
+        assert_eq!(h.get_all(header::VARY).iter().count(), 1);
+    }
+
+    #[test]
+    fn with_cors_does_not_duplicate_an_existing_vary_origin() {
+        let mut resp = sink::error_response(StatusCode::NOT_FOUND);
+        resp.headers_mut()
+            .insert(header::VARY, HeaderValue::from_static("Cookie, origin"));
+        let resp = with_cors(
+            resp,
+            Some("https://evil.example"),
+            CorsDecision::Deny { vary: true },
+        );
+        let vary: Vec<_> = resp.headers().get_all(header::VARY).iter().collect();
+        assert_eq!(vary, ["Cookie, origin"]);
     }
 
     #[test]
