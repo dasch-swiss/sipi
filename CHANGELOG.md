@@ -1,5 +1,12 @@
 # Changelog
 
+## [10.0.1](https://github.com/dasch-swiss/vitrinli/compare/v10.0.0...v10.0.1) (2026-10-29)
+
+
+### Bug Fixes
+
+* **server:** Send CORS headers on every IIIF-route response ([4fd154f](https://github.com/dasch-swiss/vitrinli/commit/4fd154f4e81489c748652cd0facd7b7733c6ded8))
+
 ## [10.0.0](https://github.com/dasch-swiss/sipi/compare/v9.1.1...v10.0.0) (2026-10-22)
 
 
