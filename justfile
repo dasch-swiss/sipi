@@ -151,8 +151,8 @@ bazel-clippy-check *FLAGS='':
 # Advisory scan over the checked-in Cargo-format lockfile (`Cargo.Bazel.lock`,
 # materialized from `crate.from_specs(cargo_lockfile = ...)` in MODULE.bazel —
 # cargo-audit/OSV-Scanner read Cargo.lock syntax, not MODULE.bazel.lock's
-# JSON). Covers the production `@crates` hub (server/cli/scripting); the
-# `/test/e2e` cargo manifest is covered separately by Dependabot.
+# JSON). Covers the single `@crates` hub: server, cli, scripting and the e2e
+# suite.
 #
 # Neither tool exposes a CLI severity threshold (RustSec advisories and OSV
 # entries don't uniformly carry a Critical/High label), so both fail on any
@@ -165,8 +165,13 @@ bazel-clippy-check *FLAGS='':
 # pins JWT to HS256, so no RSA private-key operation runs and the side-channel is
 # unreachable. Ignored in both tools until an upstream fix ships (rationale also
 # in `osv-scanner.toml`). Revisit when `rsa` cuts a fixed release.
+# RUSTSEC-2026-0387 (`crypto-bigint` 0.5 timing variability) is fixed only in
+# 0.7.6+, which needs `elliptic-curve` 0.14; `jsonwebtoken` (10.x and 11.1)
+# still requires `p256`/`p384` 0.13 on 0.5. Those curves serve ES256/ES384 only;
+# with HS256 pinned no elliptic-curve operation runs, so the timing leak is
+# unreachable. Revisit when `jsonwebtoken` moves to `p256` 0.14.
 audit:
-    cargo audit --file Cargo.Bazel.lock --ignore RUSTSEC-2023-0071
+    cargo audit --file Cargo.Bazel.lock --ignore RUSTSEC-2023-0071 --ignore RUSTSEC-2026-0387
     osv-scanner scan source --lockfile=Cargo.lock:Cargo.Bazel.lock --config=osv-scanner.toml
 
 # Lint commit messages with commitlint-rs — the CI `commit-lint` gate. Enforces
