@@ -59,7 +59,7 @@
             python3Packages.jpylyzer
           ];
           # Rust toolchain is intentionally NOT in commonPackages — `rules_rust`
-          # in `MODULE.bazel` pins a hermetic rustc (1.89.0). E2E + smoke
+          # in `MODULE.bazel` pins a hermetic rustc (1.98.0). E2E + smoke
           # tests run as `rust_test` Bazel targets in CI and locally; a
           # parallel `cargo` path would risk version skew against the
           # hermetic toolchain.

@@ -232,28 +232,26 @@ paths, both using bare source-directory artifacts:
 
 ### The fix
 
-`bazel/patches/hermetic_llvm_headers_glob.patch` applies three coupled changes to
-hermetic-llvm 0.8.10 via a `single_version_override` in `MODULE.bazel`:
+`bazel/patches/hermetic_llvm_headers_glob.patch` applies two coupled changes to
+hermetic-llvm via a `single_version_override` in `MODULE.bazel`:
 
 1. `directory.bzl` gains an `expand_files` opt-in. When `True`, `DefaultInfo` carries the
    individual header files (a recursive glob minus `make headers_install` byproducts) rather
    than one source-directory artifact. This fixes Path A. The macOS SDK sysroot is left
    unexpanded — globbing it would bloat every darwin compile with unnecessary inputs.
 
-2. `runtimes/module_map.bzl` is updated to emit a single umbrella submodule per directory
-   path taken from `DirectoryInfo` (rather than one umbrella per file from `DefaultInfo`),
-   so the module map generator remains correct when `DefaultInfo` is a file list.
-
-3. `kernel/extension/kernel-headers.BUILD.bazel` and
+2. `kernel/extension/kernel-headers.BUILD.bazel` and
    `runtimes/glibc/extension/glibc-headers.BUILD.bazel` change
    `hdrs = ["include"]` to `hdrs = glob(["include/**"])`. This makes every individual
    header a declared action input for the stage0 runtime compiles. This fixes Path B —
    the path the `expand_files` change does not reach.
 
-The patch targets `directory.bzl`, `runtimes/module_map.bzl`,
-`kernel/extension/kernel-headers.BUILD.bazel`, and
-`runtimes/glibc/extension/glibc-headers.BUILD.bazel`. It applies cleanly to 0.8.10.
-Upstreaming is deferred pending Ivan's decision.
+The patch targets `directory.bzl`, `kernel/extension/kernel-headers.BUILD.bazel`, and
+`runtimes/glibc/extension/glibc-headers.BUILD.bazel`. Re-check it on every `llvm` bump
+with the path A and path B `aquery` commands below, run with this patch taken out of the
+override (the override's other patch, `hermetic_llvm_darwin_rtlib.patch`, stays): while
+the kernel and glibc header inputs are the two bare `include` directories, the patch is
+still needed; once both paths list individual header files, drop this patch.
 
 Local verification (no RBE required):
 
@@ -264,10 +262,15 @@ nix develop -c just bazel-build
 # Cross-compile a Linux target from macOS
 nix develop -c bazel build --platforms=//platforms:linux_x86_64 //src/logging:logging
 
-# Confirm no bare source-directory artifact in the action inputs
+# Path A: confirm no bare source-directory artifact in the action inputs
 nix develop -c bazel aquery \
   --platforms=//platforms:linux_x86_64 \
   'mnemonic("CppCompile", //src/logging:logging)' \
+  --include_artifacts
+# Path B: the stage0 runtime compiles
+nix develop -c bazel aquery \
+  --platforms=//platforms:linux_x86_64 \
+  'mnemonic("CppCompile", deps(@llvm-project//libcxx:libcxx.static.stage0_non_asan) union deps(@llvm-project//libunwind:libunwind.static))' \
   --include_artifacts
 # All inputs should be named files, not bare directory nodes.
 ```
@@ -395,6 +398,8 @@ remote cache.
 - `.github/actions/bazel-rbe/action.yml` — the composite action; source of truth for the
   emitted flag string
 - `bazel/patches/hermetic_llvm_headers_glob.patch` — the remote-execution safety patch
+- `bazel/patches/hermetic_llvm_darwin_rtlib.patch` — drops the unused `-rtlib` from macOS
+  Rust links; not RBE-related, applied by the same override
 - `MODULE.bazel` — `single_version_override` for the `llvm` module (patch application)
   and `rust.toolchain(extra_target_triples = ...)` (cross toolchain registration)
 - `platforms/BUILD.bazel` — `//platforms:linux_x86_64` exec properties

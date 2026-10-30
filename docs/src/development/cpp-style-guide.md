@@ -921,39 +921,30 @@ These checks are included via the wildcards above but worth calling out:
 Run on the whole codebase (requires `compile_commands.json`):
 
 ```bash
-# Generate compile commands first
-cmake -B build -DCMAKE_EXPORT_COMPILE_COMMANDS=ON -DCMAKE_CXX_STANDARD=23
+# Generate compile commands first (writes ./compile_commands.json)
+just compile-commands
 
 # Run linter
-run-clang-tidy -p build -header-filter='.*'
+run-clang-tidy -p . -header-filter='.*'
 
 # Run with auto-fix (review carefully before committing)
-run-clang-tidy -p build -header-filter='.*' \
+run-clang-tidy -p . -header-filter='.*' \
   -checks='-*,modernize-use-nullptr,modernize-use-using,modernize-make-unique' \
   -fix
 ```
 
-> **Prerequisite:** `compile_commands.json` must exist in the build directory.
-> Verify with: `ls build/compile_commands.json`
+> **Prerequisite:** `compile_commands.json` must exist in the workspace root.
+> `just compile-commands` writes it (git-ignored) from Bazel's compile actions.
+> Re-run it after adding or moving a C++ file or changing a target's deps.
+> The nix shell's clang-tidy is LLVM 19 against the hermetic LLVM 22 compile
+> commands; errors inside the toolchain's builtin headers are version skew.
 
 ---
 
-### CMake Integration
-
-Wire clang-tidy into the build (optional — useful for per-file feedback in IDEs):
-
-```cmake
-find_program(CLANG_TIDY_EXE NAMES clang-tidy-19 clang-tidy)
-if(CLANG_TIDY_EXE)
-  set(CMAKE_CXX_CLANG_TIDY "${CLANG_TIDY_EXE}")
-endif()
-```
-
 ### Build Acceleration
 
-- **ccache/sccache:** Use `CMAKE_CXX_COMPILER_LAUNCHER=ccache` or `sccache` for faster rebuilds
 - **include-what-you-use (IWYU):** Complementary to clang-tidy; enforces the "self-contained headers" rule and removes unused includes
-- **compile_commands.json:** Set `CMAKE_EXPORT_COMPILE_COMMANDS ON` in the top-level `CMakeLists.txt` (not just as a CLI flag) so tools always have access
+- **compile_commands.json:** Generated on demand by `just compile-commands`; see [Developing SIPI](developing.md#clangd)
 
 ---
 
@@ -985,17 +976,12 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - name: Install tools
-        run: sudo apt-get install -y clang-19 clang-tidy-19 cmake ninja-build
-      - name: Configure
-        run: |
-          cmake -B build -G Ninja \
-            -DCMAKE_CXX_COMPILER=clang++-19 \
-            -DCMAKE_CXX_STANDARD=23 \
-            -DCMAKE_CXX_EXTENSIONS=OFF \
-            -DCMAKE_EXPORT_COMPILE_COMMANDS=ON
+        run: sudo apt-get install -y clang-tidy-19
+      - name: Generate compile commands
+        run: just compile-commands
       - name: Lint
         run: |
-          run-clang-tidy-19 -p build -header-filter='.*' \
+          run-clang-tidy-19 -p . -header-filter='.*' \
             -checks='-*,bugprone-*,modernize-*,performance-*,cppcoreguidelines-*'
 ```
 

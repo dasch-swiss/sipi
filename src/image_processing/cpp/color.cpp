@@ -48,10 +48,9 @@ namespace processing {
 
       for (size_t j = 0; j < ny; j++) {
         for (size_t i = 0; i < nx; i++) {
-          auto Y = (double)inbuf[nc * (j * nx + i) + 2];
+          auto Y = (double)inbuf[nc * (j * nx + i) + 0];
           auto Cb = (double)inbuf[nc * (j * nx + i) + 1];
-          ;
-          auto Cr = (double)inbuf[nc * (j * nx + i) + 0];
+          auto Cr = (double)inbuf[nc * (j * nx + i) + 2];
 
           int r = (int)(Y + 1.40200 * (Cr - 0x80));
           int g = (int)(Y - 0.34414 * (Cb - 0x80) - 0.71414 * (Cr - 0x80));
@@ -82,10 +81,9 @@ namespace processing {
 
       for (size_t j = 0; j < ny; j++) {
         for (size_t i = 0; i < nx; i++) {
-          auto Y = (double)inbuf[nc * (j * nx + i) + 2];
+          auto Y = (double)inbuf[nc * (j * nx + i) + 0];
           auto Cb = (double)inbuf[nc * (j * nx + i) + 1];
-          ;
-          auto Cr = (double)inbuf[nc * (j * nx + i) + 0];
+          auto Cr = (double)inbuf[nc * (j * nx + i) + 2];
 
           int r = (int)(Y + 1.40200 * (Cr - 32768));
           int g = (int)(Y - 0.34414 * (Cb - 32768) - 0.71414 * (Cr - 32768));

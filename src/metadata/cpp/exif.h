@@ -10,6 +10,8 @@
 #define SIPI_METADATA_EXIF_H
 
 
+#include <cstddef>
+#include <cstdint>
 #include <memory>
 #include <string>
 #include <type_traits>
@@ -94,6 +96,15 @@ public:
   std::vector<unsigned char> exifBytes();
 
   /*!
+   * The EXIF data encoded in at most `limit` bytes. When it does not fit, it is
+   * encoded again without the embedded previews (logged); this EXIF keeps
+   * them. kWriteFailed if it still does not fit, if Exiv2 would drop any other
+   * field to make it fit, or if Exiv2 fails to encode it; the caller decides
+   * what that means (the JPEG writer leaves the EXIF out with a warning).
+   */
+  [[nodiscard]] Result<std::vector<unsigned char>> exifBytes(std::size_t limit) const;
+
+  /*!
    * Helper function to convert a signed float to a signed rational as used by EXIF
    *
    * \param[in] f Input signed float
@@ -109,8 +120,10 @@ public:
    */
   static Exiv2::URational toURational(float f);
 
+  /// Assigns through ExifData::operator[]: replaces the first entry for the key only.
   template<class T> void addKeyVal(const std::string &key_p, const T &val) { exifData[key_p] = val; }
 
+  /// Replaces every existing entry for the key; an unsupported type or a read that throws leaves them untouched.
   template<class T> void addKeyVal(uint16_t tag, const std::string &groupName, const T &val)
   {
     Exiv2::ExifKey key = Exiv2::ExifKey(tag, groupName);
@@ -120,6 +133,7 @@ public:
       // stores the 24-byte std::string object itself as the tag value.
       v = Exiv2::Value::create(Exiv2::asciiString);
       v->read(val);
+      for (auto pos = exifData.findKey(key); pos != exifData.end(); pos = exifData.findKey(key)) { exifData.erase(pos); }
       exifData.add(key, v.get());
       return;
     }
@@ -148,9 +162,11 @@ public:
     }
 
     v->read((unsigned char *)&val, sizeof(T), Exiv2::littleEndian);
+    for (auto pos = exifData.findKey(key); pos != exifData.end(); pos = exifData.findKey(key)) { exifData.erase(pos); }
     exifData.add(key, v.get());
   }
 
+  /// Replaces every existing entry for the key; an unsupported type or a read that throws leaves them untouched.
   template<class T> void addKeyVal(uint16_t tag, const std::string &groupName, const T *valptr, size_t len)
   {
     Exiv2::ExifKey key = Exiv2::ExifKey(tag, groupName);
@@ -179,6 +195,7 @@ public:
       throw SipiError("Unsupported type of addKeyVal(2)");
     }
     v->read((unsigned char *)valptr, static_cast<long>(len * sizeof(T)), Exiv2::littleEndian);
+    for (auto pos = exifData.findKey(key); pos != exifData.end(); pos = exifData.findKey(key)) { exifData.erase(pos); }
     exifData.add(key, v.get());
   }
 
@@ -215,6 +232,27 @@ public:
       return false;
     }
   }
+
+  /// Sets the pixel-size tags that are present to w x h, keeping each tag's type; adds none:
+  /// PixelX/YDimension, ImageWidth/ImageLength/ImageHeight in any IFD (maker notes
+  /// included), RelatedImageWidth/Length, DefaultCropSize and the DNG Original*Size
+  /// tags (w h), ActiveArea (0 0 h w). False if a tag's type cannot hold its value,
+  /// which then keeps the old one.
+  [[nodiscard]] bool set_pixel_dimensions(std::size_t w, std::size_t h);
+
+  /// Removes every embedded preview image Exiv2 exposes, with its offset and size
+  /// tags: the IFD1 thumbnail, the SubIFD and IFD2/IFD3 images, and the maker-note
+  /// previews Exiv2's PreviewManager reads.
+  void erase_previews();
+
+  /// Gives the Photoshop image resources IFD0 can carry (Exif.Image.ImageResources)
+  /// the same treatment: drops the thumbnail resources, and the nested XMP and EXIF
+  /// go through erase_thumbnails/erase_previews and set_pixel_dimensions. Every
+  /// other resource stays byte for byte. False if the block cannot be parsed or
+  /// holds a native size this does not rewrite (slices, the legacy header).
+  /// The IPTC resource and the raw XMP and IPTC copies (XMLPacket, IPTCNAA)
+  /// need nothing: exifBytes() never writes them.
+  [[nodiscard]] bool restrict_image_resources(std::size_t w, std::size_t h);
 
   friend std::ostream &operator<<(std::ostream &lhs, Exif &rhs);
 };

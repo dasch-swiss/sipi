@@ -87,17 +87,42 @@ TEST(TiffExifRational, NonZeroOverZeroRationalFailsWrite)
   Sipi::SipiImage img;
   ASSERT_TRUE(img.read(unit_path("image_orientation.jpg")).has_value());
 
-  // A fresh Exif object avoids Exiv2::ExifData::add()'s no-duplicate-check
-  // semantics — adding to the JPEG's own populated Exif would leave the
-  // original entry as the first (and therefore looked-up) match.
-  auto exif = std::make_shared<Sipi::Exif>();
+  auto exif = img.getExif();
+  ASSERT_NE(exif, nullptr);
   exif->addKeyVal(EXIFTAG_BRIGHTNESSVALUE, "Photo", Exiv2::Rational{ 1, 0 });
-  img.set_exif(exif);
 
   const std::string dst = sipi::test::tmp_dir() + "/_tiff_exif_rational_n_over_zero.tif";
   const auto write_result = img.write("tif", dst);
   ASSERT_FALSE(write_result.has_value());
   EXPECT_EQ(write_result.error().code(), Sipi::ErrorCode::kMetadataParseFailed);
+  std::remove(dst.c_str());
+}
+
+// libtiff declares EXIFTAG_FLASHENERGY as a scalar (TIFF_SETGET_FLOAT),
+// matching its EXIF_DT_RATIONAL entry in exiftag_list.
+TEST(TiffExifRational, FlashEnergyRoundTrips)
+{
+  Sipi::SipiIOTiff::initLibrary();
+  Sipi::SipiImage img;
+  ASSERT_TRUE(img.read(unit_path("image_orientation.jpg")).has_value());
+
+  auto exif = std::make_shared<Sipi::Exif>();
+  exif->addKeyVal(EXIFTAG_FLASHENERGY, "Photo", Exiv2::Rational{ 5, 2 });
+  img.set_exif(exif);
+
+  const std::string dst = sipi::test::tmp_dir() + "/_tiff_exif_rational_flash_energy.tif";
+  const auto write_result = img.write("tif", dst);
+  ASSERT_TRUE(write_result.has_value());
+
+  Sipi::SipiImage rt;
+  ASSERT_TRUE(rt.read(dst).has_value());
+  auto rt_exif = rt.getExif();
+  ASSERT_NE(rt_exif, nullptr);
+
+  Exiv2::Rational flash_energy_rt;
+  ASSERT_TRUE(rt_exif->getValByKey(EXIFTAG_FLASHENERGY, "Photo", flash_energy_rt));
+  EXPECT_NEAR(static_cast<double>(flash_energy_rt.first) / flash_energy_rt.second, 2.5, 1e-4);
+
   std::remove(dst.c_str());
 }
 

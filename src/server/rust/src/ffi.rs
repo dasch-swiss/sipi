@@ -308,7 +308,8 @@ pub struct SipiServeRequest {
     pub prefix: *const c_char,
     pub identifier: *const c_char,
     pub params: SipiIiifParams,
-    pub restricted_size: *const c_char,
+    pub restricted_width: u32,
+    pub restricted_height: u32,
     pub watermark_path: *const c_char,
     pub forwarded_proto: *const c_char,
     pub forwarded_host: *const c_char,
@@ -1525,7 +1526,8 @@ mod serve_request_layout {
         // `params` (SipiIiifParams, size 72) is guarded field-by-field by
         // `iiif_params_layout`; here we pin only where it sits in the request.
         assert_eq!(offset_of!(SipiServeRequest, params), 24);
-        assert_eq!(offset_of!(SipiServeRequest, restricted_size), 96);
+        assert_eq!(offset_of!(SipiServeRequest, restricted_width), 96);
+        assert_eq!(offset_of!(SipiServeRequest, restricted_height), 100);
         assert_eq!(offset_of!(SipiServeRequest, watermark_path), 104);
         assert_eq!(offset_of!(SipiServeRequest, forwarded_proto), 112);
         assert_eq!(offset_of!(SipiServeRequest, forwarded_host), 120);

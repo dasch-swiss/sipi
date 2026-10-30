@@ -55,6 +55,13 @@ _CPP_STDLIB_LINK = select({
     "//conditions:default": [],
 })
 
+# rustc links Apple targets with `-nodefaultlibs`, so clang reports BCR modules'
+# `-pthread` linkopt as unused and rustc's `linker_messages` lint prints it.
+_DARWIN_QUIET_LINK = select({
+    "@platforms//os:macos": ["-Clink-arg=-Wno-unused-command-line-argument"],
+    "//conditions:default": [],
+})
+
 _SRCS = [
     "src/commands/health.rs",
     "src/commands/mod.rs",
@@ -70,15 +77,6 @@ _SRCS = [
     "src/commands/server/mod.rs",
     "src/ffi.rs",
     "src/main.rs",
-]
-
-_DEPS = [
-    # The `sipi` server library (the `server` verb → sipi::run). Carries the
-    # C++ image engine via //src/ffi:sipi_ffi.
-    "//src/server/rust:lib",
-    # The C++ CLI app behind the FFI seam — provides `sipi_cli_main` (offline
-    # verbs) + the system/framework linkopts via //src:sipi_lib.
-    "//src/cli:cli_app",
 ]
 
 # Process-wide allocator: mimalloc v3 (vendored, `bazel/mimalloc.BUILD.bazel`)
@@ -162,7 +160,7 @@ rust_binary(
     crate_features = _ALLOCATOR_FEATURE + _CRASH_REPORTER_FEATURE,
     crate_name = "sipi_cli",
     edition = "2021",
-    rustc_flags = _CPP_STDLIB_LINK,
+    rustc_flags = _CPP_STDLIB_LINK + _DARWIN_QUIET_LINK,
     # Excluded from the sanitizer build (ci.yml's `sanitizer` job filters `-no-sanitizer`):
     # the transitive C++ dep (protobuf) includes <sanitizer/asan_interface.h>
     # under --config=asan, which the hermetic LLVM toolchain does not ship.
@@ -176,7 +174,15 @@ rust_binary(
         "@crates//:libc",
         "@crates//:rustls",
         "@crates//:sentry",
-    ] + _DEPS + _ALLOCATOR + _CRASH_REPORTER,
+        # The `sipi` server library (the `server` verb → sipi::run). Carries the
+        # C++ image engine via //src/ffi:sipi_ffi.
+        "//src/server/rust:lib",
+    ] + _CRASH_REPORTER,
+    link_deps = [
+        # The C++ CLI app behind the FFI seam — provides `sipi_cli_main` (offline
+        # verbs) + the system/framework linkopts via //src:sipi_lib.
+        "//src/cli:cli_app",
+    ] + _ALLOCATOR,
 )
 
 # Compiles the binary crate with --cfg test; it performs the same final link of
@@ -187,7 +193,7 @@ rust_test(
     crate = ":sipi",
     crate_features = _ALLOCATOR_FEATURE + _CRASH_REPORTER_FEATURE,
     edition = "2021",
-    rustc_flags = _CPP_STDLIB_LINK,
+    rustc_flags = _CPP_STDLIB_LINK + _DARWIN_QUIET_LINK,
     tags = ["no-sanitizer"],
     visibility = ["//visibility:private"],
 )

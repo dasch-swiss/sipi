@@ -22,6 +22,8 @@ class SipiIOJpeg : public SipiIO
 {
 private:
   [[nodiscard]] static Result<bool> parse_photoshop(SipiImage *img, char *data, int length);
+  // parse_photoshop over the resources of every APP13 Photoshop segment, joined.
+  [[nodiscard]] static Result<bool> parse_photoshop_resources(SipiImage *img, std::string resources);
 
 public:
   ~SipiIOJpeg() override = default;

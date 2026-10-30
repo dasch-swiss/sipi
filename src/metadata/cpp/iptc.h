@@ -50,6 +50,12 @@ public:
   std::vector<unsigned char> iptcBytes();
 
   /*!
+   * Removes the embedded preview image (Iptc.Application2.Preview with its
+   * PreviewFormat and PreviewVersion).
+   */
+  void erase_preview();
+
+  /*!
    * The overloaded << operator which is used to write the IPTC data formatted to the outstream
    *
    * \param[in] lhs The output stream

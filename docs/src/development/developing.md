@@ -18,6 +18,40 @@ clion .
 A direnv setup (see [Nix dev shell](nix.md#direnv)) gives the IDE
 the same PATH/env without launching it from a terminal.
 
+### clangd
+
+clangd and clang-tidy read `compile_commands.json` at the workspace
+root. Generate it (it is git-ignored) with:
+
+```bash
+just compile-commands
+```
+
+Re-run it after adding or moving a C++ file or changing a target's
+deps or copts. Build once first (`just bazel-build`) so generated
+headers exist under `bazel-out/`.
+
+The compile commands name the hermetic clang as driver, so start
+clangd with `--query-driver='**'` to let it query that driver for its
+system include paths. In Zed, set it in `settings.json`:
+
+```json
+{
+  "lsp": {
+    "clangd": {
+      "binary": { "arguments": ["--query-driver=**"] }
+    }
+  }
+}
+```
+
+The repo-root `.clangd` strips flags clangd cannot parse. A clangd
+older than the hermetic LLVM (22) may report errors inside the
+toolchain's own builtin headers (e.g. `unknown type name '__mfp8'`
+on aarch64). The toolchain ships a matching clangd;
+`just compile-commands` prints its path. Point the editor's clangd
+binary at it to avoid the version skew.
+
 ## Running locally
 
 A dedicated local development config is provided at

@@ -154,11 +154,8 @@ mod tests {
             assert!(stats.arena_bytes >= 0);
             // The test binary itself has live allocations.
             assert!(stats.in_use_bytes > 0, "a running process has allocations");
-        } else {
-            assert!(
-                !cfg!(all(target_os = "linux", target_env = "gnu")),
-                "glibc build must resolve mallinfo2 (glibc >= 2.33)"
-            );
+        } else if cfg!(all(target_os = "linux", target_env = "gnu")) {
+            panic!("glibc build must resolve mallinfo2 (glibc >= 2.33)");
         }
     }
 }

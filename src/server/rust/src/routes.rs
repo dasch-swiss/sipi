@@ -11,6 +11,7 @@
 
 use std::ffi::CString;
 use std::io::Write;
+use std::num::NonZeroU32;
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::Arc;
 use std::time::{Duration, Instant, SystemTime};
@@ -271,10 +272,31 @@ struct Access {
 /// — the one exception is a `pre_flight` hook that answers the request itself
 /// (`preflight_direct_response`), whose body is whatever the script wrote, by
 /// the script's own choice.
+///
+/// Every response this handler produces leaves through [`with_cors`], whatever
+/// its status: a cross-origin client only sees a response that carries
+/// `Access-Control-Allow-Origin`, so an error without it reaches the browser as
+/// status 0 instead of its real 400/401/403/404/503. Responses built outside
+/// the handler get no CORS: the `TimeoutLayer` 408 and axum's 405 for a method
+/// the route does not serve.
 pub async fn iiif(
     State(state): State<Arc<AppState>>,
     method: Method,
     OriginalUri(uri): OriginalUri,
+    headers: HeaderMap,
+) -> Response {
+    let origin = header_str(&headers, "origin");
+    let cors_decision = cors_allow(origin.as_deref(), &state.allowed_origins);
+    let response = iiif_response(state, method, uri, headers).await;
+    with_cors(response, origin.as_deref(), cors_decision)
+}
+
+/// The body of [`iiif`]: every early return and every engine outcome, before
+/// the CORS headers are applied.
+async fn iiif_response(
+    state: Arc<AppState>,
+    method: Method,
+    uri: Uri,
     headers: HeaderMap,
 ) -> Response {
     if !state.ready {
@@ -324,24 +346,8 @@ pub async fn iiif(
         Acquired::Admitted(permit) => permit,
         Acquired::Shed | Acquired::TimedOut => return busy_response(),
     };
-    // Shell-set headers on the streamed (success) response, captured before the
-    // request (and `state`) is moved onto the blocking thread: the CORS Origin
-    // echo + credentials (image + /file), gated by `cors_allow` against the
-    // configured allowlist (empty = the unconditional echo default), and, for a
-    // /file Range request, the identifier-derived Content-Disposition.
-    let origin = header_str(&headers, "origin");
-    let cors_decision = cors_allow(origin.as_deref(), &state.allowed_origins);
-    let cors_header = match cors_decision {
-        CorsDecision::Allow { vary } => origin
-            .as_deref()
-            .and_then(|o| HeaderValue::from_str(o).ok())
-            .map(|v| (v, vary)),
-        CorsDecision::Deny { .. } => None,
-    };
-    // Even on a deny, allowlist mode still varies the response by Origin (no
-    // Origin ⇒ default `*`/deny elsewhere, a listed Origin ⇒ allow) so a
-    // shared cache must not serve a cached deny to a later allowed origin.
-    let cors_vary_only = matches!(cors_decision, CorsDecision::Deny { vary: true });
+    // The shell-set Content-Disposition of a /file Range request, derived from
+    // the identifier before the request is moved onto the blocking thread.
     let content_disp = (parsed.kind == RequestKind::FileDownload
         && headers.contains_key(header::RANGE))
     .then(|| content_disposition(&parsed.identifier))
@@ -370,29 +376,12 @@ pub async fn iiif(
         // JSON / redirect / error / HEAD: a complete response, returned as built.
         Ok(Outcome::Complete(response)) => response,
         // Image / file: stream the body as the engine produces it, adding the
-        // shell-set CORS + Content-Disposition headers to the committed head.
+        // shell-set Content-Disposition header to the committed head.
         Ok(Outcome::StreamHead {
             status,
             headers: head,
         }) => {
             let mut response = sink::stream_response(status, head, body_rx);
-            if let Some((origin, vary)) = cors_header {
-                let h = response.headers_mut();
-                h.insert(header::ACCESS_CONTROL_ALLOW_ORIGIN, origin);
-                // Cookie auth: without credentials the browser withholds the
-                // DSP/Knora session cookie cross-origin.
-                h.insert(
-                    header::ACCESS_CONTROL_ALLOW_CREDENTIALS,
-                    HeaderValue::from_static("true"),
-                );
-                if vary {
-                    h.insert(header::VARY, HeaderValue::from_static("Origin"));
-                }
-            } else if cors_vary_only {
-                response
-                    .headers_mut()
-                    .insert(header::VARY, HeaderValue::from_static("Origin"));
-            }
             if let Some(cd) = content_disp {
                 if response.status().is_success() {
                     response
@@ -505,6 +494,7 @@ fn dispatch_engine(
                 parsed,
                 headers,
                 &access,
+                &state.allowed_origins,
                 &state.public_hosts,
                 state.has_preflight,
             ),
@@ -887,26 +877,62 @@ fn serve_image(
     let c_host = CString::new(host).unwrap_or_default();
     let c_scheme = CString::new(scheme).unwrap_or_default();
     let c_uri = CString::new(request_uri).unwrap_or_default();
-    // restrict size + watermark from the preflight kv (NULL when not restricted).
-    let c_size = (access.permission == SipiPermType::Restrict)
-        .then(|| access_kv_cstring(access, "size"))
-        .flatten();
-    let c_watermark = (access.permission == SipiPermType::Restrict)
-        .then(|| access_kv_cstring(access, "watermark"))
-        .flatten();
+    // restrict size + watermark from the preflight kv (None when not restricted).
+    let restricted = access.permission == SipiPermType::Restrict;
+    let size = restricted.then(|| access_kv_str(access, "size")).flatten();
+    let watermark = restricted.then(|| restrict_watermark(access)).flatten();
     // A restrict decision that supplies neither a size cap nor a watermark
-    // arrives at the seam indistinguishable from `allow` (both NULL) — refuse
-    // it here rather than let the engine pass the original through.
-    if access.permission == SipiPermType::Restrict && c_size.is_none() && c_watermark.is_none() {
+    // arrives at the seam indistinguishable from `allow` (0, 0 and NULL) —
+    // refuse it here rather than let the engine pass the original through.
+    if restricted && size.is_none() && watermark.is_none() {
         return complete(outcome_tx, sink::error_response(StatusCode::FORBIDDEN));
     }
+    // A watermark the seam cannot carry is a 500, never "no watermark": the
+    // restriction below counts it as present.
+    let Ok(c_watermark) = watermark.map(CString::new).transpose() else {
+        return complete(
+            outcome_tx,
+            sink::error_response(StatusCode::INTERNAL_SERVER_ERROR),
+        );
+    };
+    // The shell decides (RW, RH) from its own shape probe. A failed probe is a
+    // 500: sending 0, 0 instead would serve the image unrestricted.
+    let (restricted_width, restricted_height) = match size {
+        None => (0, 0),
+        Some(size) => {
+            let decided = ffi::image_dims(resolved)
+                .map_err(|_| RestrictRefusal::Misconfigured)
+                .and_then(|native| {
+                    restriction(
+                        size,
+                        c_watermark.is_some(),
+                        native.width,
+                        native.height,
+                        &parsed.identifier,
+                    )
+                });
+            match decided {
+                Ok((w, h)) => (w.get(), h.get()),
+                Err(RestrictRefusal::Refuse) => {
+                    return complete(outcome_tx, sink::error_response(StatusCode::FORBIDDEN))
+                }
+                Err(RestrictRefusal::Misconfigured) => {
+                    return complete(
+                        outcome_tx,
+                        sink::error_response(StatusCode::INTERNAL_SERVER_ERROR),
+                    )
+                }
+            }
+        }
+    };
 
     let req = SipiServeRequest {
         resolved_path: c_resolved.as_ptr(),
         prefix: c_prefix.as_ptr(),
         identifier: c_identifier.as_ptr(),
         params,
-        restricted_size: c_size.as_ref().map_or(std::ptr::null(), |c| c.as_ptr()),
+        restricted_width,
+        restricted_height,
         watermark_path: c_watermark
             .as_ref()
             .map_or(std::ptr::null(), |c| c.as_ptr()),
@@ -931,7 +957,7 @@ fn serve_image(
     let engine_start = SystemTime::now();
     // SAFETY: every pointer in `req` outlives this synchronous call; the seam
     // guards C++ exceptions (→ status code, never an unwind into Rust). The
-    // streamed head's CORS header is added by the caller (`iiif`).
+    // CORS headers are added by the caller (`iiif`).
     sink::serve_streaming(outcome_tx, body_tx, |resp: &SipiResponse| unsafe {
         ffi::sipi_serve_image(&req, resp)
     });
@@ -986,9 +1012,9 @@ fn emit_engine_phase_spans(engine_start: SystemTime, timings: &ffi::SipiServeTim
     }
 }
 
-/// Raw `/file` passthrough via `sipi_serve_file` (Range/206). The CORS echo and,
-/// on a Range request, the identifier-derived Content-Disposition are added to
-/// the streamed head by the caller (`iiif`).
+/// Raw `/file` passthrough via `sipi_serve_file` (Range/206). The CORS headers
+/// and, on a Range request, the identifier-derived Content-Disposition are added
+/// by the caller (`iiif`).
 fn serve_file(
     resolved: &str,
     headers: &HeaderMap,
@@ -1920,6 +1946,46 @@ fn push_cors(headers: &mut Vec<(String, String)>, origin: Option<&str>, allowlis
     }
 }
 
+/// Apply the IIIF route's CORS decision to `response`, whatever its status.
+///
+/// A response that already carries `Access-Control-Allow-Origin` is left as
+/// built: info.json and knora.json set their own (`*` without an Origin, see
+/// [`json_cors`]), and a `pre_flight` hook that answers the request itself may
+/// set its own, which an echo would overwrite. Otherwise an allowed `origin` is echoed with
+/// `Access-Control-Allow-Credentials: true` (cookie auth: without it the
+/// browser withholds the DSP session cookie cross-origin), and allowlist mode
+/// adds `Origin` to `Vary` — on a deny too, so a shared cache does not serve a
+/// cached deny to a later allowed origin.
+fn with_cors(mut response: Response, origin: Option<&str>, decision: CorsDecision) -> Response {
+    let h = response.headers_mut();
+    if h.contains_key(header::ACCESS_CONTROL_ALLOW_ORIGIN) {
+        return response;
+    }
+    let vary = match decision {
+        CorsDecision::Allow { vary } => {
+            if let Some(acao) = origin.and_then(|o| HeaderValue::from_str(o).ok()) {
+                h.insert(header::ACCESS_CONTROL_ALLOW_ORIGIN, acao);
+                h.insert(
+                    header::ACCESS_CONTROL_ALLOW_CREDENTIALS,
+                    HeaderValue::from_static("true"),
+                );
+            }
+            vary
+        }
+        CorsDecision::Deny { vary } => vary,
+    };
+    let varies_on_origin = h
+        .get_all(header::VARY)
+        .iter()
+        .filter_map(|v| v.to_str().ok())
+        .flat_map(|v| v.split(','))
+        .any(|v| v.trim().eq_ignore_ascii_case("origin"));
+    if vary && !varies_on_origin {
+        h.append(header::VARY, HeaderValue::from_static("Origin"));
+    }
+    response
+}
+
 /// A head-only response (HEAD) carrying the static-serve headers, no body.
 fn head_only(status: StatusCode, headers: &[(String, String)]) -> Response {
     let mut builder = Response::builder().status(status);
@@ -1977,6 +2043,7 @@ fn serve_info_json(
     parsed: &ParsedRequest,
     headers: &HeaderMap,
     access: &Access,
+    allowed_origins: &[String],
     public_hosts: &[String],
     hook_configured: bool,
 ) -> Response {
@@ -1995,7 +2062,7 @@ fn serve_info_json(
         // path (routes.rs `serve_image`) and `/file`.
         if access.permission == SipiPermType::Restrict
             && access_kv_str(access, "size").is_none()
-            && access_kv_str(access, "watermark").is_none()
+            && restrict_watermark(access).is_none()
         {
             return sink::error_response(StatusCode::FORBIDDEN);
         }
@@ -2003,11 +2070,17 @@ fn serve_info_json(
             Ok(d) => d,
             Err(_) => return sink::error_response(StatusCode::INTERNAL_SERVER_ERROR),
         };
-        let dims = match restricted_dims(&dims, access) {
+        let (dims, size_restricted) = match restricted_dims(&dims, access, &parsed.identifier) {
             Ok(d) => d,
-            Err(_) => return sink::error_response(StatusCode::INTERNAL_SERVER_ERROR),
+            Err(RestrictRefusal::Refuse) => return sink::error_response(StatusCode::FORBIDDEN),
+            Err(RestrictRefusal::Misconfigured) => {
+                return sink::error_response(StatusCode::INTERNAL_SERVER_ERROR)
+            }
         };
-        (info::image_info_json(&id, &dims), info::image_context())
+        (
+            info::image_info_json(&id, &dims, size_restricted),
+            info::image_context(),
+        )
     } else {
         let size = match std::fs::metadata(resolved) {
             Ok(m) => m.len(),
@@ -2035,23 +2108,20 @@ fn serve_info_json(
         StatusCode::OK
     };
 
-    // info.json always sends ACAO: *, even with an Origin — unaffected by the
-    // allowlist, which restricts credentialed CORS and not this public,
-    // credential-less response, so it bypasses `cors_allow` entirely. When a
-    // preflight hook is configured, the permission (and thus the body) is
-    // credential-dependent, so the response must not be shared across
-    // credentials by an intermediary cache.
-    let vary: &[&str] = if hook_configured {
-        &["Cookie", "Authorization"]
-    } else {
-        &[]
-    };
+    // The body depends on the caller's credentials (clamped dims, 401 auth
+    // challenge), so a credentialed viewer must be able to read it: the same
+    // CORS as knora.json and the image route.
+    let (acao, vary) = json_cors(
+        header_str(headers, "origin"),
+        allowed_origins,
+        hook_configured,
+    );
     json_response(
         status,
         &value,
         headers,
         Some(link_context),
-        Some("*"),
+        acao.as_deref(),
         vary,
         hook_configured,
     )
@@ -2083,7 +2153,7 @@ fn serve_knora_json(
         // (routes.rs `serve_image`) and `/file`.
         if access.permission == SipiPermType::Restrict
             && access_kv_str(access, "size").is_none()
-            && access_kv_str(access, "watermark").is_none()
+            && restrict_watermark(access).is_none()
         {
             return sink::error_response(StatusCode::NOT_FOUND);
         }
@@ -2091,9 +2161,12 @@ fn serve_knora_json(
             Ok(result) => result,
             Err(_) => return sink::error_response(StatusCode::INTERNAL_SERVER_ERROR),
         };
-        let dims = match restricted_dims(&dims, access) {
+        let (dims, _) = match restricted_dims(&dims, access, &parsed.identifier) {
             Ok(d) => d,
-            Err(_) => return sink::error_response(StatusCode::INTERNAL_SERVER_ERROR),
+            Err(RestrictRefusal::Refuse) => return sink::error_response(StatusCode::NOT_FOUND),
+            Err(RestrictRefusal::Misconfigured) => {
+                return sink::error_response(StatusCode::INTERNAL_SERVER_ERROR)
+            }
         };
         info::image_knora_json(&id, &mime, &dims, &sidecar, essentials.as_ref())
     } else {
@@ -2108,34 +2181,18 @@ fn serve_knora_json(
         }
     };
 
-    // knora.json echoes the Origin when present (gated by `cors_allow` against
-    // the configured allowlist — empty = the unconditional echo default), else *.
-    let origin = header_str(headers, "origin");
-    let (acao, origin_vary) = match origin {
-        None => (Some("*".to_owned()), false),
-        Some(o) => match cors_allow(Some(&o), allowed_origins) {
-            CorsDecision::Allow { vary } => (Some(o), vary),
-            CorsDecision::Deny { vary } => (None, vary),
-        },
-    };
-    // The permission (and thus the body — dims may be clamped) is
-    // credential-dependent whenever a preflight hook is configured, so an
-    // intermediary cache must not share this response across credentials.
-    let mut vary: Vec<&str> = Vec::new();
-    if origin_vary {
-        vary.push("Origin");
-    }
-    if hook_configured {
-        vary.push("Cookie");
-        vary.push("Authorization");
-    }
+    let (acao, vary) = json_cors(
+        header_str(headers, "origin"),
+        allowed_origins,
+        hook_configured,
+    );
     json_response(
         StatusCode::OK,
         &value,
         headers,
         None,
         acao.as_deref(),
-        &vary,
+        vary,
         hook_configured,
     )
 }
@@ -2170,9 +2227,37 @@ fn redirect(headers: &HeaderMap, parsed: &ParsedRequest, public_hosts: &[String]
 
 // ── Helpers ───────────────────────────────────────────────────────────────
 
+/// The `Access-Control-Allow-Origin` and the `Vary` list of info.json and
+/// knora.json. No Origin answers `*`; a presented Origin is echoed when
+/// [`cors_allow`] allows it against `allowlist`, else no ACAO is emitted.
+/// [`json_response`] adds credentials to an echoed Origin. The ACAO depends on
+/// the Origin in every mode, so the response always varies on `Origin`
+/// (whatever [`CorsDecision`]'s `vary` says, which the image route uses); with a
+/// preflight hook the body depends on the credentials too (clamped dims, 401
+/// auth challenge), so an intermediary cache must not share it across them.
+fn json_cors(
+    origin: Option<String>,
+    allowlist: &[String],
+    hook_configured: bool,
+) -> (Option<String>, &'static [&'static str]) {
+    let acao = match origin {
+        None => Some("*".to_owned()),
+        Some(o) => match cors_allow(Some(&o), allowlist) {
+            CorsDecision::Allow { .. } => Some(o),
+            CorsDecision::Deny { .. } => None,
+        },
+    };
+    let vary: &'static [&'static str] = if hook_configured {
+        &["Origin", "Cookie", "Authorization"]
+    } else {
+        &["Origin"]
+    };
+    (acao, vary)
+}
+
 /// A CORS decision for one request Origin against the configured allowlist.
-/// The single chokepoint every CORS site (`iiif`'s image/file
-/// stream, [`json_response`]'s knora.json path, [`cors_preflight_response`],
+/// The single chokepoint every CORS site ([`with_cors`] for every `iiif`
+/// response, [`json_cors`] for info.json and knora.json, [`cors_preflight_response`],
 /// [`push_cors`]) reads through [`cors_allow`] — the four sites differ only in
 /// which headers they attach on `Allow`, not in whether they attach them.
 #[derive(Clone, Copy)]
@@ -2228,14 +2313,6 @@ fn parse_cookies(headers: &HeaderMap) -> Vec<(String, String)> {
         .collect()
 }
 
-fn access_kv_cstring(access: &Access, key: &str) -> Option<CString> {
-    access
-        .kv
-        .iter()
-        .find(|(k, _)| k == key)
-        .and_then(|(_, v)| CString::new(v.as_str()).ok())
-}
-
 fn access_kv_str<'a>(access: &'a Access, key: &str) -> Option<&'a str> {
     access
         .kv
@@ -2244,50 +2321,108 @@ fn access_kv_str<'a>(access: &'a Access, key: &str) -> Option<&'a str> {
         .map(|(_, v)| v.as_str())
 }
 
+/// A `restrict` decision's watermark. An empty one is no watermark: the engine
+/// applies none, so counting it would serve a no-op restriction unrefused.
+fn restrict_watermark(access: &Access) -> Option<&str> {
+    access_kv_str(access, "watermark").filter(|w| !w.is_empty())
+}
+
+/// Why a `restrict` decision's `size` yields no restricted dims.
+#[derive(Debug, PartialEq, Eq)]
+enum RestrictRefusal {
+    /// A restriction that restricts nothing (a size kind that never reduces,
+    /// without a watermark) or a restricted axis below 2 px, which
+    /// the codecs cannot render. Each route answers with its refusal status.
+    Refuse,
+    /// The `size` does not parse: a preflight misconfiguration, 500.
+    Misconfigured,
+}
+
+/// The restricted dims `(RW, RH)` of a `restrict` decision's `size` on an
+/// image of native `width` x `height`. info.json, knora.json and the image
+/// route all decide through here, so they agree on refusals and dims.
+///
+/// The refusal is decided on the size's kind, not on the resulting dims: a
+/// box kind caps at its box, and an image already inside the box is served at
+/// native size (a warning makes the over-large box visible).
+fn restriction(
+    size: &str,
+    watermarked: bool,
+    width: u32,
+    height: u32,
+    identifier: &str,
+) -> Result<(NonZeroU32, NonZeroU32), RestrictRefusal> {
+    let never_reduces =
+        iiif_parser::size_never_reduces(size).map_err(|_| RestrictRefusal::Misconfigured)?;
+    if never_reduces && !watermarked {
+        return Err(RestrictRefusal::Refuse);
+    }
+    let (w, h) = iiif_parser::clamp_dims_to_size(size, width, height)
+        .map_err(|_| RestrictRefusal::Misconfigured)?;
+    // The engine refuses the same minimum at the seam (serve_image.cpp).
+    if w < 2 || h < 2 {
+        return Err(RestrictRefusal::Refuse);
+    }
+    if !watermarked && (w, h) == (width, height) {
+        tracing::warn!(
+            identifier,
+            size,
+            "restrict size does not reduce the image; served at native size"
+        );
+    }
+    match (NonZeroU32::new(w), NonZeroU32::new(h)) {
+        (Some(w), Some(h)) => Ok((w, h)),
+        _ => Err(RestrictRefusal::Refuse),
+    }
+}
+
 /// Clamp an image's dims for a restricted permission so info.json / knora.json
-/// never discloses the native tiling pyramid. A `Restrict` decision that caps
-/// the view to an IIIF size string also has its width/height clamped to that
-/// size (rather than the native resolution); every other restricted
-/// permission keeps the native width/height (the caller renders an auth
-/// challenge, not the image) but still loses the tile grid.
+/// never discloses the native tiling pyramid. A `Restrict` decision with a
+/// `size` reports its [`restriction`] dims, or refuses as the image route
+/// does; every other restricted permission keeps the native width/height (the
+/// caller renders an auth challenge, not the image) but still loses the tile
+/// grid. The flag is true when the dims are a size restriction's (RW, RH).
 ///
 /// `Stream` is not a restriction: it restricts no pixel and must describe the
 /// image exactly as `Allow` does, tile grid included (ADR-0027).
 fn restricted_dims(
     dims: &ffi::SipiImageDims,
     access: &Access,
-) -> Result<ffi::SipiImageDims, iiif_parser::ParseError> {
+    identifier: &str,
+) -> Result<(ffi::SipiImageDims, bool), RestrictRefusal> {
     if matches!(
         access.permission,
         SipiPermType::Allow | SipiPermType::Stream
     ) {
-        return Ok(*dims);
+        return Ok((*dims, false));
     }
     let mut restricted = *dims;
+    let mut size_restricted = false;
     if access.permission == SipiPermType::Restrict {
         if let Some(size) = access_kv_str(access, "size") {
-            let (width, height) = iiif_parser::clamp_dims_to_size(size, dims.width, dims.height)?;
-            restricted.width = width;
-            restricted.height = height;
+            let watermarked = restrict_watermark(access).is_some();
+            let (width, height) =
+                restriction(size, watermarked, dims.width, dims.height, identifier)?;
+            restricted.width = width.get();
+            restricted.height = height.get();
+            size_restricted = true;
         }
     }
     restricted.tile_width = 0;
     restricted.tile_height = 0;
-    Ok(restricted)
+    Ok((restricted, size_restricted))
 }
 
 /// Serialise a JSON value with the standard IIIF headers: a CORS
-/// `Access-Control-Allow-Origin` (`acao`: `Some("*")` for info.json,
-/// Origin-echo-`Some`-else-`Some("*")` for knora.json, gated by [`cors_allow`]
-/// — `None` when an allowlist is configured and the origin isn't on it, so no
-/// ACAO is emitted at all) and either `application/ld+json` (when the client
-/// `Accept`s it) or `application/json` + a `Link` to the JSON-LD context. A
-/// concretely echoed origin also carries `Access-Control-Allow-Credentials:
-/// true` (cookie auth); `*` (public info.json) does not — CORS forbids the
-/// pairing. `vary`, set by the caller, names every header the response varies
-/// on (e.g. `Origin` in allowlist mode, `Cookie`/`Authorization` whenever the
-/// permission/body is credential-dependent) and is emitted as one joined
-/// `Vary` header when non-empty. `private`, set by the caller whenever the
+/// `Access-Control-Allow-Origin` (`acao`, from [`json_cors`]: the echoed
+/// Origin, `*` when no Origin was sent, or `None` when the allowlist denies
+/// the Origin, so no ACAO is emitted at all) and either `application/ld+json`
+/// (when the client `Accept`s it) or `application/json` + a `Link` to the
+/// JSON-LD context. A concretely echoed origin also carries
+/// `Access-Control-Allow-Credentials: true` (cookie auth); `*` does not, as
+/// CORS forbids the pairing. `vary`, from [`json_cors`], names every header
+/// the response varies on and is emitted as one joined `Vary` header when
+/// non-empty. `private`, set by the caller whenever the
 /// body is credential-dependent, emits `Cache-Control: private, no-store` so
 /// an intermediary cache never shares one caller's response with another.
 fn json_response(
@@ -2304,11 +2439,9 @@ fn json_response(
     if let Some(acao) = acao {
         if let Ok(acao_value) = HeaderValue::from_str(acao) {
             builder = builder.header(header::ACCESS_CONTROL_ALLOW_ORIGIN, acao_value);
-            // A concrete echoed origin (knora.json with an Origin) also needs
-            // credentials so the browser accepts the cookie-authenticated
-            // cross-origin response (set whenever an Origin is present).
-            // `*` (public info.json) must not pair with
-            // credentials — CORS forbids it — so it is intentionally excluded.
+            // A concrete echoed origin also needs credentials so the browser
+            // accepts the cookie-authenticated cross-origin response. `*` (no
+            // Origin sent) must not pair with credentials: CORS forbids it.
             if acao != "*" {
                 builder = builder.header(header::ACCESS_CONTROL_ALLOW_CREDENTIALS, "true");
             }
@@ -2594,7 +2727,7 @@ mod tests {
     #[test]
     fn json_response_sets_credentials_only_for_echoed_origin() {
         let value = serde_json::json!({ "ok": true });
-        // A concrete echoed origin (knora.json with an Origin) → ACAO + credentials.
+        // A concrete echoed origin → ACAO + credentials.
         let resp = json_response(
             StatusCode::OK,
             &value,
@@ -2616,7 +2749,7 @@ mod tests {
                 .unwrap(),
             "true"
         );
-        // Public `*` (info.json) → ACAO but never credentials (CORS forbids it).
+        // `*` (no Origin sent) → ACAO but never credentials (CORS forbids it).
         let resp = json_response(
             StatusCode::OK,
             &value,
@@ -2699,6 +2832,126 @@ mod tests {
         // Allowlist mode still varies by Origin on a deny, so a shared cache
         // doesn't serve this deny to a later allowed origin.
         assert_eq!(h.get(header::VARY).unwrap(), "Origin");
+    }
+
+    #[test]
+    fn with_cors_echoes_allowed_origin_on_error() {
+        for status in [
+            StatusCode::BAD_REQUEST,
+            StatusCode::UNAUTHORIZED,
+            StatusCode::FORBIDDEN,
+            StatusCode::NOT_FOUND,
+            StatusCode::SERVICE_UNAVAILABLE,
+        ] {
+            let resp = with_cors(
+                sink::error_response(status),
+                Some("https://example.org"),
+                CorsDecision::Allow { vary: false },
+            );
+            let h = resp.headers();
+            assert_eq!(resp.status(), status);
+            assert_eq!(
+                h.get(header::ACCESS_CONTROL_ALLOW_ORIGIN).unwrap(),
+                "https://example.org",
+                "{status}"
+            );
+            assert_eq!(
+                h.get(header::ACCESS_CONTROL_ALLOW_CREDENTIALS).unwrap(),
+                "true",
+                "{status}"
+            );
+            assert!(h.get(header::VARY).is_none(), "{status}");
+        }
+    }
+
+    #[test]
+    fn with_cors_varies_on_origin_in_allowlist_mode() {
+        let allowed = with_cors(
+            sink::error_response(StatusCode::NOT_FOUND),
+            Some("https://a.example"),
+            CorsDecision::Allow { vary: true },
+        );
+        assert_eq!(allowed.headers().get(header::VARY).unwrap(), "Origin");
+
+        let denied = with_cors(
+            sink::error_response(StatusCode::NOT_FOUND),
+            Some("https://evil.example"),
+            CorsDecision::Deny { vary: true },
+        );
+        let h = denied.headers();
+        assert!(h.get(header::ACCESS_CONTROL_ALLOW_ORIGIN).is_none());
+        assert!(h.get(header::ACCESS_CONTROL_ALLOW_CREDENTIALS).is_none());
+        assert_eq!(h.get(header::VARY).unwrap(), "Origin");
+
+        let no_origin = with_cors(
+            sink::error_response(StatusCode::NOT_FOUND),
+            None,
+            CorsDecision::Deny { vary: false },
+        );
+        assert!(no_origin.headers().is_empty());
+    }
+
+    #[test]
+    fn with_cors_keeps_a_json_response_cors_as_built() {
+        let value = serde_json::json!({ "ok": true });
+        // No Origin: info.json answers `*` without credentials, varying on
+        // Origin, Cookie and Authorization. `with_cors` must not add to it.
+        let resp = with_cors(
+            json_response(
+                StatusCode::OK,
+                &value,
+                &headers(&[]),
+                None,
+                Some("*"),
+                &["Origin", "Cookie", "Authorization"],
+                true,
+            ),
+            None,
+            CorsDecision::Deny { vary: true },
+        );
+        let h = resp.headers();
+        assert_eq!(h.get(header::ACCESS_CONTROL_ALLOW_ORIGIN).unwrap(), "*");
+        assert!(h.get(header::ACCESS_CONTROL_ALLOW_CREDENTIALS).is_none());
+        assert_eq!(h.get_all(header::VARY).iter().count(), 1);
+    }
+
+    #[test]
+    fn with_cors_does_not_duplicate_an_existing_vary_origin() {
+        let mut resp = sink::error_response(StatusCode::NOT_FOUND);
+        resp.headers_mut()
+            .insert(header::VARY, HeaderValue::from_static("Cookie, origin"));
+        let resp = with_cors(
+            resp,
+            Some("https://evil.example"),
+            CorsDecision::Deny { vary: true },
+        );
+        let vary: Vec<_> = resp.headers().get_all(header::VARY).iter().collect();
+        assert_eq!(vary, ["Cookie, origin"]);
+    }
+
+    #[test]
+    fn json_cors_always_varies_on_origin() {
+        let allowlist = ["https://a.example".to_owned()];
+        for (origin, list, acao) in [
+            (None, &[][..], Some("*")),
+            (
+                Some("https://b.example"),
+                &[][..],
+                Some("https://b.example"),
+            ),
+            (
+                Some("https://a.example"),
+                &allowlist[..],
+                Some("https://a.example"),
+            ),
+            (Some("https://b.example"), &allowlist[..], None),
+        ] {
+            let (got, vary) = json_cors(origin.map(str::to_owned), list, false);
+            assert_eq!(got.as_deref(), acao, "{origin:?}");
+            assert_eq!(vary, ["Origin"], "{origin:?}");
+        }
+        let (_, vary) = json_cors(None, &[], true);
+        assert_eq!(vary, ["Origin", "Cookie", "Authorization"]);
     }
 
     #[test]
@@ -3051,5 +3304,79 @@ mod tests {
             .map(|(i, p)| decisions(*p) - before[i])
             .collect();
         assert_eq!(deltas, vec![0, 1, 0, 0, 0, 0, 0, 2]);
+    }
+
+    fn dims(w: u32, h: u32) -> Result<(u32, u32), RestrictRefusal> {
+        restriction_of("!128,128", false, w, h)
+    }
+
+    fn restriction_of(
+        size: &str,
+        watermarked: bool,
+        w: u32,
+        h: u32,
+    ) -> Result<(u32, u32), RestrictRefusal> {
+        restriction(size, watermarked, w, h, "id").map(|(w, h)| (w.get(), h.get()))
+    }
+
+    #[test]
+    fn restrict_watermark_treats_empty_as_absent() {
+        let access = |wm: &str| Access {
+            infile: String::new(),
+            permission: SipiPermType::Restrict,
+            kv: vec![("watermark".into(), wm.into())],
+        };
+        assert_eq!(restrict_watermark(&access("")), None);
+        assert_eq!(restrict_watermark(&access("wm.tif")), Some("wm.tif"));
+    }
+
+    #[test]
+    fn restriction_unparsable_size_is_misconfigured() {
+        assert_eq!(
+            restriction_of("nonsense", false, 512, 512),
+            Err(RestrictRefusal::Misconfigured)
+        );
+    }
+
+    #[test]
+    fn restriction_refuses_an_axis_below_two_pixels() {
+        assert_eq!(dims(2000, 10), Err(RestrictRefusal::Refuse));
+    }
+
+    #[test]
+    fn restriction_never_yields_zero() {
+        assert_eq!(
+            iiif_parser::clamp_dims_to_size("!128,128", 0, 0).unwrap(),
+            (1, 1)
+        );
+        assert_eq!(dims(0, 0), Err(RestrictRefusal::Refuse));
+    }
+
+    #[test]
+    fn restriction_refuses_never_reducing_kinds_without_a_watermark() {
+        for size in ["max", "pct:100", "pct:150", "^pct:200", "red:0"] {
+            assert_eq!(
+                restriction_of(size, false, 512, 512),
+                Err(RestrictRefusal::Refuse),
+                "{size}"
+            );
+            assert_eq!(
+                restriction_of(size, true, 512, 512),
+                Ok((512, 512)),
+                "{size} with a watermark"
+            );
+        }
+    }
+
+    #[test]
+    fn restriction_caps_box_kinds() {
+        assert_eq!(restriction_of("^!128,128", false, 512, 512), Ok((128, 128)));
+        assert_eq!(dims(2368, 1792), Ok((128, 97)));
+    }
+
+    #[test]
+    fn restriction_serves_an_image_inside_the_box_at_native_size() {
+        assert_eq!(dims(100, 80), Ok((100, 80)));
+        assert_eq!(restriction_of("5000,", false, 2000, 1000), Ok((2000, 1000)));
     }
 }

@@ -12,8 +12,8 @@
 //! `/admin/files/{shortcode}/{file}` with the permission JSON the closure
 //! expects, selected by filename.
 
-use image::GenericImageView;
-use serde_json::json;
+use image::RgbaImage;
+use serde_json::{json, Value};
 use sipi_e2e::jwt::create_jwt;
 use sipi_e2e::{http_client, test_data_dir, SipiServer};
 use std::io::{Read, Write};
@@ -42,7 +42,7 @@ fn mock_dsp_api() -> u16 {
                 let request = String::from_utf8_lossy(&buf[..n]);
                 let body = if request.contains("perm2file") {
                     r#"{"permissionCode":2}"#
-                } else if request.contains("perm1file") {
+                } else if request.contains("perm1file") || request.contains("perm1odd") {
                     r#"{"permissionCode":1,"restrictedViewSettings":{"size":"!128,128"}}"#
                 } else {
                     r#"{"permissionCode":0}"#
@@ -131,32 +131,180 @@ fn permission_code_1_restricts_the_size() {
     );
 }
 
-/// Restricted view (code 1) must cap the effective sampling factor of a
-/// REGION request too, not just a full-image request — otherwise a client
-/// reconstructs full resolution by tiling native-scale regions instead of
-/// requesting `full/max` (each region's absolute output stays below the
-/// restricted full-image box, so a box-only check never fires). perm1file.jp2
-/// is 512x512 with `size='!128,128'` (a 0.25 sampling factor); a 256x256
-/// region must be capped to at most 64x64, the same factor applied to the
-/// region's own extent.
+/// A region request on a size-restricted image resolves in the restricted
+/// image's own coordinates: perm1file.jp2 is 512x512 under `!128,128`, so it
+/// is served as a 128x128 image and `0,0,64,64` is the top-left quarter of
+/// `full/max`, never a native-scale 64x64 cut.
 #[test]
 fn permission_code_1_restricts_the_size_of_a_region_request() {
+    let full = get_png("perm1file.jp2", "full/max");
+    assert_eq!(full.dimensions(), (128, 128));
+    let region = get_png("perm1file.jp2", "0,0,64,64/max");
+    assert_eq!(region.dimensions(), (64, 64));
+    assert_eq!(region, crop(&full, 0, 0, 64, 64));
+}
+
+/// A non-dividing restricted image: perm1odd.jp2 is 373x496 under
+/// `!128,128`, which the shell rounds to (96, 128).
+const ODD: &str = "perm1odd.jp2";
+
+fn image_url(file: &str, region_size: &str, ext: &str) -> String {
+    format!(
+        "{}/0801/{file}/{region_size}/0/default.{ext}",
+        server().base_url
+    )
+}
+
+/// GET a PNG rendering and decode it to RGBA (lossless, so pixels compare
+/// exactly; never compare PNG bytes).
+fn get_png(file: &str, region_size: &str) -> RgbaImage {
     let resp = http_client()
-        .get(format!(
-            "{}/0801/perm1file.jp2/0,0,256,256/max/0/default.jpg",
-            server().base_url
-        ))
+        .get(image_url(file, region_size, "png"))
         .send()
-        .expect("GET perm1 region");
-    assert_eq!(resp.status().as_u16(), 200);
-    let bytes = resp.bytes().expect("read body");
-    let img = image::load_from_memory(&bytes).expect("decode restricted region");
-    let (w, h) = img.dimensions();
+        .expect("GET png");
+    assert_eq!(
+        resp.status().as_u16(),
+        200,
+        "{file} {region_size} must serve"
+    );
+    image::load_from_memory(&resp.bytes().expect("body"))
+        .expect("decode png")
+        .to_rgba8()
+}
+
+fn crop(img: &RgbaImage, x: u32, y: u32, w: u32, h: u32) -> RgbaImage {
+    image::imageops::crop_imm(img, x, y, w, h).to_image()
+}
+
+fn info_json(file: &str) -> Value {
+    let resp = http_client()
+        .get(format!("{}/0801/{file}/info.json", server().base_url))
+        .send()
+        .expect("GET info.json");
+    assert_eq!(resp.status().as_u16(), 200, "{file} info.json");
+    resp.json().expect("info.json body")
+}
+
+fn info_dims(info: &Value) -> (u32, u32) {
+    let dim = |key: &str| u32::try_from(info[key].as_u64().expect(key)).expect(key);
+    (dim("width"), dim("height"))
+}
+
+/// The restricted info.json describes the restricted image: (RW, RH) as its
+/// dims and its only size, and maxWidth/maxHeight = (RW, RH) because nothing
+/// larger is served. An unrestricted info.json states no maximum.
+#[test]
+fn restricted_info_json_states_the_restricted_dims_as_its_maximum() {
+    let info = info_json(ODD);
+    assert_eq!(info_dims(&info), (96, 128));
+    assert_eq!(info["maxWidth"], 96);
+    assert_eq!(info["maxHeight"], 128);
+    assert_eq!(info["sizes"], json!([{ "width": 96, "height": 128 }]));
+
+    let open = info_json("perm2file.jp2");
+    assert!(open.get("maxWidth").is_none(), "unrestricted: {open}");
+    assert!(open.get("maxHeight").is_none(), "unrestricted: {open}");
+}
+
+/// info.json width/height are exactly the `full/max` output dims.
+#[test]
+fn restricted_info_json_dims_equal_full_max() {
+    let (w, h) = info_dims(&info_json(ODD));
+    assert_eq!(get_png(ODD, "full/max").dimensions(), (w, h));
+}
+
+/// DEV-7456: tiles at size `max` over the restricted image, edge tiles
+/// included, are crops of the one (RW, RH) rendering, so they stitch to
+/// `full/max` pixel for pixel.
+#[test]
+fn restricted_tiles_at_size_max_stitch_to_full_max() {
+    let (w, h) = info_dims(&info_json(ODD));
+    let full = get_png(ODD, "full/max");
+    for tile in [32u32, 64] {
+        let mut stitched = RgbaImage::new(w, h);
+        for y in (0..h).step_by(tile as usize) {
+            for x in (0..w).step_by(tile as usize) {
+                let (tw, th) = (tile.min(w - x), tile.min(h - y));
+                let piece = get_png(ODD, &format!("{x},{y},{tw},{th}/max"));
+                assert_eq!(piece.dimensions(), (tw, th), "tile {x},{y} at {tile}");
+                image::imageops::replace(&mut stitched, &piece, i64::from(x), i64::from(y));
+            }
+        }
+        assert!(
+            stitched == full,
+            "{tile} px tiles must stitch to full/max exactly"
+        );
+    }
+}
+
+/// DEV-7485: a left-half region in info.json coordinates is the left half of
+/// `full/max`.
+#[test]
+fn restricted_left_half_region_is_the_left_half_of_full_max() {
+    let (w, h) = info_dims(&info_json(ODD));
+    let full = get_png(ODD, "full/max");
+    let half = get_png(ODD, &format!("0,0,{},{h}/max", w / 2));
+    assert_eq!(half, crop(&full, 0, 0, w / 2, h));
+}
+
+/// The canonical `Link` of a restricted request names restricted-space
+/// coordinates and never the native 373x496, on GET and HEAD; a refused
+/// request carries no Link.
+#[test]
+fn restricted_canonical_link_is_in_restricted_coordinates() {
+    let link = |resp: &reqwest::blocking::Response| {
+        resp.headers()
+            .get("link")
+            .map(|v| v.to_str().expect("link header").to_string())
+    };
+    // Only the path after the host: the ephemeral port may contain the digits.
+    let assert_no_native = |link: &str| {
+        let path = link.split_once("/0801/").map_or(link, |(_, p)| p);
+        assert!(
+            !path.contains("373") && !path.contains("496"),
+            "canonical Link discloses the native size: {link}"
+        );
+    };
+
+    let get = http_client()
+        .get(image_url(ODD, "full/max", "jpg"))
+        .send()
+        .expect("GET full/max");
+    assert_eq!(get.status().as_u16(), 200);
+    let get_link = link(&get).expect("GET carries a Link");
     assert!(
-        w <= 64 && h <= 64,
-        "restricted region should be capped to the profile's sampling factor (<=64x64), got {}x{}",
-        w,
-        h
+        get_link.contains(&format!("/0801/{ODD}/full/max/0/default.jpg")),
+        "full/max canonical: {get_link}"
+    );
+    assert_no_native(&get_link);
+
+    let head = http_client()
+        .head(image_url(ODD, "full/max", "jpg"))
+        .send()
+        .expect("HEAD full/max");
+    assert_eq!(head.status().as_u16(), 200);
+    assert_eq!(link(&head).as_deref(), Some(get_link.as_str()));
+
+    let region = http_client()
+        .get(image_url(ODD, "pct:0,0,50,50/40,50", "jpg"))
+        .send()
+        .expect("GET region");
+    assert_eq!(region.status().as_u16(), 200);
+    let region_link = link(&region).expect("region carries a Link");
+    assert!(
+        region_link.contains(&format!("/0801/{ODD}/0,0,48,64/40,50/0/default.jpg")),
+        "region canonical: {region_link}"
+    );
+    assert_no_native(&region_link);
+
+    let refused = http_client()
+        .get(image_url(ODD, "full/^pct:200", "jpg"))
+        .send()
+        .expect("GET beyond full/max");
+    assert_eq!(refused.status().as_u16(), 400);
+    assert!(
+        link(&refused).is_none(),
+        "a refused request carries no Link"
     );
 }
 

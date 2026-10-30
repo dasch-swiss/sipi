@@ -26,7 +26,7 @@ BUILD.bazel that declares its `cc_library`/`cc_binary`/`cc_test`/
 `oci_image`/`rust_test` targets and visibility rules.
 
 **Hermetic toolchain.** The BCR `llvm` (hermetic-llvm) module, pinned
-at 0.8.10, registers a single constraint-based LLVM 22.1.7 toolchain
+at 0.8.25, registers a single constraint-based LLVM 23.1.2 toolchain
 that every cc action runs under — it serves all platforms.
 libc++ is the default stdlib.
 The bundle ships per-target glibc (~2.28) + libc++ + compiler-rt on

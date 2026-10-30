@@ -824,10 +824,7 @@ fn run_elua(
     };
     let name = format!("@{}", script.display());
     let mut cursor = 0usize;
-    loop {
-        let Some(open) = find(&code, b"<lua>", cursor) else {
-            break;
-        };
+    while let Some(open) = find(&code, b"<lua>", cursor) {
         let html = &code[cursor..open];
         if !html.is_empty() && response.borrow_mut().write(html).is_err() {
             return Err(RouteFailure::Error("client gone".into()));

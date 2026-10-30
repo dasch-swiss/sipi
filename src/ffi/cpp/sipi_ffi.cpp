@@ -7,6 +7,7 @@
 
 #include <algorithm>
 #include <cctype>
+#include <chrono>
 #include <cstdint>
 #include <memory>
 #include <optional>
@@ -14,6 +15,7 @@
 #include <utility>
 
 #include "image/SipiImage.h"// SipiImage::read_shape (sipi_image_dims)
+#include "ffi/decode_guard.h"// run_with_deadline (sipi_image_dims)
 #include "ffi/engine_context.h"
 #include "ffi/metrics_snapshot.h"
 #include "ffi/serve_image.h"
@@ -181,11 +183,17 @@ int sipi_image_dims(const char *resolved_path, SipiImageDims *out, SipiEssential
   // origname) when the file has one — emitted through the optional `emit`
   // callback (NULL when the caller, e.g. info.json, doesn't need it), so a
   // caller that wants both the shape and the identity pays for a single read.
+  // Under the decode deadline, as on the serve path: the worker owns its copy
+  // of the path, and `out`/`emit` are written only here, after it finished.
+  // engine_context_or_default: the probe tests install no engine context.
   return Sipi::ffi::sipi_guard([&] {
-    const Sipi::SipiImage probe;
-    auto shape = probe.read_shape(resolved_path);
-    if (!shape) { return static_cast<int>(Sipi::ffi::SipiStatus::InternalError); }
-    const Sipi::SipiImgInfo &info = *shape;
+    const auto timeout = std::chrono::milliseconds(Sipi::ffi::engine_context_or_default().decode_timeout_ms);
+    auto probed = Sipi::ffi::run_with_deadline(timeout, [path = std::string(resolved_path)] {
+      const Sipi::SipiImage probe;
+      return probe.read_shape(path);
+    });
+    if (!probed || !*probed) { return static_cast<int>(Sipi::ffi::SipiStatus::InternalError); }
+    const Sipi::SipiImgInfo &info = **probed;
     out->width = static_cast<std::uint32_t>(info.width);
     out->height = static_cast<std::uint32_t>(info.height);
     out->numpages = static_cast<std::uint32_t>(info.numpages);

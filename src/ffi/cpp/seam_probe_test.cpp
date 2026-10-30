@@ -151,6 +151,19 @@ TEST(SeamProbe, ImageDimsOnNonImageIsError)
   EXPECT_NE(sipi_image_dims(path.c_str(), &dims, nullptr, nullptr), 0);
 }
 
+TEST(SeamProbe, ImageDimsOnMissingFileIsErrorAndLeavesOutUntouched)
+{
+  // A failed probe must never read as a shape: the shell fails closed on the
+  // status, and `out` keeps what the caller put there.
+  const std::string path = kImagesDir + "/unit/does_not_exist.tif";
+  SipiImageDims dims{};
+  dims.width = 7;
+  dims.height = 7;
+  EXPECT_NE(sipi_image_dims(path.c_str(), &dims, nullptr, nullptr), 0);
+  EXPECT_EQ(dims.width, 7u);
+  EXPECT_EQ(dims.height, 7u);
+}
+
 TEST(SeamProbe, MimetypeMatchesEngineLibmagic)
 {
   const std::string tif = fixture("/unit/lena512.tif");

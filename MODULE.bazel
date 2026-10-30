@@ -1,7 +1,7 @@
 """Sipi — IIIF-compatible media server.
 
-Bazel 9.0.2 LTS module. Bazel is the build system; Nix provisions the
-dev shell only.
+Bazel module (version pinned in `.bazelversion`). Bazel is the build
+system; Nix provisions the dev shell only.
 
 Versioning: `version.txt` is the single source of truth for the Sipi version
 string. `tools/workspace_status.sh` reads it into `STABLE_SIPI_VERSION`, which
@@ -22,7 +22,7 @@ module(
 # `rules_cc` is required at the top of every BUILD.bazel using cc_* in
 # Bazel 9 (built-in cc_* rules removed from the global namespace).
 bazel_dep(name = "platforms", version = "1.1.0")
-bazel_dep(name = "rules_cc", version = "0.2.19")
+bazel_dep(name = "rules_cc", version = "0.2.25")
 
 # ── Fuzzing ───────────────────────────────────────────────────────────────
 # `rules_fuzzing` provides the `cc_fuzz_test` behind
@@ -134,18 +134,14 @@ single_version_override(
 # Consumed as @cli11//:cli11 with `#include <CLI/CLI.hpp>`.
 bazel_dep(name = "cli11", version = "2.6.2")
 
-# protobuf 34.1 transitively pulls `rules_go@0.51.0-rc2` for its Go support.
-# That release's `go/private/rules/cgo.bzl` still references `CcInfo` from
-# `@rules_cc//cc:defs.bzl`, where the symbol was removed in rules_cc 0.2.x
-# (now `@rules_cc//cc/common:cc_info.bzl`). Bazel resolves the registered
-# `@go_toolchains//:all` toolchain at analysis time even for non-Go targets,
-# so the broken load fires on first `bazelisk build //src/metadata:essentials_cc_proto`.
-# Override to the latest stable rules_go, which loads CcInfo from the new path.
-# Drop this override once a protobuf release pins a Bazel-9-clean rules_go.
-bazel_dep(name = "rules_go", version = "0.60.0")
-
-# Same story for `rules_android` — protobuf 34.1 transitively pulls
-# `rules_android@0.6.4`, whose `android_local_test/attrs.bzl` still loads
+# protobuf 34.1 also pulls `rules_go@0.51.0-rc2`, whose `cgo.bzl` loads
+# `CcInfo` from `@rules_cc//cc:defs.bzl` (removed in rules_cc 0.2.x) and breaks
+# analysis of every target. There is no root `rules_go` pin because `llvm`'s
+# own `rules_go` 0.62.0 dep lifts it past that; if an `llvm` bump drops or
+# lowers that dep, restore `bazel_dep(name = "rules_go", ...)` at >= 0.60.0.
+#
+# protobuf 34.1 transitively pulls `rules_android@0.6.4`, whose
+# `android_local_test/attrs.bzl` still loads
 # `CcInfo` from `@rules_cc//cc:defs.bzl`. Bazel resolves the registered
 # `@androidsdk//:all` toolchain at analysis time for every target's
 # toolchain query (even pure C++ ones), so the broken load tanks every
@@ -165,25 +161,24 @@ single_version_override(
 # decouples from host Nix/Xcode tooling. The toolchain-extension wiring
 # (LLVM version, exec/target platforms) lives below.
 # See docs/adr/0014-toolchain-provider-swap.md.
-bazel_dep(name = "llvm", version = "0.8.18")
+bazel_dep(name = "llvm", version = "0.8.25")
 
-# hermetic-llvm hands the Linux kernel + glibc system headers to compile actions
-# as a bare source-directory artifact via two paths: the toolchain cc_args
-# (target-config compiles) and the kernel_headers / gnu_libc_headers cc_library
-# `hdrs = ["include"]` consumed by @llvm-project's libcxx/libcxxabi/libunwind
-# (the exec-config "stage0" runtime compiles, which get no kernel-header cc_args).
-# Remote execution must expand a source directory into each action's Merkle input
-# tree; the include/ subtree is dropped, giving `'linux/limits.h' file not found`
-# on the toolchain-bootstrap [for tool] compiles -- deterministic once the action
-# cache is cold, masked by warm cache hits. A Bazel-side input-declaration issue,
-# not a backend bug. The patch (1) globs the headers_directory targets into
-# discrete File artifacts (cc_args path) and (2) makes the module-map generator
-# emit one umbrella per directory, plus (3) globs the cc_library hdrs into
-# individual files (implementation_deps path). Drop if/when fixed upstream.
+# hermetic-llvm hands the Linux kernel + glibc headers to compile actions as
+# bare source directories, whose subtrees remote execution drops from the input
+# tree (`'linux/limits.h' file not found` on cold-cache [for tool] compiles).
+# The headers-glob patch declares the individual header files instead; its
+# header has the details. Re-check it on every `llvm` bump with the aquery
+# commands in docs/src/development/rbe.md § "The hermetic-llvm headers glob
+# patch", and drop `hermetic_llvm_headers_glob.patch` once both paths list
+# individual files without it.
 single_version_override(
     module_name = "llvm",
     patch_strip = 1,
-    patches = ["//bazel/patches:hermetic_llvm_headers_glob.patch"],
+    patches = [
+        "//bazel/patches:hermetic_llvm_headers_glob.patch",
+        # Drops the unused `-rtlib=compiler-rt` from macOS links; see its header.
+        "//bazel/patches:hermetic_llvm_darwin_rtlib.patch",
+    ],
 )
 
 # ── Container image rules ─────────────────────────────────────────────────
@@ -341,11 +336,18 @@ bazel_dep(name = "google_benchmark", version = "1.9.5", dev_dependency = True)
 # compare.py — see tools/benchmark/BUILD.bazel for why it is vendored).
 # `rules_python` is resolved transitively at 1.8.0 (`rules_fuzzing` requires
 # it as a non-dev dep; googletest→re2→pybind11 and protobuf only ask for
-# 1.7.0), so this direct dev_dependency matches MVS and causes zero churn.
+# 1.7.0). `hedron_compile_commands` (below) asks for 2.0.1, which MVS would
+# apply to the whole graph, so the override holds it at 1.8.0. Bump the dep and
+# the override together; drop the override once the fork asks for <= the dep.
 # The hermetic 3.12 toolchain and the
 # `sipi_bench_pip` hub (numpy/scipy, mirroring google_benchmark 1.9.5's own
 # tools/requirements.txt) keep the compare workflow off the host/Nix python.
 bazel_dep(name = "rules_python", version = "1.8.0", dev_dependency = True)
+
+single_version_override(
+    module_name = "rules_python",
+    version = "1.8.0",
+)
 
 python = use_extension("@rules_python//python/extensions:python.bzl", "python", dev_dependency = True)
 python.toolchain(python_version = "3.12")
@@ -377,7 +379,17 @@ use_repo(pip, "sipi_bench_pip")
 benchmark_fixtures = use_extension("//bazel:benchmark_fixtures_extension.bzl", "benchmark_fixtures_extension", dev_dependency = True)
 use_repo(benchmark_fixtures, "sipi_bench_fixtures")
 
-# ── LLVM toolchain — hermetic, LLVM 22.1.7, libc++ ─────────────────────────
+# compile_commands.json generator behind `just compile-commands` (clangd,
+# clang-tidy). The helly25 fork, not upstream hedronvision: upstream calls the
+# `native.py_binary` Bazel 9 removed, and neither is in the BCR.
+bazel_dep(name = "hedron_compile_commands", dev_dependency = True)
+git_override(
+    module_name = "hedron_compile_commands",
+    commit = "078ba7675c05bea2666c92d9a8abe200d8547655",
+    remote = "https://github.com/helly25/bazel-compile-commands-extractor.git",
+)
+
+# ── LLVM toolchain — hermetic, LLVM 23.1.2, libc++ ─────────────────────────
 #
 # hermeticbuild/hermetic-llvm is zero-sysroot: it links each Linux target
 # against per-version glibc stubs it generates itself (default floor: the
@@ -385,20 +397,19 @@ use_repo(benchmark_fixtures, "sipi_bench_fixtures")
 # than the prior toolchains_llvm Chromium debian-bullseye 2.31) and ships its
 # own libc++/compiler-rt, so there are no Chromium sysroot tarballs to pin and
 # no host-glibc leakage into Bazel-driven compiles. The macOS SDK
-# (MacOSX26.4.sdk) is fetched hermetically from Apple's CDN, so darwin needs
+# (MacOSX26.5.sdk) is fetched hermetically from Apple's CDN, so darwin needs
 # no host Xcode CLT and no `.bazelrc` SDK hacks.
 #
-# LLVM 22.1.7 is pinned explicitly via `llvm.version` below (0.8.18's own
-# default floats to 22.1.8; we pin an exact patch per ADR-0014). 19.1.7 (the
+# LLVM 23.1.2 is pinned explicitly via `llvm.version` below, even though it
+# is also 0.8.25's own default: we pin an exact patch per ADR-0014. 19.1.7 (the
 # prior toolchains_llvm pin) has NO prebuilt in hermetic-llvm and would force
-# a multi-hour from-source clang bootstrap, so the provider swap necessarily
-# carries a 19→22 compiler bump. libc++ is the toolchain default on every
+# a multi-hour from-source clang bootstrap. libc++ is the toolchain default on every
 # target, so the old `stdlib = {linux-*: libc++}` map is gone. C++23 comes
 # from the global `--cxxopt=-std=c++23` in .bazelrc (the module exposes no
 # `cxx_standard` attr). See docs/adr/0014-toolchain-provider-swap.md for the
 # rationale and the v0.8.x / compatibility-level-0 pinning policy.
 llvm = use_extension("@llvm//extensions:llvm.bzl", "llvm")
-llvm.version(llvm_version = "22.1.7")
+llvm.version(llvm_version = "23.1.2")
 use_repo(llvm, "llvm-project")
 
 # `exec` = the hosts we build ON; `target` = the platforms we build FOR. CI
@@ -455,7 +466,8 @@ llvm_toolchain_minimal = use_extension("@llvm//extensions:llvm_toolchain_minimal
 # The extension reports all six prebuilt bundles as direct deps, so all six are
 # imported here even though `//bazel`'s `alias(actual = "@llvm-toolchain-minimal-…")`
 # targets only reference the darwin-arm64 / linux-amd64 / linux-arm64 triples
-# (Linux debug-split objcopy/readelf + `bazel coverage` llvm-cov/llvm-profdata).
+# (Linux debug-split objcopy/readelf + `bazel coverage` llvm-cov/llvm-profdata +
+# `just compile-commands` clang++/clangd).
 use_repo(
     llvm_toolchain_minimal,
     "llvm-toolchain-minimal-darwin-amd64",
@@ -478,23 +490,7 @@ use_repo(
 # The LLVM toolchain blocks above MUST appear before the Rust extension —
 # otherwise build scripts silently pick up the host `cc` and produce
 # non-hermetic artifacts.
-bazel_dep(name = "rules_rust", version = "0.70.0")
-
-# `cargo_build_script` re-invokes the cc_toolchain's compile flags from a build
-# script's runfiles cwd (not the execroot), so `_pwd_flags` in rules_rust rewrites
-# execroot-relative toolchain flags (`--sysroot=`, `-isystem`, `-L`, `-B`,
-# `-resource-dir`) to `${pwd}/…`. It omits `-isysroot`, which hermetic-llvm's
-# macOS toolchain emits alongside `--sysroot=` (repo `@llvm++osx+macos_sdk`). The
-# relative `-isysroot external/…/sysroot` then can't resolve from the runfiles
-# cwd, so cc-rs crates (ring) fail with `'TargetConditionals.h' file not found`
-# on darwin — breaking every ring-dependent Rust target (the production server
-# included). The patch adds `-isysroot` to `_pwd_flags`, mirroring the existing
-# entries. Drop if/when fixed upstream (rules_rust > 0.70.0).
-single_version_override(
-    module_name = "rules_rust",
-    patch_strip = 1,
-    patches = ["//bazel/patches:rules_rust_cargo_build_script_isysroot.patch"],
-)
+bazel_dep(name = "rules_rust", version = "0.74.0")
 
 rust = use_extension("@rules_rust//rust:extensions.bzl", "rust")
 rust.toolchain(
@@ -504,7 +500,7 @@ rust.toolchain(
     # also required by the transitive `pxfm` crate. First-party crates
     # stay on edition 2021 (set per `rust_*` target in their BUILD
     # files) — the transitive bumps are invisible to first-party code.
-    versions = ["1.89.0"],
+    versions = ["1.98.0"],
     # Cross-compile targets. The arm64/darwin CI legs run on native runners but
     # compile on the x86_64 RBE worker, so rules_rust must register a toolchain
     # with exec=x86_64-linux for each of these targets. Without them, no toolchain
@@ -583,7 +579,7 @@ crate.spec(package = "rustls", version = "0.23", default_features = False, featu
 # mlua in `external` link mode: mlua-sys's build script emits nothing (no
 # pkg-config probe, no vendored source, no link flags) — the `lua_*` symbols
 # resolve at final-link time from the BCR `@lua` 5.3.6 cc_library, which the
-# consuming rust target lists as a direct dep. `external` is a feature of
+# consuming rust target lists in `link_deps`. `external` is a feature of
 # `mlua-sys`, not `mlua` (no passthrough feature exists), hence the
 # annotation — the first `crate.annotation()` in this file. Annotation
 # features are additive at BUILD generation and `external` has no deps, so
@@ -606,17 +602,31 @@ crate.spec(package = "rand", version = "0.9")
 # resolver will pick, because a repin alone will not move a transitive crate that
 # the existing lock already satisfies. Unlike the specs above, do not prune these
 # on sight for being unreferenced; drop one only once the graph pulls a version
-# at or above the floor on its own.
+# at or above the floor on its own. Each floor is a compatible (caret) range, so
+# it cannot pull in a second major/minor series the graph does not use, and keeps
+# `default_features = False`, so it never turns on a crate's default features.
 #
 # rustls: RUSTSEC-2026-0285, TLS 1.3 handshake messages accepted across
-# encryption level boundaries. Reaches the graph via the `sentry` crates'
-# `rustls-no-provider`. Fixed in 0.23.45.
+# encryption level boundaries, fixed in 0.23.45; RUSTSEC-2026-0346/0347/0348/0349,
+# fixed in 0.23.46. Reaches the graph via the `sentry` crates'
+# `rustls-no-provider`.
 #
 # `default_features = False` is load-bearing, not tidiness: rustls' default
 # feature set selects the `aws-lc-rs` provider, which drags in `aws-lc-sys` —
 # the one crate this graph must never contain (see the note above). Declaring
 # the floor with defaults on is enough to pull it in.
-crate.spec(package = "rustls", version = ">=0.23.45", default_features = False, features = ["ring", "std", "tls12", "logging"])
+crate.spec(package = "rustls", version = "0.23.46", default_features = False, features = ["ring", "std", "tls12", "logging"])
+
+# quinn-proto: RUSTSEC-2026-0338/0340/0343, fixed in 0.11.18. Reaches the graph
+# via `quinn`.
+crate.spec(package = "quinn-proto", version = "0.11.18", default_features = False)
+
+# rustls-webpki: RUSTSEC-2026-0382, fixed in 0.103.16. webpki-roots and
+# webpki-root-certs: RUSTSEC-2026-0381/0383, fixed in 1.0.10. All reach the
+# graph via `rustls` / `reqwest`.
+crate.spec(package = "rustls-webpki", version = "0.103.16", default_features = False)
+crate.spec(package = "webpki-roots", version = "1.0.10", default_features = False)
+crate.spec(package = "webpki-root-certs", version = "1.0.10", default_features = False)
 
 # `cargo_lockfile` materializes a Cargo-format lock alongside the Bazel-native
 # resolution — cargo-audit/OSV-Scanner read Cargo.lock syntax, not
@@ -657,6 +667,9 @@ approvaltests_cpp(
 http_archive(
     name = "exiv2",
     build_file = "//bazel:exiv2.BUILD.bazel",
+    # Drop when the pinned exiv2 includes <ctime> in src/value.cpp (see the patch).
+    patch_strip = 1,
+    patches = ["//bazel/patches:exiv2_value_include_ctime.patch"],
     sha256 = "700b76b97695b2fab4ef8c79619c68ae57d09e0c130724791cafbd39e0eb4aef",
     strip_prefix = "exiv2-0.28.9",
     url = "https://github.com/Exiv2/exiv2/archive/refs/tags/v0.28.9.tar.gz",

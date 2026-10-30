@@ -14,6 +14,7 @@
 #include <string>
 #include <unordered_map>
 
+#include "iiifparser/SipiQualityFormat.h"
 #include "iiifparser/SipiRegion.h"
 #include "iiifparser/SipiSize.h"
 #include "format_handlers/output_sink.h"
@@ -77,6 +78,23 @@ struct ScalingQuality
   ScalingMethod tiff;
   ScalingMethod png;
 };
+
+/// The scaling method used to scale an image decoded from `source`. Every
+/// codec read and the size-restricted crop take it from here, so `full/max`
+/// and a restricted region scale alike. TIFF reads the `jpeg` setting.
+[[nodiscard]] inline ScalingMethod scaling_method_for(SipiQualityFormat::FormatType source,
+  const ScalingQuality &quality)
+{
+  switch (source) {
+  case SipiQualityFormat::TIF:
+  case SipiQualityFormat::JPG:
+    return quality.jpeg;
+  case SipiQualityFormat::PNG:
+    return quality.png;
+  default:
+    return quality.jk2;
+  }
+}
 
 enum Orientation : std::uint8_t {
   // from the TIFF specification...

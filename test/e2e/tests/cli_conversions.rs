@@ -17,9 +17,12 @@ use sipi_e2e::{
 #[test]
 fn cli_conversions() {
     let mut tasks: Vec<ConversionTask> = vec![
-        // JP2 → TIFF decodes (files 1 and 4; others in the conformance set
-        // have known issues). Part 1 of the former `cli_file_conversion`.
+        // JP2 → TIFF decodes of files 1 to 4 (sRGB, sYCC, sYCC with 2x2
+        // subsampled chroma, greyscale); the round-trips below cover the
+        // reference set 1 to 9. Part 1 of the former `cli_file_conversion`.
         conversion_task("jp2_decode_file1", || assert_jp2_decode(1)),
+        conversion_task("jp2_decode_file2", || assert_jp2_decode(2)),
+        conversion_task("jp2_decode_file3", || assert_jp2_decode(3)),
         conversion_task("jp2_decode_file4", || assert_jp2_decode(4)),
         // TIFF → JP2 → TIFF → JPEG → PNG format fidelity.
         conversion_task("metadata_fidelity", assert_metadata_fidelity),

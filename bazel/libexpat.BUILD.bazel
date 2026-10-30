@@ -33,6 +33,7 @@ package(default_visibility = [
     "@@//src:__pkg__",
     "@@//src/format_handlers:__pkg__",
     "@@//src/image:__pkg__",
+    "@@//src/metadata:__pkg__",
     "@@+http_archive+exiv2//:__subpackages__",
 ])
 

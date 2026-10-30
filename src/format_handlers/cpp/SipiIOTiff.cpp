@@ -139,51 +139,37 @@ static toff_t memTiffSeekProc(thandle_t handle, toff_t off, int whence)
 {
   auto *memtif = (MEMTIFF *)handle;
 
+  toff_t target;
   switch (whence) {
-  case SEEK_SET: {
-    if ((tsize_t)off > memtif->size) {
-      auto *newdata = (unsigned char *)realloc(memtif->data, memtif->size + memtif->incsiz + off);
-      if (newdata == nullptr) {
-        return (toff_t)-1;  // signal seek failure to libtiff
-      }
-      memtif->data = newdata;
-      memtif->size = memtif->size + memtif->incsiz + off;
-    }
-
-    memtif->fptr = off;
+  case SEEK_SET:
+    target = off;
     break;
-  }
-  case SEEK_CUR: {
-    if ((tsize_t)(memtif->fptr + off) > memtif->size) {
-      auto *newdata = (unsigned char *)realloc(memtif->data, memtif->fptr + memtif->incsiz + off);
-      if (newdata == nullptr) {
-        return (toff_t)-1;
-      }
-      memtif->data = newdata;
-      memtif->size = memtif->fptr + memtif->incsiz + off;
-    }
-
-    memtif->fptr += off;
+  case SEEK_CUR:
+    target = memtif->fptr + off;
     break;
-  }
-  case SEEK_END: {
-    if ((tsize_t)(memtif->size + off) > memtif->size) {
-      auto *newdata = (unsigned char *)realloc(memtif->data, memtif->size + memtif->incsiz + off);
-      if (newdata == nullptr) {
-        return (toff_t)-1;
-      }
-      memtif->data = newdata;
-      memtif->size = memtif->size + memtif->incsiz + off;
-    }
-
-    memtif->fptr = memtif->size + off;
+  case SEEK_END:
+    target = static_cast<toff_t>(memtif->flen) + off;
     break;
-  }
-  default: {
-  }
+  default:
+    return (toff_t)-1;
   }
 
-  if (memtif->fptr > memtif->flen) memtif->flen = memtif->fptr;
+  if ((tsize_t)target > memtif->size) {
+    auto *newdata = (unsigned char *)realloc(memtif->data, target + memtif->incsiz);
+    if (newdata == nullptr) {
+      return (toff_t)-1;  // signal seek failure to libtiff
+    }
+    memtif->data = newdata;
+    memtif->size = target + memtif->incsiz;
+  }
+
+  // A seek past the end leaves a hole that ships in the response body: it must
+  // read as zeros, never as whatever the allocator left in the buffer.
+  if ((tsize_t)target > memtif->flen) {
+    memset(memtif->data + memtif->flen, 0, target - memtif->flen);
+    memtif->flen = target;
+  }
+  memtif->fptr = target;
   return memtif->fptr;
 }
 /*===========================================================================*/
@@ -1706,15 +1692,10 @@ Result<bool> SipiIOTiff::read(SipiImage *img,
       bool redonly;
       SipiSize::SizeType rtype = size->get_size(w, h, nnx, nny, reduce, redonly);
       if (rtype != SipiSize::FULL) {
-        switch (scaling_quality.jpeg) {
-        case ScalingMethod::HIGH:
-          if (auto r = Sipi::processing::scale(*img, nnx, nny); !r) { return std::unexpected(r.error()); }
-          break;
-        case ScalingMethod::MEDIUM:
-          if (auto r = Sipi::processing::scaleMedium(*img, nnx, nny); !r) { return std::unexpected(r.error()); }
-          break;
-        case ScalingMethod::LOW:
-          if (auto r = Sipi::processing::scaleFast(*img, nnx, nny); !r) { return std::unexpected(r.error()); }
+        if (auto r = Sipi::processing::scale_with(
+              *img, nnx, nny, scaling_method_for(SipiQualityFormat::TIF, scaling_quality));
+            !r) {
+          return std::unexpected(r.error());
         }
       }
     }

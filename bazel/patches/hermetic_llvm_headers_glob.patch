@@ -20,7 +20,7 @@ toolchain-bootstrap [for tool] compiles. It is deterministic once the action
 cache is cold; warm action-cache hits skip the compile and mask the gap, so it
 presents as flaky. A Bazel-side input-declaration issue, not a backend bug.
 
-Three coupled changes:
+Two coupled changes:
 
 1. directory.bzl gains an opt-in expand_files arg (set for the kernel + glibc
    header repos) that makes DefaultInfo carry the individual header files (a
@@ -28,16 +28,12 @@ Three coupled changes:
    source-directory artifact, so the Merkle-tree builder enumerates every header.
    This fixes Path A. The macOS SDK sysroot also uses headers_directory but is
    left unexpanded -- expanding it would bloat every darwin *local* compile.
+   The toolchain module map needs no change: runtimes/module_map.bzl's
+   _include_path_impl reads src[DirectoryInfo].transitive_files for every
+   DirectoryInfo source and never its DefaultInfo, so a file-list DefaultInfo
+   leaves the generated module map as it was.
 
-2. runtimes/module_map.bzl previously emitted one umbrella submodule per File in
-   a source directory's DefaultInfo, assuming that is exactly one directory.
-   With expand_files that DefaultInfo is a file list, which would emit one
-   (invalid) "umbrella <file>" per header and fail -Wincomplete-umbrella. The
-   generator now emits a single umbrella per source directory taken from
-   DirectoryInfo.path; identical to the old behaviour for unexpanded
-   directories, so darwin/macOS-SDK module maps are unchanged.
-
-3. The kernel_headers / gnu_libc_headers cc_library targets change
+2. The kernel_headers / gnu_libc_headers cc_library targets change
    hdrs = ["include"] (one source-directory artifact) to
    hdrs = glob(["include/**"]), so every individual header becomes a declared
    action input for the exec-config stage0 runtime compiles. This fixes Path B --
@@ -47,26 +43,24 @@ Drop if/when hermetic-llvm ships an equivalent fix upstream
 (https://github.com/hermeticbuild/hermetic-llvm).
 
 diff --git a/directory.bzl b/directory.bzl
-index 6881833..2e434c5 100644
 --- a/directory.bzl
 +++ b/directory.bzl
-@@ -4,7 +4,14 @@ load("@bazel_skylib//rules/directory:subdirectory.bzl", "subdirectory")
- 
+@@ -5,7 +5,13 @@
  # We want to put a source directory into the DefaultInfo but still propagate
- # the DirectoryInfo for header inclusion checking.
+ # the DirectoryInfo for header inclusion checking and the toolchain's module
+ # map.
 -def headers_directory(name, path, visibility = None):
 +#
 +# expand_files: when True, DefaultInfo carries the individual header files
 +# (a recursive glob) instead of a single source-directory artifact. Remote
 +# execution must expand a source directory into the action's Merkle input tree
-+# and intermittently drops a subtree; enumerating discrete File artifacts makes
-+# the input tree deterministic. The module-map generator emits one umbrella per
-+# directory from DirectoryInfo, so a file list here does not multiply umbrellas.
++# and drops its subtree; enumerating discrete File artifacts makes the input
++# tree complete.
 +def headers_directory(name, path, visibility = None, expand_files = False):
      if path == ".":
          directory(
              name = name + "_directory",
-@@ -24,7 +31,13 @@ def headers_directory(name, path, visibility = None):
+@@ -25,7 +31,13 @@
  
      native.filegroup(
          name = name + "_source_directory",
@@ -82,10 +76,9 @@ index 6881833..2e434c5 100644
  
      _headers_directory(
 diff --git a/kernel/extension/kernel-headers.BUILD.bazel b/kernel/extension/kernel-headers.BUILD.bazel
-index 52137ff..c8afb12 100644
 --- a/kernel/extension/kernel-headers.BUILD.bazel
 +++ b/kernel/extension/kernel-headers.BUILD.bazel
-@@ -3,7 +3,10 @@ load("@rules_cc//cc:cc_library.bzl", "cc_library")
+@@ -3,7 +3,10 @@
  
  cc_library(
      name = "kernel_headers",
@@ -97,7 +90,7 @@ index 52137ff..c8afb12 100644
      # Any code should always get passed linux UAPI headers as -isystem
      features = ["system_include_paths"],
      includes = ["include"],
-@@ -13,5 +16,6 @@ cc_library(
+@@ -13,5 +16,6 @@
  headers_directory(
      name = "kernel_headers_directory",
      path = "include",
@@ -105,10 +98,9 @@ index 52137ff..c8afb12 100644
      visibility = ["//visibility:public"],
  )
 diff --git a/runtimes/glibc/extension/glibc-headers.BUILD.bazel b/runtimes/glibc/extension/glibc-headers.BUILD.bazel
-index a07c490..3337660 100644
 --- a/runtimes/glibc/extension/glibc-headers.BUILD.bazel
 +++ b/runtimes/glibc/extension/glibc-headers.BUILD.bazel
-@@ -3,7 +3,10 @@ load("@rules_cc//cc:cc_library.bzl", "cc_library")
+@@ -3,7 +3,10 @@
  
  cc_library(
      name = "gnu_libc_headers",
@@ -120,81 +112,10 @@ index a07c490..3337660 100644
      # user code should always get glibc headers as -isystem
      # but it seems glibc itself includes as <...>
      features = ["system_include_paths"],
-@@ -14,5 +17,6 @@ cc_library(
+@@ -14,5 +17,6 @@
  headers_directory(
      name = "glibc_headers_directory",
      path = "include",
 +    expand_files = True,
      visibility = ["//visibility:public"],
  )
-diff --git a/runtimes/module_map.bzl b/runtimes/module_map.bzl
-index 38ace07..6fae5da 100644
---- a/runtimes/module_map.bzl
-+++ b/runtimes/module_map.bzl
-@@ -7,18 +7,22 @@ IncludePathInfo = provider(
-     "IncludePathInfo",
-     fields = {
-         "submodule_directories": "A depset of File objects representing directories to be included as umbrella submodules.",
-+        "umbrella_directory_paths": "A list of directory path strings (from DirectoryInfo) for source directories whose DefaultInfo has been expanded to individual files; each becomes a single umbrella submodule.",
-         "textual_headers": "A depset of File objects representing headers to be included as textual headers.",
-     },
- )
- 
--def _umbrella_submodule(directory):
--    path = paths.normalize(directory.path).replace("//", "/")
-+def _umbrella_submodule_path(path):
-+    path = paths.normalize(path).replace("//", "/")
- 
-     return """
-   module "{path}" {{
-     umbrella "{path}"
-   }}""".format(path = path)
- 
-+def _umbrella_submodule(directory):
-+    return _umbrella_submodule_path(directory.path)
-+
- def _module_map_impl(ctx):
-     module_map = ctx.actions.declare_file(ctx.attr.name + ".modulemap")
- 
-@@ -35,6 +39,12 @@ def _module_map_impl(ctx):
-         expand_directories = False,
-     )
- 
-+    # Source directories expanded to individual files (expand_files = True) emit a
-+    # single umbrella over the directory itself, taken from DirectoryInfo, rather
-+    # than one umbrella per file.
-+    for path in include_path_info.umbrella_directory_paths:
-+        module_map_args.add(_umbrella_submodule_path(path))
-+
-     module_map_args.add_joined(
-         include_path_info.textual_headers,
-         join_with = "\n",
-@@ -71,11 +81,18 @@ module_map = rule(
- 
- def _include_path_impl(ctx):
-     submodule_directories = []
-+    umbrella_directory_paths = []
-     textual_headers_depsets = []
- 
-     for src in ctx.attr.srcs:
--        if SourceDirectoryInfo in src or DirectoryInfo not in src:
--            # We're either a source directory or an output directory (Tree Artifact).
-+        if SourceDirectoryInfo in src:
-+            # A source directory. Its DefaultInfo may have been expanded to
-+            # individual header files (expand_files = True) so remote execution
-+            # uploads a complete Merkle tree; the umbrella must still be the single
-+            # directory, taken from DirectoryInfo rather than one umbrella per file.
-+            umbrella_directory_paths.append(src[DirectoryInfo].path)
-+        elif DirectoryInfo not in src:
-+            # An output directory (Tree Artifact).
-             submodule_directories.append(src[DefaultInfo].files)
-         else:
-             textual_headers_depsets.append(src[DirectoryInfo].transitive_files)
-@@ -83,6 +100,7 @@ def _include_path_impl(ctx):
-     return [
-         IncludePathInfo(
-             submodule_directories = depset([], transitive = submodule_directories),
-+            umbrella_directory_paths = umbrella_directory_paths,
-             textual_headers = depset([], transitive = textual_headers_depsets),
-         ),
-     ]

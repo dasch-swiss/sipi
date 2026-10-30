@@ -100,6 +100,12 @@ namespace processing {
 [[nodiscard]] Result<void> scale(SipiImage &img, size_t nnx = 0, size_t nny = 0);
 
 /*!
+ * Resize an image with the operator `method` names: HIGH scale(), MEDIUM
+ * scaleMedium(), LOW scaleFast(). Same errors as those.
+ */
+[[nodiscard]] Result<void> scale_with(SipiImage &img, size_t nnx, size_t nny, ScalingMethod method);
+
+/*!
  * Rotate an image
  *
  * The angles 0, 90, 180, 270 are treated specially!
@@ -125,6 +131,9 @@ namespace processing {
 
 /*!
  * Convert full range YCbCr (YCC) to RGB colors
+ *
+ * Channels 0, 1 and 2 hold Y, Cb and Cr; any further channels are copied
+ * through unchanged.
  *
  * \param[in] img Image to convert, mutated in place
  * \returns an error if the image's bits/sample is not 8 or 16, or if the

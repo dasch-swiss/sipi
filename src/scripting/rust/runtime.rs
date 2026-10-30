@@ -182,7 +182,7 @@ impl BytecodeCache {
             let end = source
                 .iter()
                 .position(|&b| b == b'\n')
-                .map_or(source.len(), |i| i);
+                .unwrap_or(source.len());
             source.drain(..end);
         }
         let func = lua

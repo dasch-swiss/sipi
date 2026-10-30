@@ -208,7 +208,8 @@ typedef struct
   const char *prefix; /* IIIF prefix — canonical-URL + cache key */
   const char *identifier; /* IIIF identifier — canonical-URL `id` + cache key */
   SipiIiifParams params; /* region/size/rotation/quality/format */
-  const char *restricted_size; /* preflight `restrict` downscale, or NULL */
+  uint32_t restricted_width; /* preflight `restrict` size cap (RW, RH), decided by routes::restriction; */
+  uint32_t restricted_height; /* 0, 0 = no size cap; exactly one of them 0 is a 500 */
   const char *watermark_path; /* preflight `restrict` watermark, or NULL */
   const char *forwarded_proto; /* X-Forwarded-Proto → canonical-URL / redirect scheme */
   const char *forwarded_host; /* X-Forwarded-Host  → canonical-URL `id` (host for the canonical URL) */
@@ -495,7 +496,8 @@ static_assert(offsetof(SipiServeRequest, resolved_path) == 0, "SipiServeRequest 
 static_assert(offsetof(SipiServeRequest, prefix) == 8, "SipiServeRequest layout drift");
 static_assert(offsetof(SipiServeRequest, identifier) == 16, "SipiServeRequest layout drift");
 static_assert(offsetof(SipiServeRequest, params) == 24, "SipiServeRequest layout drift");
-static_assert(offsetof(SipiServeRequest, restricted_size) == 96, "SipiServeRequest layout drift");
+static_assert(offsetof(SipiServeRequest, restricted_width) == 96, "SipiServeRequest layout drift");
+static_assert(offsetof(SipiServeRequest, restricted_height) == 100, "SipiServeRequest layout drift");
 static_assert(offsetof(SipiServeRequest, watermark_path) == 104, "SipiServeRequest layout drift");
 static_assert(offsetof(SipiServeRequest, forwarded_proto) == 112, "SipiServeRequest layout drift");
 static_assert(offsetof(SipiServeRequest, forwarded_host) == 120, "SipiServeRequest layout drift");
@@ -634,8 +636,8 @@ SIPI_FFI_NODISCARD int sipi_memory_limit_bytes(size_t *out);
  *  parseable Essentials packet; it fires zero times otherwise (a plain
  *  JPEG/PNG, or a TIFF/JP2 without a packet, has no original-file identity to
  *  report — this is not an error). Returns 0, or 500 if the shape cannot be
- *  read (the edge has already confirmed the file exists, so an unreadable
- *  image here is an engine-level failure). */
+ *  read within the decode deadline (the edge has already confirmed the file
+ *  exists, so an unreadable image here is an engine-level failure). */
 SIPI_FFI_NODISCARD int sipi_image_dims(const char *resolved_path,
   SipiImageDims *out,
   SipiEssentialsFn emit,

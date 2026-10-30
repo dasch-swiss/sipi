@@ -82,6 +82,6 @@ updates:
           - "*"
     ignore:
       # Majors require manual review against MODULE.bazel's override comments
-      # (rules_go / rules_android floors driven by protobuf 34.1, BCR repacks).
+      # (rules_android floor driven by protobuf 34.1, BCR repacks).
       - dependency-name: "*"
         update-types: ["version-update:semver-major"]

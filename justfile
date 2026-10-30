@@ -87,12 +87,12 @@ bazel-test *FLAGS='':
 # propagated into each test action. Bazel's `tools/test/collect_cc_coverage.sh`
 # reads these to decide the LLVM coverage path (`llvm-profdata merge` +
 # `llvm-cov export --format=lcov`) for the `.profraw` profiles. They MUST be
-# the hermetic toolchain's binaries (LLVM 22), version-matched to the
+# the hermetic toolchain's binaries (LLVM 23), version-matched to the
 # instrumented profile — a host/Nix `llvm-profdata` of a different major
 # version cannot read the profile and yields an empty lcov. Resolved from the
 # `//bazel:llvm-{profdata,cov}` aliases (exec-platform-selected bundle) rather
 # than PATH. Required since the Bazel 7.2+ env-clobber bug — fix landed in
-# Bazel 9.1.0 (PR #25879, closes #23247), which is pinned via `.bazelversion`.
+# Bazel 9.1.0 (PR #25879, closes #23247); `.bazelversion` must stay at or above it.
 bazel-coverage *FLAGS='':
     #!/usr/bin/env bash
     set -euo pipefail
@@ -207,6 +207,19 @@ commit-lint from="origin/main":
 bazel-rust-project:
     bazel run @rules_rust//tools/rust_analyzer:gen_rust_project
 
+# (Re)generate the git-ignored compile_commands.json for clangd and clang-tidy.
+# Re-run after adding/moving a C++ file or changing a target's deps/copts.
+# --bcce-compiler pins the driver to the hermetic clang++'s absolute path (the
+# tool would emit it relative). Prints the version-matched hermetic clangd path.
+compile-commands:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    EXEC_ROOT="$(bazel info execution_root)"
+    CLANGXX="$EXEC_ROOT/$(bazel cquery --output=files '"//bazel:clang++"' 2>/dev/null)"
+    test -x "$CLANGXX" || { echo "//bazel:clang++ did not resolve to the hermetic clang++: $CLANGXX" >&2; exit 1; }
+    bazel run //tools/compile_commands:refresh_compile_commands -- --bcce-compiler="$CLANGXX"
+    echo "hermetic clangd: $EXEC_ROOT/$(bazel cquery --output=files //bazel:clangd 2>/dev/null || true)"
+
 # Run all Rust e2e `rust_test` targets against the Bazel-built `:sipi`
 # binary. Pass extra Bazel flags positionally: e.g. `--config=asan` for
 # the sanitiser run, `--test_output=streamed` for live stdout,
@@ -289,7 +302,7 @@ bazel-build-tracy *FLAGS='':
 # Coverage-guided fuzzing of the production Rust IIIF parser
 # (`//src/iiifparser/fuzz`) and the C++ codec decode entry points
 # (`//src/format_handlers/fuzz`; DEV-7066). Runs on Linux and macOS: hermetic-llvm
-# 0.8.18 stages `libclang_rt.fuzzer_osx.a`, so `-fsanitize=fuzzer` links on
+# stages `libclang_rt.fuzzer_osx.a` since 0.8.18, so `-fsanitize=fuzzer` links on
 # darwin (see `.bazelrc` §Fuzzing; the macOS repo-rule DEVELOPER_DIR that lets
 # rules_fuzzing's Python deps resolve in the Nix shell is set globally there).
 #

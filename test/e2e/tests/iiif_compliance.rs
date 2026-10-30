@@ -381,7 +381,8 @@ fn info_json_x_forwarded_proto_https() {
 
 #[test]
 fn cors_info_json_without_origin() {
-    // info.json always sends Access-Control-Allow-Origin: * (src/server/rust/src/info.rs)
+    // No Origin: info.json answers ACAO * without credentials (CORS forbids
+    // pairing * with credentials).
     let srv = server();
     let resp = client()
         .get(format!("{}/unit/lena512.jp2/info.json", srv.base_url))
@@ -396,11 +397,69 @@ fn cors_info_json_without_origin() {
         .to_str()
         .unwrap();
     assert_eq!(acao, "*", "info.json ACAO should be * without Origin");
+    assert!(
+        resp.headers()
+            .get("access-control-allow-credentials")
+            .is_none(),
+        "info.json without Origin must not send Access-Control-Allow-Credentials"
+    );
+}
+
+#[test]
+fn cors_knora_json_varies_on_origin() {
+    // The ACAO is `*` without an Origin and the echoed Origin with one, so a
+    // shared cache must key knora.json on Origin in both cases, as info.json.
+    let srv = server();
+    let url = format!("{}/unit/lena512.jp2/knora.json", srv.base_url);
+    let resp = client().get(&url).send().expect("GET knora.json failed");
+    assert_eq!(resp.status().as_u16(), 200);
+    assert_varies_on_origin(&resp);
+
+    let resp = client()
+        .get(&url)
+        .header("Origin", "https://example.org")
+        .send()
+        .expect("GET knora.json with Origin failed");
+    assert_eq!(resp.status().as_u16(), 200);
+    assert_credentialed_echo(&resp, "https://example.org");
+    assert_varies_on_origin(&resp);
+}
+
+/// Assert `resp` echoes `origin` with credentials, as the image route does.
+fn assert_credentialed_echo(resp: &reqwest::blocking::Response, origin: &str) {
+    let headers = resp.headers();
+    let acao = headers
+        .get("access-control-allow-origin")
+        .expect("missing ACAO header")
+        .to_str()
+        .unwrap();
+    assert_eq!(acao, origin, "ACAO should echo the Origin");
+    let credentials = headers
+        .get("access-control-allow-credentials")
+        .expect("missing Access-Control-Allow-Credentials")
+        .to_str()
+        .unwrap();
+    assert_eq!(credentials, "true");
+}
+
+/// Assert `resp` carries a `Vary` naming `Origin`.
+fn assert_varies_on_origin(resp: &reqwest::blocking::Response) {
+    let vary = resp
+        .headers()
+        .get("vary")
+        .expect("missing Vary header")
+        .to_str()
+        .unwrap();
+    assert!(
+        vary.split(',')
+            .any(|v| v.trim().eq_ignore_ascii_case("origin")),
+        "Vary should contain Origin, got: {}",
+        vary
+    );
 }
 
 #[test]
 fn cors_info_json_with_origin() {
-    // info.json always sends * regardless of Origin header
     let srv = server();
     let resp = client()
         .get(format!("{}/unit/lena512.jp2/info.json", srv.base_url))
@@ -409,14 +468,72 @@ fn cors_info_json_with_origin() {
         .expect("GET info.json with Origin failed");
 
     assert_eq!(resp.status().as_u16(), 200);
-    let acao = resp
-        .headers()
-        .get("access-control-allow-origin")
-        .expect("missing ACAO header")
+    assert_credentialed_echo(&resp, "https://example.org");
+    assert_varies_on_origin(&resp);
+}
+
+#[test]
+fn cors_info_json_with_origin_and_cookie() {
+    // DEV-7520: a credentialed info.json fetch (dsp-app sends
+    // `withCredentials: true`) is readable cross-origin only with an echoed
+    // Origin plus credentials.
+    let srv = server();
+    let resp = client()
+        .get(format!("{}/unit/lena512.jp2/info.json", srv.base_url))
+        .header("Origin", "https://app.example.org")
+        .header("Cookie", "KnoraAuthentication=abc")
+        .send()
+        .expect("GET info.json with Origin and Cookie failed");
+
+    assert_eq!(resp.status().as_u16(), 200);
+    assert_credentialed_echo(&resp, "https://app.example.org");
+}
+
+#[test]
+fn cors_info_json_auth_challenge_with_origin() {
+    // The 401 auth-challenge info.json must be readable cross-origin, or the
+    // viewer cannot see the login service it has to follow.
+    let srv = server();
+    let resp = client()
+        .get(format!("{}/auth/lena512.jp2/info.json", srv.base_url))
+        .header("Origin", "https://example.org")
+        .send()
+        .expect("GET /auth/lena512.jp2/info.json with Origin failed");
+
+    assert_eq!(resp.status().as_u16(), 401);
+    assert_credentialed_echo(&resp, "https://example.org");
+}
+
+#[test]
+fn cors_preflight_info_json() {
+    let srv = server();
+    let resp = client()
+        .request(
+            reqwest::Method::OPTIONS,
+            format!("{}/unit/lena512.jp2/info.json", srv.base_url),
+        )
+        .header("Origin", "https://example.org")
+        .header("Access-Control-Request-Method", "GET")
+        .header("Access-Control-Request-Headers", "Authorization")
+        .send()
+        .expect("OPTIONS preflight on info.json failed");
+
+    assert_credentialed_echo(&resp, "https://example.org");
+    // A credentialed preflight cannot use the `*` wildcard for methods or
+    // headers: browsers treat it literally once credentials are involved.
+    let headers = resp.headers();
+    let methods = headers
+        .get("access-control-allow-methods")
+        .expect("missing Allow-Methods")
         .to_str()
         .unwrap();
-    // info.json hardcodes * (src/server/rust/src/info.rs)
-    assert_eq!(acao, "*", "info.json ACAO should be * even with Origin");
+    assert_eq!(methods, "GET, POST, PUT, DELETE");
+    let allow_headers = headers
+        .get("access-control-allow-headers")
+        .expect("missing Allow-Headers")
+        .to_str()
+        .unwrap();
+    assert_eq!(allow_headers, "Authorization");
 }
 
 #[test]
@@ -460,6 +577,43 @@ fn cors_image_without_origin() {
         resp.headers().get("access-control-allow-origin").is_none(),
         "image response should not have ACAO without Origin header"
     );
+}
+
+#[test]
+fn cors_error_responses_with_origin() {
+    // A cross-origin client only sees a response carrying ACAO: without it a
+    // 400/401/403/404 reaches the browser as status 0. Every IIIF-route error
+    // must echo the Origin with credentials, like the success responses do.
+    let srv = server();
+    for (path, status) in [
+        // Parser rejection (before the engine) and engine rejection.
+        ("/unit/lena512.jp2/invalid/max/0/default.jpg", 400),
+        ("/unit/lena512.jp2/600,600,100,100/max/0/default.jpg", 400),
+        // `deny` from `pre_flight`, and from `file_pre_flight` (which denies
+        // only `unit/test2.csv`).
+        ("/tmp/lena512.jp2/full/max/0/default.jpg", 401),
+        ("/unit/test2.csv/file", 401),
+        // A bare `restrict` decision is refused. `file_pre_flight` never
+        // answers `restrict`, so `/file` has no 403 case here.
+        (
+            "/test_restrict_bare/lena512.jp2/full/max/0/default.jpg",
+            403,
+        ),
+        ("/test_restrict_bare/lena512.jp2/info.json", 403),
+        // File missing on disk.
+        ("/unit/missing.jp2/full/max/0/default.jpg", 404),
+        ("/unit/missing.jp2/info.json", 404),
+        ("/unit/missing.jp2/knora.json", 404),
+        ("/unit/missing.csv/file", 404),
+    ] {
+        let resp = client()
+            .get(format!("{}{path}", srv.base_url))
+            .header("Origin", "https://example.org")
+            .send()
+            .unwrap_or_else(|e| panic!("GET {path} failed: {e}"));
+        assert_eq!(resp.status().as_u16(), status, "{path}");
+        assert_credentialed_echo(&resp, "https://example.org");
+    }
 }
 
 #[test]
@@ -751,6 +905,40 @@ fn size_percent() {
 #[test]
 fn size_upscaling() {
     assert_iiif_status("/unit/lena512.jp2/full/^1000,/0/default.jpg", 200);
+}
+
+/// DEV-6118: `full/max` and `full/^max` on an unrestricted image are the
+/// native size from info.json, for a JP2 and a TIFF whose `sizes` ladder has
+/// more than one entry.
+#[test]
+fn full_max_on_unrestricted_images_is_the_native_size() {
+    let srv = server();
+    for file in ["unit/lena512_tiled.jp2", "unit/mario.tif"] {
+        let resp = client()
+            .get(format!("{}/{file}/info.json", srv.base_url))
+            .send()
+            .expect("GET info.json");
+        assert_eq!(resp.status().as_u16(), 200, "{file} info.json");
+        let info: Value = resp.json().expect("info.json body");
+        let native = (
+            u32::try_from(info["width"].as_u64().expect("width")).expect("width"),
+            u32::try_from(info["height"].as_u64().expect("height")).expect("height"),
+        );
+        assert!(
+            info["sizes"].as_array().expect("sizes").len() > 1,
+            "{file} must have a sizes ladder: {info}"
+        );
+        assert!(info.get("maxWidth").is_none(), "{file}: {info}");
+        for size in ["max", "^max"] {
+            let resp = client()
+                .get(format!("{}/{file}/full/{size}/0/default.jpg", srv.base_url))
+                .send()
+                .expect("GET full");
+            assert_eq!(resp.status().as_u16(), 200, "{file} full/{size}");
+            let img = image::load_from_memory(&resp.bytes().expect("body")).expect("decode");
+            assert_eq!(img.dimensions(), native, "{file} full/{size}");
+        }
+    }
 }
 
 #[test]

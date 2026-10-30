@@ -119,6 +119,39 @@ TEST(JpegWrite, ReadWriteRoundtripPreservesDimensions)
   std::remove(dst.c_str());
 }
 
+TEST(JpegWrite, OverwritingLargerFileTruncatesIt)
+{
+  const std::string src = test_images + "unit/MaoriFigure.jpg";
+  const std::string fresh = tmp_dir + "_jpeg_overwrite_fresh.jpg";
+  const std::string dst = tmp_dir + "_jpeg_overwrite_dst.jpg";
+  ASSERT_TRUE(file_exists(src));
+
+  Sipi::SipiImage img;
+  ASSERT_TRUE(img.read(src).has_value());
+  ASSERT_TRUE(img.write("jpg", fresh).has_value());
+  const size_t fresh_size = file_size(fresh);
+  ASSERT_GT(fresh_size, 0u);
+
+  {
+    int fd = ::open(dst.c_str(), O_WRONLY | O_CREAT | O_TRUNC, 0644);
+    ASSERT_GE(fd, 0);
+    const std::string junk(2 * fresh_size, 'x');
+    ASSERT_EQ(::write(fd, junk.data(), junk.size()), static_cast<ssize_t>(junk.size()));
+    ::close(fd);
+  }
+
+  ASSERT_TRUE(img.write("jpg", dst).has_value());
+  EXPECT_EQ(file_size(dst), fresh_size);
+
+  Sipi::SipiImage reread;
+  ASSERT_TRUE(reread.read(dst).has_value());
+  EXPECT_EQ(reread.getNx(), img.getNx());
+  EXPECT_EQ(reread.getNy(), img.getNy());
+
+  std::remove(fresh.c_str());
+  std::remove(dst.c_str());
+}
+
 namespace {
 // A CallbackSink ctx that fails every write — simulating a client that
 // aborts mid-stream (conn_write_data -> ERREXIT -> longjmp). libjpeg's HTML

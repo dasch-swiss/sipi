@@ -311,6 +311,20 @@ pub fn clamp_dims_to_size(size: &str, width: u32, height: u32) -> Result<(u32, u
     Ok((out_w.min(w).max(1) as u32, out_h.min(h).max(1) as u32))
 }
 
+/// Whether a restricted-view IIIF size string can never reduce any image:
+/// `max`/full, `pct:` of 100 or more, and `red:0`, each with or without `^`.
+/// A box kind (`w,`, `,h`, `w,h`, `!w,h`) is never one of these, even with
+/// `^`, because [`clamp_dims_to_size`] caps it at native.
+pub fn size_never_reduces(size: &str) -> Result<bool, ParseError> {
+    let parts = parse_size(size)?;
+    Ok(match parts.kind {
+        SizeKind::Full | SizeKind::Undefined => true,
+        SizeKind::Percents => parts.percent >= 100.0,
+        SizeKind::Reduce => parts.reduce == 0,
+        SizeKind::PixelsX | SizeKind::PixelsY | SizeKind::PixelsXy | SizeKind::Maxdim => false,
+    })
+}
+
 fn parse_rotation(s: &str) -> Result<(bool, f32), ParseError> {
     if s.is_empty() {
         return Ok((false, 0.0));
@@ -471,6 +485,41 @@ mod tests {
             clamp_dims_to_size("1000,1000", 512, 512).unwrap(),
             (512, 512)
         );
+    }
+
+    #[test]
+    fn clamp_dims_to_size_non_dividing() {
+        // 1792 * 128 / 2368 = 96.86 rounds to 97; 101 * 0.5 and 51 * 0.5 round
+        // half away from zero.
+        assert_eq!(
+            clamp_dims_to_size("!128,128", 2368, 1792).unwrap(),
+            (128, 97)
+        );
+        assert_eq!(clamp_dims_to_size("pct:50", 101, 51).unwrap(), (51, 26));
+    }
+
+    #[test]
+    fn clamp_dims_to_size_image_inside_box_keeps_native() {
+        assert_eq!(clamp_dims_to_size("!128,128", 100, 80).unwrap(), (100, 80));
+    }
+
+    #[test]
+    fn size_never_reduces_kinds() {
+        for size in ["max", "^max", "pct:100", "^pct:200", "red:0"] {
+            assert_eq!(size_never_reduces(size), Ok(true), "{size}");
+        }
+        for size in [
+            "!128,128",
+            "^!128,128",
+            "pct:50",
+            "^pct:50",
+            "128,",
+            "5000,",
+            "red:1",
+        ] {
+            assert_eq!(size_never_reduces(size), Ok(false), "{size}");
+        }
+        assert!(size_never_reduces("not-a-size").is_err());
     }
 
     #[test]

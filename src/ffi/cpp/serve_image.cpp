@@ -35,7 +35,10 @@
 #include "iiifparser/SipiRotation.h"
 #include "iiifparser/SipiSize.h"
 #include "logging/logger.h"
+#include "metadata/exif.h"
 #include "metadata/icc.h"
+#include "metadata/iptc.h"
+#include "metadata/xmp.h"
 #include "observability/metrics.h"
 #include "image/populate_from_image.h"
 #include "util/Parsing.h"
@@ -147,8 +150,11 @@ namespace {
 
   // Builds the Canonical URL (IIIF spec form). Returns it twice-shaped: the
   // `<...>;rel="canonical"` Link-header value (`.first`) and the bare URL
-  // (`.second`), which the serve path then uses as the Cache key. Engine-facing,
-  // so it lives with the seam.
+  // (`.second`), the base of the Cache key (`build_image_response` appends the
+  // size-restriction suffix, the one other part of the key). Engine-facing,
+  // so it lives with the seam. The size resolves against the region extent, as
+  // the served output does: two requests whose outputs differ must never get
+  // the same Cache key.
   std::pair<std::string, std::string> build_canonical_url(size_t tmp_w,
     size_t tmp_h,
     const std::string &scheme,
@@ -171,15 +177,16 @@ namespace {
     size_t tmp_r_w = 0, tmp_r_h = 0;
     bool tmp_ro = false;
 
+    size_t extent_w = tmp_w, extent_h = tmp_h;
     if (region->getType() != SipiRegion::FULL) {
-      region->crop_coords(tmp_w, tmp_h, tmp_r_x, tmp_r_y, tmp_r_w, tmp_r_h);
+      region->crop_coords(tmp_w, tmp_h, tmp_r_x, tmp_r_y, extent_w, extent_h);
     }
 
     region->canonical(canonical_region, canonical_len);
 
     if (size->getType() != SipiSize::FULL) {
       try {
-        size->get_size(tmp_w, tmp_h, tmp_r_w, tmp_r_h, tmp_red, tmp_ro);
+        size->get_size(extent_w, extent_h, tmp_r_w, tmp_r_h, tmp_red, tmp_ro);
       } catch (Sipi::SipiSizeError &err) {
         throw SipiError("SipiSize error!");
       }
@@ -452,6 +459,46 @@ namespace {
 
   std::string str_or_empty(const char *s) { return s != nullptr ? std::string(s) : std::string(); }
 
+  // Cuts `region` out of the restricted rendering and scales the crop to
+  // (out_w, out_h). A crop already at the target size is not scaled: the scale
+  // operators refuse a 1-sample axis, and a tile at size `max` must be a pure
+  // crop so that tiles stitch to `full/max` exactly. `build_image_response`
+  // refuses, before the HEAD return, a crop this would have to scale from or
+  // to a 1-sample axis.
+  [[nodiscard]] Result<void> crop_restricted(SipiImage &img,
+    const std::shared_ptr<SipiRegion> &region,
+    size_t out_w,
+    size_t out_h,
+    ScalingMethod method)
+  {
+    if (auto r = processing::crop(img, region); !r) { return r; }
+    if (img.getNx() == out_w && img.getNy() == out_h) { return {}; }
+    return processing::scale_with(img, out_w, out_h, method);
+  }
+
+  // A size-restricted output is its own image of the delivered size: the
+  // embedded size fields must state that size, not the original's, and the
+  // embedded previews (pixels that can exceed the restriction) go. Nothing
+  // else is removed: rights and other descriptive metadata are always
+  // returned (UBIQUITOUS_LANGUAGE.md, restrict). False if a size field kept
+  // its native value, or an XMP preview or the EXIF's Photoshop resources
+  // could not be rewritten.
+  [[nodiscard]] bool rewrite_restricted_metadata(SipiImage &img)
+  {
+    bool ok = true;
+    if (auto exif = img.getExif(); exif != nullptr) {
+      exif->erase_previews();
+      ok = exif->set_pixel_dimensions(img.getNx(), img.getNy());
+      ok = exif->restrict_image_resources(img.getNx(), img.getNy()) && ok;
+    }
+    if (auto xmp = img.getXmp(); xmp != nullptr) {
+      ok = xmp->erase_thumbnails() && ok;
+      xmp->set_pixel_dimensions(img.getNx(), img.getNy());
+    }
+    if (auto iptc = img.getIptc(); iptc != nullptr) { iptc->erase_preview(); }
+    return ok;
+  }
+
   // A full-file body for the passthrough / cache-hit paths. Opened here
   // (O_NOFOLLOW + a regular-file check via fstat) rather than merely stat'd,
   // so a planted symlink at `path` — a forged cache index record pointing at
@@ -516,8 +563,18 @@ std::expected<ServeResponse, SipiStatus>
   const SipiIdentifier sid(shttps::urldecode(str_or_empty(req.identifier)));
 
   const std::string watermark = str_or_empty(req.watermark_path);
-  auto restricted_size =
-    req.restricted_size != nullptr ? std::make_shared<SipiSize>(std::string(req.restricted_size)) : std::make_shared<SipiSize>();
+  const size_t rest_w = req.restricted_width;
+  const size_t rest_h = req.restricted_height;
+  if ((rest_w == 0) != (rest_h == 0)) {
+    log_warn("GET %s: half-set restricted dims", uri.c_str());
+    return std::unexpected(SipiStatus::InternalError);
+  }
+  // The shell refuses a restriction below 2 px per axis (routes.rs
+  // `restriction`); the scale operators cannot produce one.
+  if (rest_w != 0 && (rest_w < 2 || rest_h < 2)) {
+    log_warn("GET %s: restricted dims below 2 px", uri.c_str());
+    return std::unexpected(SipiStatus::InternalError);
+  }
 
   const SipiQualityFormat::FormatType in_format = detect_in_format(infile);
 
@@ -559,85 +616,50 @@ std::expected<ServeResponse, SipiStatus>
   const size_t img_w = info.width;
   const size_t img_h = info.height;
 
-  size_t tmp_r_w{ 0 }, tmp_r_h{ 0 };
-  int tmp_red{ 0 };
-  bool tmp_ro{ false };
-  try {
-    size->get_size(img_w, img_h, tmp_r_w, tmp_r_h, tmp_red, tmp_ro);
-  } catch (Sipi::SipiSizeError &) {
-    return std::unexpected(SipiStatus::BadRequest);
-  } catch (Sipi::SipiError &) {
-    return std::unexpected(SipiStatus::BadRequest);
+  // The shell probed the shape before this read; a file replaced in between
+  // must not widen the restricted view.
+  if (rest_w > img_w || rest_h > img_h) {
+    log_warn("GET %s: restricted dims exceed the image", uri.c_str());
+    return std::unexpected(SipiStatus::InternalError);
   }
 
-  size_t rest_w{ 0 }, rest_h{ 0 };
-  try {
-    restricted_size->get_size(img_w, img_h, rest_w, rest_h, tmp_red, tmp_ro);
-  } catch (Sipi::SipiSizeError &) {
-    return std::unexpected(SipiStatus::BadRequest);
-  } catch (Sipi::SipiError &) {
-    return std::unexpected(SipiStatus::BadRequest);
-  }
-  // A restrict decision that does not reduce resolution and adds no watermark
-  // is not a restriction — refuse it rather than pass the original through at
-  // full fidelity (S2-09). Catches size=max, size=pct:100, ^pct:200 (upscale).
-  // `req.restricted_size` (not `restricted_size->undefined()`) is the signal
-  // that a size was actually requested: "max" parses to the same `undefined()`
-  // shape as "no restriction", but still resolves rest_w/rest_h to the full
-  // image extent above. (A bare {type='restrict'} with no size and no
-  // watermark arrives with a null restricted_size and is refused on the Rust
-  // edge before the seam.)
-  if (req.restricted_size != nullptr && rest_w >= img_w && rest_h >= img_h && watermark.empty()) {
-    return std::unexpected(SipiStatus::Forbidden);
-  }
-  if (!restricted_size->undefined()) {
-    // The restricted-size cap must bound the effective SAMPLING FACTOR of ANY
-    // region, not the full-image output box: comparing full-image boxes (the
-    // previous check) lets a client reconstruct the full-resolution image by
-    // requesting many native-scale REGIONS, since each region's own absolute
-    // output stays below the restricted full-image box and the cap never
-    // fires. `f` is the fraction of native resolution the restricted profile
-    // may reveal; the requested output for THIS region is capped to `f` times
-    // that region's own pixel extent, so the cap composes across regions
-    // where an absolute output box does not. We SCALE, not reject — rejecting
-    // region requests on a restricted image breaks IIIF viewers that tile
-    // through the image.
-    //
-    // Two residuals accepted here, not fixed by this change:
-    //  - Many overlapping, sub-pixel-offset regions each resampled at `f`
-    //    from the full-resolution source form a super-resolution attack that
-    //    can recover more detail than a single `f`-scaled image. Accepted:
-    //    rejecting region requests on restricted images breaks viewers.
-    //  - The canonical `Link` header still emits the region in native pixel
-    //    coordinates (`SipiRegion::canonical`), so e.g. `pct:0,0,100,100`
-    //    discloses the native width/height even though the served bytes are
-    //    capped. Recommendation for a later finding: omit the canonical Link
-    //    for non-Allow permissions.
-    const double f = std::min(static_cast<double>(rest_w) / static_cast<double>(img_w),
-      static_cast<double>(rest_h) / static_cast<double>(img_h));
-
-    int region_x{ 0 }, region_y{ 0 };
-    size_t region_w{ 0 }, region_h{ 0 };
-    try {
-      region->crop_coords(img_w, img_h, region_x, region_y, region_w, region_h);
-    } catch (Sipi::SipiError &) {
-      return std::unexpected(SipiStatus::BadRequest);
-    }
-
-    size_t out_w{ 0 }, out_h{ 0 };
+  // A size-restricted image is served as its own image of (RW, RH): region and
+  // size resolve in that space, every output is cut from one rendering at
+  // (RW, RH), and nothing larger than (RW, RH) before rotation is served, so
+  // no request reveals more than `full/max` (ADR-0028). Checked before the
+  // HEAD return and the cache lookup, so HEAD and GET agree.
+  const bool size_restricted = rest_w != 0;
+  size_t out_w{ 0 }, out_h{ 0 };
+  if (size_restricted) {
+    int crop_x{ 0 }, crop_y{ 0 };
+    size_t crop_w{ 0 }, crop_h{ 0 };
     int out_reduce{ 0 };
     bool out_redonly{ false };
     try {
-      size->get_size(region_w, region_h, out_w, out_h, out_reduce, out_redonly);
+      region->crop_coords(rest_w, rest_h, crop_x, crop_y, crop_w, crop_h);
+      size->get_size(crop_w, crop_h, out_w, out_h, out_reduce, out_redonly);
     } catch (Sipi::SipiSizeError &) {
       return std::unexpected(SipiStatus::BadRequest);
     } catch (Sipi::SipiError &) {
       return std::unexpected(SipiStatus::BadRequest);
     }
-
-    if (static_cast<double>(out_w) > static_cast<double>(region_w) * f
-        || static_cast<double>(out_h) > static_cast<double>(region_h) * f) {
-      size = std::make_shared<SipiSize>(static_cast<float>(f * 100.0));
+    if (out_w > rest_w || out_h > rest_h) { return std::unexpected(SipiStatus::BadRequest); }
+    // A crop that needs scaling must have at least 2 samples per axis on both
+    // sides: the scale operators refuse anything less, after the HEAD return.
+    const bool scales = out_w != crop_w || out_h != crop_h;
+    if (scales && (crop_w < 2 || crop_h < 2 || out_w < 2 || out_h < 2)) {
+      return std::unexpected(SipiStatus::BadRequest);
+    }
+  } else {
+    size_t tmp_r_w{ 0 }, tmp_r_h{ 0 };
+    int tmp_red{ 0 };
+    bool tmp_ro{ false };
+    try {
+      size->get_size(img_w, img_h, tmp_r_w, tmp_r_h, tmp_red, tmp_ro);
+    } catch (Sipi::SipiSizeError &) {
+      return std::unexpected(SipiStatus::BadRequest);
+    } catch (Sipi::SipiError &) {
+      return std::unexpected(SipiStatus::BadRequest);
     }
   }
 
@@ -650,16 +672,29 @@ std::expected<ServeResponse, SipiStatus>
     (forwarded_proto != nullptr && *forwarded_proto != '\0') ? std::string(forwarded_proto) : std::string("http");
   std::pair<std::string, std::string> canonical_info;
   try {
-    canonical_info = build_canonical_url(
-      img_w, img_h, scheme, str_or_empty(req.forwarded_host), str_or_empty(req.prefix), sid.getIdentifier(),
-      region, size, rotation, quality_format, sid.getPage(), cannonical_watermark);
+    canonical_info = build_canonical_url(size_restricted ? rest_w : img_w,
+      size_restricted ? rest_h : img_h,
+      scheme,
+      str_or_empty(req.forwarded_host),
+      str_or_empty(req.prefix),
+      sid.getIdentifier(),
+      region,
+      size,
+      rotation,
+      quality_format,
+      sid.getPage(),
+      cannonical_watermark);
   } catch (Sipi::SipiError &) {
     return std::unexpected(SipiStatus::BadRequest);
   }
   const std::string canonical_header = canonical_info.first;
-  // The Canonical URL used verbatim as the Cache key (this serve path adds no
-  // watermark suffix); `SipiCache` keys its table by this string.
-  const std::string cache_key = canonical_info.second;
+  // The bare Canonical URL plus its watermark marker is the Cache key;
+  // `SipiCache` keys its table by this string. A size restriction appends
+  // `/r<RW>x<RH>` to the key only, never to the Link: the same canonical
+  // coordinates under two restrictions, or with and without one, are
+  // different images and must never share a cache entry.
+  std::string cache_key = canonical_info.second;
+  if (size_restricted) { cache_key += "/r" + std::to_string(rest_w) + "x" + std::to_string(rest_h); }
   const char *content_type = content_type_for(quality_format.format());
 
   auto base_headers = [&] {
@@ -684,9 +719,10 @@ std::expected<ServeResponse, SipiStatus>
     return out;
   }
 
-  // Direct passthrough: the request maps 1:1 onto the source file.
-  if (region->getType() == SipiRegion::FULL && size->getType() == SipiSize::FULL && angle == 0.0 && !mirror
-      && watermark.empty() && quality_format.format() == in_format
+  // Direct passthrough: the request maps 1:1 onto the source file. Never for a
+  // size-restricted image: the file is the unrestricted original.
+  if (!size_restricted && region->getType() == SipiRegion::FULL && size->getType() == SipiSize::FULL
+      && angle == 0.0 && !mirror && watermark.empty() && quality_format.format() == in_format
       && quality_format.quality() == SipiQualityFormat::DEFAULT) {
     auto body = full_file_body(infile);
     if (!body) { return std::unexpected(body.error()); }
@@ -722,7 +758,17 @@ std::expected<ServeResponse, SipiStatus>
   // handed back over the seam accumulator into the shell's OTLP histogram —
   // independently of whether the budget is enforced: the estimate describes the
   // request, not the budget feature.
-  const auto ddims = compute_decode_dims(img_w, img_h, info.clevels, region, size);
+  //
+  // A size-restricted request decodes the whole image at (RW, RH) whatever its
+  // region, so a small region cannot hide a full decode from the budget.
+  const auto decode_region = size_restricted ? std::make_shared<SipiRegion>() : region;
+  const auto decode_size =
+    size_restricted ? std::make_shared<SipiSize>(SipiSize::PIXELS_XY, false, 0.F, 0, rest_w, rest_h) : size;
+  auto ddims = compute_decode_dims(img_w, img_h, info.clevels, decode_region, decode_size);
+  if (size_restricted) {
+    ddims.out_w = out_w;
+    ddims.out_h = out_h;
+  }
   const bool needs_icc = quality_format.quality() == SipiQualityFormat::COLOR
                          || quality_format.quality() == SipiQualityFormat::GRAY;
   const size_t estimated = estimate_peak_memory(
@@ -807,9 +853,19 @@ std::expected<ServeResponse, SipiStatus>
     // the subsequent encode; on timeout it stays with the detached worker.
     auto deadline_result = run_guarded_decode(std::chrono::milliseconds(eng.decode_timeout_ms),
       std::move(budget_guard),
-      [infile, region, size, force_bps_8, scaling_quality = eng.scaling_quality] {
+      [infile,
+        decode_region,
+        decode_size,
+        region,
+        size_restricted,
+        out_w,
+        out_h,
+        force_bps_8,
+        scaling_quality = eng.scaling_quality,
+        method = scaling_method_for(in_format, eng.scaling_quality)] {
         SipiImage decoded;
-        auto status = decoded.read(infile, region, size, force_bps_8, scaling_quality);
+        auto status = decoded.read(infile, decode_region, decode_size, force_bps_8, scaling_quality);
+        if (status && size_restricted) { status = crop_restricted(decoded, region, out_w, out_h, method); }
         return DecodeOutcome{ std::move(decoded), std::move(status) };
       });
     if (!deadline_result) {
@@ -957,6 +1013,21 @@ std::expected<ServeResponse, SipiStatus>
     return std::unexpected(SipiStatus::ClientGone);
   }
 
+  if (size_restricted) {
+    bool rewritten = false;
+    // Exiv2 can throw while editing the EXIF data.
+    try {
+      rewritten = rewrite_restricted_metadata(img);
+    } catch (const std::exception &err) {
+      log_warn("GET %s: restricted metadata rewrite failed: %s", uri.c_str(), err.what());
+    }
+    // A native size field or an embedded preview must not be served.
+    if (!rewritten) {
+      log_warn("GET %s: a native size field or preview could not be removed", uri.c_str());
+      return std::unexpected(SipiStatus::InternalError);
+    }
+  }
+
   // Cache file: probe writability now (a 500 here is still pre-commit), then let
   // the producer's TeeSink fill it during the encode.
   std::string cachefile;
@@ -975,7 +1046,7 @@ std::expected<ServeResponse, SipiStatus>
     quality_format.format(),
     eng.jpeg_quality,
     eng.cache,
-    std::move(cachefile),// the only non-const local here; infile/cache_key/uri are const, so copied
+    std::move(cachefile),
     infile,
     cache_key,
     uri,

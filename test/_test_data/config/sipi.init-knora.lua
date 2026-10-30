@@ -138,11 +138,29 @@ function pre_flight(prefix, identifier, cookie)
     end
 
     -- Test-only prefixes for a restrict decision that does not actually
-    -- restrict resolution or add a watermark (S2-09): the engine must refuse
+    -- restrict resolution or add a watermark: the server must refuse
     -- these rather than serve the original at full fidelity.
     if prefix == "test_restrict_max" then
         local actual_filepath = config.imgroot .. '/unit/' .. identifier
         return {type = 'restrict', size = 'max'}, actual_filepath
+    end
+
+    if prefix == "test_restrict_pct100" then
+        local actual_filepath = config.imgroot .. '/unit/' .. identifier
+        return {type = 'restrict', size = 'pct:100'}, actual_filepath
+    end
+
+    -- An empty watermark applies none, so it does not make `max` a restriction.
+    if prefix == "test_restrict_max_emptywm" then
+        local actual_filepath = config.imgroot .. '/unit/' .. identifier
+        return {type = 'restrict', size = 'max', watermark = ''}, actual_filepath
+    end
+
+    -- Test-only prefix: a box larger than the image, so the image is served
+    -- at native size rather than refused.
+    if prefix == "test_restrict_bigbox" then
+        local actual_filepath = config.imgroot .. '/unit/' .. identifier
+        return {type = 'restrict', size = '!1024,1024'}, actual_filepath
     end
 
     -- Test-only prefix: a `stream` decision resolving to the same file the

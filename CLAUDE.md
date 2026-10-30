@@ -16,6 +16,8 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 SIPI (Simple Image Presentation Interface) is a multithreaded, high-performance, IIIF-compatible media server written in C++23. It implements IIIF Image API 3.0 and provides efficient image format conversions while preserving metadata. The server can be used both as a command-line tool and as a web server with Lua scripting support.
 
+**Naming: SIPI is now called Vitrinli.** In Linear (team DEV), the product label is `components > vitrinli` (renamed from `sipi`, so it covers all history), set by the reporter. The `vitrinli module` label group holds one label per `CONVENTIONS.md` module scope, set by the maintainer at triage. To list Vitrinli issues, filter on the `vitrinli` label and also search title/description text for both "sipi" and "vitrinli", then merge: issues filed without the product label only show up in the text search.
+
 ## Domain Model
 
 Read these before reasoning about names, boundaries, or architectural decisions:
@@ -132,7 +134,7 @@ For CI pipeline details (Docker publishing, release automation), see [`docs/src/
 
 Valid types (exactly eight): `feat`, `fix`, `perf`, `refactor`, `docs`, `test`, `build`, `chore`. `revert`, `style`, and `ci` are **not** valid — use `chore(ci): ...`, fold formatting in, and `fix`/`chore` for reverts. Breaking changes use `!` suffix: `feat(scope)!: ...`. **A scope is mandatory** (`type(scope): subject`, no catch-all) — a module name from [`CONVENTIONS.md` § Module Layout](CONVENTIONS.md); if none fits, ask the maintainer before coining a new one. A CI gate (`commitlint-rs`, `just commit-lint`) enforces this. Full schema single-sourced in [`docs/src/development/commit-conventions.md`](docs/src/development/commit-conventions.md).
 
-**A PR lands as one commit by default.** Rebase-merge puts every branch commit on `main` verbatim — there is no squash safety net. Clean up the branch before merge; split into multiple commits only when the work is genuinely several independent, self-contained changes. A `fix:` corrects behavior already on `main`; a bug introduced earlier in the same branch is folded into its introducing commit, never a standalone `fix:`.
+**The history's reader is a coding agent.** Rebase-merge puts every branch commit on `main` verbatim — there is no squash safety net. Before merge, curate the branch to **one commit per module per slice**, each with a body that explains the end state (decisions, rejected alternatives, invariants, gotchas), never the journey. A small one-slice, one-module PR is one commit. A `fix:` corrects behavior already on `main`; a bug introduced earlier in the same branch is folded into its introducing commit, never a standalone `fix:`.
 
 For the git workflow, commit message schema, scope vocabulary, and PR description format (all single-sourced), see [`docs/src/development/commit-conventions.md`](docs/src/development/commit-conventions.md). PRs are scaffolded by [`.github/PULL_REQUEST_TEMPLATE.md`](.github/PULL_REQUEST_TEMPLATE.md).
 
@@ -170,7 +172,7 @@ These are not style preferences — they are contract with the maintainer. Code 
 
 ## Development Notes
 
-**Compiler Requirements:** C++23. Bazel selects a hermetic LLVM 22.1.7 toolchain via the BCR `llvm` (hermetic-llvm) module pinned at 0.8.18; the host compiler does not need to be Clang. libc++ is the default stdlib and a single toolchain serves all platforms and configs, `--config=fuzz` included. See [`docs/adr/0014-toolchain-provider-swap.md`](docs/adr/0014-toolchain-provider-swap.md).
+**Compiler Requirements:** C++23. Bazel selects a hermetic LLVM 23.1.2 toolchain via the BCR `llvm` (hermetic-llvm) module pinned at 0.8.25; the host compiler does not need to be Clang. libc++ is the default stdlib and a single toolchain serves all platforms and configs, `--config=fuzz` included. See [`docs/adr/0014-toolchain-provider-swap.md`](docs/adr/0014-toolchain-provider-swap.md).
 
 **Build configurations:**
 - `bazel build //src/cli:sipi` — fastbuild (`-O0 -g`, fast incremental)

@@ -532,10 +532,18 @@ The following matrix maps every testable IIIF spec requirement to its test statu
 
 | Requirement | Status | Test | Notes |
 |---|---|---|---|
-| Info.json ACAO without Origin | :white_check_mark: | `cors_info_json_without_origin` | |
-| Info.json ACAO with Origin | :white_check_mark: | `cors_info_json_with_origin` | |
+| Info.json ACAO without Origin | :white_check_mark: | `cors_info_json_without_origin` | `*`, no credentials |
+| Info.json ACAO with Origin | :white_check_mark: | `cors_info_json_with_origin` | Echoed Origin + credentials, `Vary: Origin` |
+| Info.json ACAO with Origin and Cookie | :white_check_mark: | `cors_info_json_with_origin_and_cookie` | Echoed Origin + credentials |
+| Info.json 401 auth challenge with Origin | :white_check_mark: | `cors_info_json_auth_challenge_with_origin` | Echoed Origin + credentials |
+| Info.json OPTIONS preflight | :white_check_mark: | `cors_preflight_info_json` | Echoed Origin + credentials, explicit methods and headers |
+| Info.json under `SIPI_ALLOWED_ORIGINS` | :white_check_mark: | `allowed_origins_allowlist_gates_info_json_cors` | `security.rs`; denied Origin gets no ACAO |
+| Knora.json `Vary: Origin` with and without Origin | :white_check_mark: | `cors_knora_json_varies_on_origin` | `*` without Origin, echoed Origin + credentials with one |
 | Image ACAO with Origin | :white_check_mark: | `cors_image_with_origin` | |
 | Image ACAO without Origin | :white_check_mark: | `cors_image_without_origin` | |
+| Error ACAO with Origin (400/401/403/404) | :white_check_mark: | `cors_error_responses_with_origin` | Image, info.json, knora.json and `/file` (no `/file` 403: the test hook never restricts); echoed Origin + credentials |
+| Error ACAO on a 503 shed | :white_check_mark: | `lua_route_occupies_the_full_lane` | `admission_control.rs`; echoed Origin + credentials |
+| Error ACAO under `SIPI_ALLOWED_ORIGINS` | :white_check_mark: | `allowed_origins_allowlist_gates_info_json_cors` | `security.rs`; 404 echoes a listed Origin, an unlisted one gets only `Vary: Origin` |
 | OPTIONS preflight | :white_check_mark: | `cors_preflight` | |
 
 ### HTTP Behavior (Section 7)
@@ -597,10 +605,10 @@ Two Rust-shell features the C++-era gap list assumed are permanently **removed**
 | Prometheus metrics endpoint | N/A — removed | — | OTLP replaces it on the Rust shell; there is no scrape endpoint |
 | SSL/TLS endpoints | N/A — removed | — | TLS terminates at Traefik; the Rust shell serves plain HTTP only, flags parse-only |
 | Image dimension verification | :white_check_mark: | `iiif_compliance.rs::region_dimension_verification`, `size_dimension_verification`, `rotation_dimension_verification` | decodes output and asserts actual pixel dimensions |
-| EXIF preservation through IIIF pipeline | :white_check_mark: | `iiif_compliance.rs::metadata_iiif_pipeline`; `server.rs::lua_exif_gps` | HTTP-level; deep tag-by-tag EXIF diffing remains a gap (no exiv2 binding in the Rust test crate) |
-| XMP preservation through IIIF pipeline | :x: GAP | — | Only a negative/malformed-XMP fixture (`cli_json.rs`); no positive XMP round-trip-through-pipeline test |
+| EXIF preservation through IIIF pipeline | :white_check_mark: | `iiif_compliance.rs::metadata_iiif_pipeline`; `server.rs::lua_exif_gps` | HTTP-level; `server.rs::restricted_output_rewrites_dimension_metadata` diffs every `Exif.*` line (via `sipi query`) against the unrestricted output |
+| XMP preservation through IIIF pipeline | :white_check_mark: | `server.rs::restricted_output_keeps_rights_metadata_verbatim`; unit `formats_test` `JpegMetadataSegments.*` | XMP `dc:rights` and EXIF `Copyright` of `CIELab16.tif` survive byte for byte in jpg/png/tif/jp2 outputs; `cli_json.rs` covers malformed XMP; a jpg XMP packet over one segment is split into Extended XMP with the rights in the standard packet, an EXIF over one segment loses only its previews; a block that still does not fit (EXIF, unsplittable XMP) is left out with a warning and the JPEG is delivered |
 | ICC profile preservation/conversion | :x: GAP | — | C++ unit tests exist but no HTTP-level round-trip test |
-| IPTC metadata preservation | :white_check_mark: | `heritage_jpeg.rs` | resilient parse of heritage APP13/IPTC; no positive field-value round-trip assertion |
+| IPTC metadata preservation | :white_check_mark: | `heritage_jpeg.rs`; `server.rs::every_output_format_keeps_the_iptc_metadata` | resilient parse of heritage APP13/IPTC; `CIELab16.tif`'s `Iptc.*` lines (Copyright included) equal the source's in jpg/png/tif/jp2 outputs, restricted and unrestricted; IPTC over one segment continues in further APP13 segments (unit `JpegMetadataSegments.LargeIptcContinuesInFurtherApp13Segments`) |
 | Essentials round-trip | :white_check_mark: | `upload.rs::metadata_essentials_roundtrip` | |
 | CLI conversion metadata fidelity | :white_check_mark: | `cli.rs::cli_metadata_fidelity` | |
 | MIME consistency check (`/api/mimetest`) | :white_check_mark: | `server.rs::mime_consistency` | all 6 cases ported |
@@ -608,6 +616,14 @@ Two Rust-shell features the C++-era gap list assumed are permanently **removed**
 | Convert from binaries (`/convert_from_binaries`) | :white_check_mark: | `server.rs::image_conversion_from_binaries` | |
 | Temp directory cleanup | :white_check_mark: | `server.rs::temp_directory_cleanup` | |
 | Restricted image size reduction | :white_check_mark: | `server.rs::restricted_image_reduction` | |
+| Restricted image as its own image (RW, RH) | :white_check_mark: | `dsp_api_closure.rs::restricted_info_json_states_the_restricted_dims_as_its_maximum`, `restricted_info_json_dims_equal_full_max`, `restricted_tiles_at_size_max_stitch_to_full_max`, `restricted_left_half_region_is_the_left_half_of_full_max`, `restricted_canonical_link_is_in_restricted_coordinates`, `permission_code_1_restricts_the_size_of_a_region_request`; unit `//src/ffi:serve_image_test` (`RestrictedImage.*`, `Sizes/RestrictedSize.*`) | ADR-0028: region/size resolve against (RW, RH), exact `full/max` on non-dividing sizes, tiles stitch, pre-rotation (RW, RH) bound, passthrough guard, `/r<RW>x<RH>` cache-key marker; `info.rs::size_restricted_image_states_its_max_size` |
+| `full/max` on unrestricted images is native (DEV-6118) | :white_check_mark: | `iiif_compliance.rs::full_max_on_unrestricted_images_is_the_native_size` | JP2 and TIFF, `max` and `^max` |
+| Restriction refusals and the box size | :white_check_mark: | `security.rs::no_op_restrictions_are_refused_on_every_route`, `restricted_knora_json_dims_match_info_json`, `image_inside_restriction_box_is_served_at_native_size` | A size that never reduces (`max`, `pct:100`, empty watermark) is refused on the image, info.json and knora.json; knora.json dims equal info.json's; an image inside a box size is served at native size |
+| JP2 component subsampling | :white_check_mark: | `server.rs::subsampled_jp2_serves_full_image`; `cli_conversions.rs` `jp2_decode_file3`; unit `//src/format_handlers:formats_test` (`J2kSubsampling.*`, `J2kSubsamplingRegion.*`) | ISO 15444-4 `file3.jp2` decodes full, reduced and by region against the reference; unsupported factors fail fast |
+| JP2 channel order from the `cdef` mapping | :white_check_mark: | `cli_conversions.rs` `jp2_decode_file2`; unit `//src/format_handlers:formats_test` (`J2kChannelOrder.*`) | YCbCr converted in Y/Cb/Cr order, with and without a reversing `cdef` |
+| Writing over a larger existing file | :white_check_mark: | unit `//src/format_handlers:formats_test` (`FormatOverwrite.*`, `JpegWrite.OverwritingLargerFileTruncatesIt`) | No stale trailing bytes in any format |
+| EXIF `addKeyVal` replaces an existing value | :white_check_mark: | unit `//src/metadata:exif_rational_test` (`ExifAddKeyVal.*`) | Tag/group overloads; an unsupported type throws and keeps the value |
+| Size-restricted output dimension metadata | :white_check_mark: | `server.rs::restricted_output_rewrites_dimension_metadata`; `serve_image_test` `RestrictedImage.MetadataDropsPreviewsAndStatesTheDeliveredSize`, `RestrictedImage.ExifImageResourcesDropPreviewsAndStateTheDeliveredSize`; unit `//src/metadata:pixel_dimensions_test` | EXIF and XMP size fields state the delivered size, no EXIF thumbnail, maker-note preview, XMP thumbnail or Photoshop thumbnail resource (crafted source), every other EXIF/IPTC line equal to the unrestricted output |
 | 4-bit palette PNG upload | :white_check_mark: | `upload.rs` | `upload_4bit_palette_png` |
 | Cache API routes (`/api/cache`) | N/A — removed | — | route unregistered, Lua `cache` table bindings absent from `src/` |
 | Favicon endpoint | :x: GAP | — | favicon route exists (`src/server/rust/src/lib.rs`); its only e2e test was removed with the differential suite |
@@ -685,17 +701,17 @@ Two Rust-shell features the C++-era gap list assumed are permanently **removed**
 | Rotation parameters | 9 | 0 | 100% |
 | Quality parameters | 6 | 0 | 100% |
 | Format parameters | 5 | 0 | 100% |
-| CORS | 5 | 0 | 100% |
+| CORS | 13 | 0 | 100% |
 | HTTP behavior | 13 | 0 | 100% |
 | Identifiers | 4 | 1 (ARK/URN) | 80% |
-| Sipi extensions | 90 | 8 | 92% |
-| **Total** | **182** | **9** | **95%** |
+| Sipi extensions | 100 | 7 | 93% |
+| **Total** | **200** | **8** | **96%** |
 
 *(Three additional Sipi-extension rows — Prometheus `/metrics`, `/api/cache`, SSL/TLS — are excluded from this count entirely: they are removed-on-the-Rust-shell features, not gaps. See the N/A note above the extension matrix.)*
 
-**Key remaining gap categories** (8 rows, all in Sipi extensions):
+**Key remaining gap categories** (7 rows, all in Sipi extensions):
 
-- **Deep metadata survival** (2 gaps): positive XMP round-trip, ICC profile HTTP-level round-trip — EXIF/IPTC now covered
+- **Deep metadata survival** (1 gap): ICC profile HTTP-level round-trip — EXIF/IPTC/XMP now covered
 - **Concurrency edge cases** (1 gap): thread-pool-exhaustion saturation test (`concurrent_requests`/`lua_state_thread_isolation` are written and correct, just `#[ignore]`'d for the unrelated 503-shedding reason above — not gaps)
 - **Hardening depth** (2 gaps): TSan (nightly-future), extremely long URL/header (URL half now covered by the nightly libFuzzer target; the header half is untested)
 - **Test-harness depth** (1 gap): a direct SImage Lua-API unit harness (vs. black-box HTTP coverage)

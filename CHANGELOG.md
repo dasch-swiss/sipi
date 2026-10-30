@@ -1,5 +1,67 @@
 # Changelog
 
+## [10.0.0](https://github.com/dasch-swiss/sipi/compare/v9.1.1...v10.0.0) (2026-10-22)
+
+
+### ⚠ BREAKING CHANGES
+
+* **ffi:** region and size on a size-restricted image resolve in the restricted image's coordinate space (RW, RH), not in native pixels; any restricted output larger than (RW, RH) before rotation is a 400. A DSP deployment must move its viewer to info.json tiling in the same release that takes this version.
+
+### Bug Fixes
+
+* **deps:** Raise rustls, quinn-proto and webpki crates past open advisories ([f5596a3](https://github.com/dasch-swiss/sipi/commit/f5596a32b7de0462a76fe9151d0bfcf74b332589))
+* **ffi,server:** Decide restricted-view dimensions once in the shell ([ca84744](https://github.com/dasch-swiss/sipi/commit/ca8474436cb1e2bacbc1f770a4614c0c59bb09b8))
+* **ffi:** Rewrite embedded dimension metadata in size-restricted outputs ([ef4f350](https://github.com/dasch-swiss/sipi/commit/ef4f350a0b25f3ee1ff4d68c80b5572ae89de3c8))
+* **ffi:** Serve a size-restricted image as its own image ([d88f6e9](https://github.com/dasch-swiss/sipi/commit/d88f6e90f8aa8e3d38e450bbbe2930a5a15885c9))
+* **format_handlers,image_processing:** Convert YCbCr JPEG 2000 images in their declared channel order ([1661636](https://github.com/dasch-swiss/sipi/commit/16616360427d656502a9aa74fa4e362fa1675dfa))
+* **format_handlers:** Decode subsampled JPEG 2000 components instead of spinning ([f92245c](https://github.com/dasch-swiss/sipi/commit/f92245c532d6c9c1d914aadfa8f5928838d9ec5b))
+* **format_handlers:** Keep IPTC and oversized metadata blocks in JPEG output ([9481366](https://github.com/dasch-swiss/sipi/commit/9481366c91f9de8997b8a5f864b32d6f7dbee149))
+* **format_handlers:** Truncate an existing file when writing a JPEG ([9999696](https://github.com/dasch-swiss/sipi/commit/9999696eda25c888b98ae118e1cedd64d9482089))
+* **format_handlers:** Zero the holes a streamed TIFF seeks over ([7d7839f](https://github.com/dasch-swiss/sipi/commit/7d7839f6209a41775b8366afdb4818bf0819ca72))
+* **metadata:** Replace an existing EXIF entry in addKeyVal instead of appending ([209eed3](https://github.com/dasch-swiss/sipi/commit/209eed30ac73aeecda425fbe0b23be9c54157979))
+* **server:** Echo the Origin with credentials on info.json ([824f0cf](https://github.com/dasch-swiss/sipi/commit/824f0cf6c17fbb06d32b04dd840229fe3515399a))
+* **server:** State maxWidth and maxHeight on a size-restricted info.json ([fa7a298](https://github.com/dasch-swiss/sipi/commit/fa7a298dea7f64e388487175e84fc399b9644328))
+
+
+### Code Refactoring
+
+* **ffi:** Probe image dims under the decode deadline ([8ab2466](https://github.com/dasch-swiss/sipi/commit/8ab2466efeaa904453fe0d062ee068b292f8716d))
+* **format_handlers:** Scale codec reads through scale_with ([df9c6dd](https://github.com/dasch-swiss/sipi/commit/df9c6dd325a8f5c04b8649743c06e2f279ee1dc3))
+* **iiifparser:** Add size_never_reduces for the restricted-view refusal ([cb73340](https://github.com/dasch-swiss/sipi/commit/cb733407178b9ef5dd0ce8b2d99edab0ca4aac6f))
+* **image_processing:** Add scale_with, the one scaling-method dispatch ([a9203c4](https://github.com/dasch-swiss/sipi/commit/a9203c4e5f9dedd4447ce58ddeeebfef5dbb782d))
+* **image:** Add scaling_method_for, the codec-to-scaling-method mapping ([be14210](https://github.com/dasch-swiss/sipi/commit/be1421006bbf51f26b9596f76e9e7a8a5f544fc5))
+* **metadata:** Add the size-field rewrite and preview removal edits ([331cdd9](https://github.com/dasch-swiss/sipi/commit/331cdd94e729f5c7a01f54efa3b490cb06a2784c))
+* **metadata:** Fit EXIF and XMP blocks into one JPEG marker segment ([dd0fe9c](https://github.com/dasch-swiss/sipi/commit/dd0fe9c77c1d68702c5570a6a3b6bfd24698b484))
+
+
+### Documentation
+
+* **bazel:** Describe the compile database workflow for clangd and clang-tidy ([4065f37](https://github.com/dasch-swiss/sipi/commit/4065f37776b8c98d3d7b69c8c408caa9074a0ed7))
+* **docs:** Make the agent reader the leading principle for commit cleanup ([320628a](https://github.com/dasch-swiss/sipi/commit/320628a5858afe03749bdcb841e1837d5f02d621))
+* **docs:** Note the Vitrinli rename and how to list its Linear issues ([724ce64](https://github.com/dasch-swiss/sipi/commit/724ce64c24886c2f790b518e9801dd6a24578d2f))
+* **docs:** Record the restricted-output metadata rewrite ([d035bbe](https://github.com/dasch-swiss/sipi/commit/d035bbe14196b198e68e9a22f545e31c6eeca26e))
+* **docs:** Record the restricted-view coordinate space in ADR-0028 ([fdabe98](https://github.com/dasch-swiss/sipi/commit/fdabe989cd2229515b2fc6e1e97efc0a9a575728))
+* **format_handlers:** Record the JPEG metadata fit policy ([2cf1b10](https://github.com/dasch-swiss/sipi/commit/2cf1b109d1c05c1f18e08fd2dd2156b59a5d0bd2))
+* **server:** List the info.json and knora.json CORS cases in the testing strategy ([2c74595](https://github.com/dasch-swiss/sipi/commit/2c74595a2d9a01d76acaf7fa73271b3c405040a8))
+* **specs:** Add the Bazel toolchain upgrade plan and its journal ([cad0cc0](https://github.com/dasch-swiss/sipi/commit/cad0cc00fca14d5d34ced33e432fbffc446ec889))
+* **specs:** Add the Vitrinli Todo bug backlog plan and its journal ([6dc1289](https://github.com/dasch-swiss/sipi/commit/6dc12896eb3ed7712f34e9aa8527d54770629344))
+
+
+### Tests
+
+* **format_handlers:** Pin the FlashEnergy EXIF type in the TIFF tag table ([64e0351](https://github.com/dasch-swiss/sipi/commit/64e0351165e94b8921f7155f2e1a21f3ddfbdbbb))
+
+
+### Build System
+
+* **bazel:** Generate compile_commands.json for clangd and clang-tidy ([c036158](https://github.com/dasch-swiss/sipi/commit/c036158ae3a4f2baaeb76a7f065d2d4b1a9cfacb))
+* **bazel:** Make the macOS Rust links warning-clean ([2272102](https://github.com/dasch-swiss/sipi/commit/227210229986a8c330a4bb950df8fe785986422f))
+* **bazel:** Upgrade Bazel to 9.3.0 ([a46523c](https://github.com/dasch-swiss/sipi/commit/a46523c2dcbfbe9cfb8d503b29dfc99ed6347d20))
+* **bazel:** Upgrade hermetic-llvm to 0.8.25 ([e138f0b](https://github.com/dasch-swiss/sipi/commit/e138f0b15fd609fa888991d9895853f65e01631a))
+* **bazel:** Upgrade LLVM to 23.1.2 ([0ce24da](https://github.com/dasch-swiss/sipi/commit/0ce24dab29e482b8f5272997d3f00ff52e7842a2))
+* **bazel:** Upgrade rules_rust to 0.74.0 ([923cfd5](https://github.com/dasch-swiss/sipi/commit/923cfd5c4da65c8178845bd6fead3da42baf1fcc))
+* **bazel:** Upgrade Rust to 1.98.0 ([db27f34](https://github.com/dasch-swiss/sipi/commit/db27f34323638c3968eead09d5e9d0f8a9477382))
+
 ## [9.1.1](https://github.com/dasch-swiss/sipi/compare/v9.1.0...v9.1.1) (2026-09-29)
 
 

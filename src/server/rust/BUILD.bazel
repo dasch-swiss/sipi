@@ -81,6 +81,8 @@ rust_library(
         # The FFI-free two-lane admission pool (classify + acquire + per-partition
         # counters). Owned by `AppState`; `routes.rs` keeps only the call sites.
         "//src/throttling/rust:admission",
+    ],
+    link_deps = [
         # The narrow C FFI seam → the transitive C++ image engine. This is the
         # cc_library → rust link (Open Question #1). //src/ffi:sipi_ffi pulls
         # //src/image, so the library carries the engine without depending on
@@ -119,6 +121,13 @@ _CPP_STDLIB_LINK = select({
     "//conditions:default": [],
 })
 
+# rustc links Apple targets with `-nodefaultlibs`, so clang reports BCR modules'
+# `-pthread` linkopt as unused and rustc's `linker_messages` lint prints it.
+_DARWIN_QUIET_LINK = select({
+    "@platforms//os:macos": ["-Clink-arg=-Wno-unused-command-line-argument"],
+    "//conditions:default": [],
+})
+
 # Inline #[cfg(test)] unit tests (the IIIF parser unit tests). Compiles the
 # library crate with --cfg test; needs the C++ stdlib link args because it
 # links the same cc deps as the library.
@@ -126,6 +135,6 @@ rust_test(
     name = "sipi_unit_test",
     crate = ":lib",
     edition = "2021",
-    rustc_flags = _CPP_STDLIB_LINK,
+    rustc_flags = _CPP_STDLIB_LINK + _DARWIN_QUIET_LINK,
     tags = ["no-sanitizer"],  # see :lib — protobuf won't compile under --config=asan
 )

@@ -89,9 +89,9 @@ TEST(ConvertYcc, ConvertYcc16BitDoesNotOverflow)
   for (size_t y = 0; y < ny; ++y) {
     for (size_t x = 0; x < nx; ++x) {
       const size_t idx = y * nx + x;
-      img.setPixel(x, y, 0, 32768);// Cr, 16-bit chroma midpoint
+      img.setPixel(x, y, 0, 200);// Y
       img.setPixel(x, y, 1, 32768);// Cb, 16-bit chroma midpoint
-      img.setPixel(x, y, 2, 200);// Y
+      img.setPixel(x, y, 2, 32768);// Cr, 16-bit chroma midpoint
       img.setPixel(x, y, 3, static_cast<int>(1000 + idx));// pass-through channel, distinct per pixel
     }
   }

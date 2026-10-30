@@ -1,0 +1,4 @@
+CompileFlags:
+  Remove:
+    - -fno-canonical-system-headers
+    - -fmodule-map-file=*

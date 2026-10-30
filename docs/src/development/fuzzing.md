@@ -246,8 +246,8 @@ corpus-regression, and replay tests.
 
 ### Linux and macOS
 
-`--config=fuzz` links on both platforms. hermetic-llvm **0.8.18** stages the
-compiler-rt libFuzzer runtime for darwin (`libclang_rt.fuzzer_osx.a`, upstream
+`--config=fuzz` links on both platforms. Since **0.8.18**, hermetic-llvm stages
+the compiler-rt libFuzzer runtime for darwin (`libclang_rt.fuzzer_osx.a`, upstream
 [PR #700](https://github.com/hermeticbuild/hermetic-llvm/pull/700)), closing the
 gap where `@llvm//toolchain:resource_dir` used to select `[]` for
 `@platforms//os:macos`. The clang driver also links `libclang_rt.ubsan_osx_dynamic`

@@ -93,7 +93,9 @@ cc_library(
 )
 
 # Decode tier — SipiImage::read() across the @sipi_bench_fixtures input-format
-# matrix. Co-located with the module per ADR-0003 (moved from //src with the
+# matrix, plus one source-tree fixture (`decode_full_subsampled_jp2`, resolved
+# from SIPI_WORKSPACE_ROOT, which `just bench` sets to the repo root).
+# Co-located with the module per ADR-0003 (moved from //src with the
 # format_handlers carve). Built only by `just bench` (`tags = ["manual"]`).
 cc_binary(
     name = "decode_benchmark",
@@ -137,24 +139,30 @@ cc_test(
     name = "formats_test",
     srcs = [
         "cpp/format_error_path_test.cpp",
+        "cpp/format_overwrite_test.cpp",
         "cpp/imginfo_test.cpp",
+        "cpp/j2k_channel_order_test.cpp",
         "cpp/j2k_dimension_regression_test.cpp",
         "cpp/j2k_metadata_regression_test.cpp",
         "cpp/j2k_palette_regression_test.cpp",
+        "cpp/j2k_subsampling_test.cpp",
         "cpp/jpeg_format_regression_test.cpp",
         "cpp/jpeg_marker_regression_test.cpp",
+        "cpp/jpeg_metadata_segments_test.cpp",
         "cpp/jpeg_write_test.cpp",
         "cpp/malformed_tiff_test.cpp",
         "cpp/png_metadata_roundtrip_test.cpp",
         "cpp/select_pyramid_level_test.cpp",
         "cpp/tiff_bilevel_regression_test.cpp",
         "cpp/tiff_exif_rational_test.cpp",
+        "cpp/tiff_stream_write_test.cpp",
     ],
     data = ["//test/_test_data:images"],
     env = {"SIPI_WORKSPACE_ROOT": "."},
     deps = [
         ":format_handlers",
         "//test:test_paths",
+        "@exiv2",
         "@googletest//:gtest_main",
     ],
 )

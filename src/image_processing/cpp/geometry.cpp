@@ -521,6 +521,21 @@ Result<void> scaleMedium(SipiImage &img, size_t nnx, size_t nny)
 
 //============================================================================
 
+Result<void> scale_with(SipiImage &img, size_t nnx, size_t nny, ScalingMethod method)
+{
+  switch (method) {
+  case ScalingMethod::MEDIUM:
+    return scaleMedium(img, nnx, nny);
+  case ScalingMethod::LOW:
+    return scaleFast(img, nnx, nny);
+  case ScalingMethod::HIGH:
+    break;
+  }
+  return scale(img, nnx, nny);
+}
+
+//============================================================================
+
 Result<void> scale(SipiImage &img, size_t nnx, size_t nny)
 {
   SIPI_ZONE_N("SipiImage::scale");

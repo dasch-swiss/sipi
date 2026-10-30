@@ -448,15 +448,10 @@ Result<bool> SipiIOPng::read(SipiImage *img,
     bool redonly;
     SipiSize::SizeType rtype = size->get_size(img->getNx(), img->getNy(), nnx, nny, reduce, redonly);
     if (rtype != SipiSize::FULL) {
-      switch (scaling_quality.png) {
-      case ScalingMethod::HIGH:
-        if (auto r = Sipi::processing::scale(*img, nnx, nny); !r) { return std::unexpected(r.error()); }
-        break;
-      case ScalingMethod::MEDIUM:
-        if (auto r = Sipi::processing::scaleMedium(*img, nnx, nny); !r) { return std::unexpected(r.error()); }
-        break;
-      case ScalingMethod::LOW:
-        if (auto r = Sipi::processing::scaleFast(*img, nnx, nny); !r) { return std::unexpected(r.error()); }
+      if (auto r = Sipi::processing::scale_with(
+            *img, nnx, nny, scaling_method_for(SipiQualityFormat::PNG, scaling_quality));
+          !r) {
+        return std::unexpected(r.error());
       }
     }
   }

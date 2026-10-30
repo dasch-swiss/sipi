@@ -106,6 +106,40 @@ TEST(SipiImage, PyramidTiffReadsFullAndReduced)
   EXPECT_DOUBLE_EQ(reduced_decodes.Value(), before_reduced + 1.0);
 }
 
+TEST(SipiImage, ScalingMethodForReadsTheCodecsSetting)
+{
+  const Sipi::ScalingQuality q{ Sipi::ScalingMethod::HIGH, Sipi::ScalingMethod::MEDIUM, Sipi::ScalingMethod::HIGH,
+    Sipi::ScalingMethod::LOW };
+  EXPECT_EQ(Sipi::scaling_method_for(Sipi::SipiQualityFormat::JP2, q), Sipi::ScalingMethod::HIGH);
+  EXPECT_EQ(Sipi::scaling_method_for(Sipi::SipiQualityFormat::JPG, q), Sipi::ScalingMethod::MEDIUM);
+  EXPECT_EQ(Sipi::scaling_method_for(Sipi::SipiQualityFormat::TIF, q), Sipi::ScalingMethod::MEDIUM);
+  EXPECT_EQ(Sipi::scaling_method_for(Sipi::SipiQualityFormat::PNG, q), Sipi::ScalingMethod::LOW);
+}
+
+// A codec read that scales and a full read scaled afterwards with
+// scaling_method_for() (the size-restricted crop path) give the same pixels.
+TEST(SipiImage, CodecScaleMatchesScaleWithItsMethod)
+{
+  const std::string png = test_images + "unit/sample_with_icc.png";
+  const Sipi::ScalingQuality q{ Sipi::ScalingMethod::HIGH, Sipi::ScalingMethod::HIGH, Sipi::ScalingMethod::HIGH,
+    Sipi::ScalingMethod::LOW };
+  Sipi::SipiImage scaled;
+  ASSERT_TRUE(scaled.read(png, nullptr, std::make_shared<Sipi::SipiSize>("!100,100"), false, q).has_value());
+
+  Sipi::SipiImage full;
+  ASSERT_TRUE(full.read(png).has_value());
+  ASSERT_NE(full.getNx(), scaled.getNx());
+  Sipi::SipiImage high = full;
+  ASSERT_TRUE(Sipi::processing::scale_with(
+    full, scaled.getNx(), scaled.getNy(), Sipi::scaling_method_for(Sipi::SipiQualityFormat::PNG, q))
+      .has_value());
+  EXPECT_TRUE(full == scaled);
+
+  // The methods differ on this image, so the equality above is not vacuous.
+  ASSERT_TRUE(Sipi::processing::scale_with(high, scaled.getNx(), scaled.getNy(), Sipi::ScalingMethod::HIGH).has_value());
+  EXPECT_FALSE(high == scaled);
+}
+
 TEST(SipiImage, ImageComparison)
 {
   Sipi::SipiIOTiff::initLibrary();

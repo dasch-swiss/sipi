@@ -93,8 +93,8 @@ test` compiles the instrumented `sipi` tree exactly once — a single
 action graph shares the ~5500-file compile across both suites (two
 separate jobs would each compile the full tree). Runs on linux-x86_64 only
 (the macOS toolchain args omit the sanitizer header path). ASan/LSan
-symbol resolution uses the hermetic LLVM 22.1.7 `//bazel:llvm-symbolizer`
-(version-matched to clang 22.1.7), which the e2e macro attaches as a test
+symbol resolution uses the hermetic LLVM 23.1.2 `//bazel:llvm-symbolizer`
+(version-matched to clang 23.1.2), which the e2e macro attaches as a test
 runfile under `--config=asan` and points `ASAN_SYMBOLIZER_PATH` at — so the
 tests (unit + e2e) execute on the RBE worker, symbolizer included, rather
 than on the runner.

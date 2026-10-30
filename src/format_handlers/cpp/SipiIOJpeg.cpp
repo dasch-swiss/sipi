@@ -4,6 +4,8 @@
  */
 
 #include <algorithm>
+#include <array>
+#include <climits>
 #include <csetjmp>
 #include <cstdint>
 #include <cstdlib>
@@ -11,6 +13,7 @@
 #include <iostream>
 #include <memory>
 #include <string>
+#include <string_view>
 #include <unistd.h>
 
 #include <cstdio>
@@ -373,6 +376,29 @@ static void jpeg_html_dest(struct jpeg_compress_struct *cinfo,
 
 //=============================================================================
 
+// The image resources of every APP13 "Photoshop 3.0" segment, in order: a
+// resource can continue in the next segment.
+static std::string photoshop_resources(jpeg_saved_marker_ptr marker)
+{
+  std::string resources;
+  for (; marker != nullptr; marker = marker->next) {
+    if (marker->marker == JPEG_APP0 + 13 && marker->data_length >= 14
+        && memcmp("Photoshop 3.0", marker->data, 14) == 0) {
+      resources.append(reinterpret_cast<const char *>(marker->data) + 14, marker->data_length - 14);
+    }
+  }
+  return resources;
+}
+
+Result<bool> SipiIOJpeg::parse_photoshop_resources(SipiImage *img, std::string resources)
+{
+  if (resources.size() > INT_MAX) {
+    return std::unexpected(SipiValueError{ ErrorCode::kMalformedInput, "JPEG Photoshop resources over 2 GB" });
+  }
+  if (resources.empty()) { return true; }
+  return parse_photoshop(img, resources.data(), static_cast<int>(resources.size()));
+}
+
 Result<bool> SipiIOJpeg::parse_photoshop(SipiImage *img, char *data, int length)
 {
   int slen;
@@ -652,9 +678,9 @@ Result<bool> SipiIOJpeg::read(SipiImage *img,
       // the simplest correct extraction is "everything after the namespace
       // header is the XMP packet".
       //
-      // TODO: handle ExtendedXMP (multi-APP1-segment XMP packets
-      // larger than 64 KB). The "http://ns.adobe.com/xmp/extension/\0"
-      // namespace is currently ignored.
+      // Only StandardXMP is read: ExtendedXMP segments
+      // ("http://ns.adobe.com/xmp/extension/\0"), which write() emits for a
+      // packet over one segment, are ignored.
       //
       // Nothing below can throw but std::bad_alloc.
       constexpr size_t kXmpNsLen = 29;// "http://ns.adobe.com/xap/1.0/" + NUL
@@ -693,17 +719,6 @@ Result<bool> SipiIOJpeg::read(SipiImage *img,
           icc_buffer_len += len;
         }
       }
-    } else if (marker->marker == JPEG_APP0 + 13) {
-      // PHOTOSHOP MARKER.... a malformed resource block is fatal: SIPI is a
-      // repository and must not admit corrupt embedded metadata.
-      if (marker->data_length >= 14 && strncmp("Photoshop 3.0", (char *)marker->data, 14) == 0) {
-        if (auto ps = parse_photoshop(img, (char *)marker->data + 14, (int)marker->data_length - 14); !ps) {
-          free(icc_buffer);
-          icc_buffer = nullptr;
-          jpeg_destroy_decompress(&cinfo);
-          return std::unexpected(ps.error());
-        }
-      }
     } else if (marker->marker == JPEG_APP0 + 14) {
       // Adobe APP14 marker — 12-byte segment payload (data_length excludes
       // the 2-byte marker and 2-byte length field that precede it):
@@ -727,6 +742,12 @@ Result<bool> SipiIOJpeg::read(SipiImage *img,
       return std::unexpected(icc.error());
     }
     img->set_icc(*icc);
+  }
+  // A malformed resource block is fatal: SIPI is a repository and must not
+  // admit corrupt embedded metadata.
+  if (auto ps = parse_photoshop_resources(img, photoshop_resources(cinfo.marker_list)); !ps) {
+    jpeg_destroy_decompress(&cinfo);
+    return std::unexpected(ps.error());
   }
 
   // icc_buffer is freed and nulled above; errors → longjmp → setjmp handler
@@ -843,16 +864,10 @@ Result<bool> SipiIOJpeg::read(SipiImage *img,
   // resize/Scale the image if necessary
   //
   if ((size != nullptr) && (rtype != SipiSize::FULL)) {
-    switch (scaling_quality.jpeg) {
-    case ScalingMethod::HIGH:
-      if (auto r = Sipi::processing::scale(*img, nnx, nny); !r) { return std::unexpected(r.error()); }
-      break;
-    case ScalingMethod::MEDIUM:
-      if (auto r = Sipi::processing::scaleMedium(*img, nnx, nny); !r) { return std::unexpected(r.error()); }
-      break;
-    case ScalingMethod::LOW:
-      if (auto r = Sipi::processing::scaleFast(*img, nnx, nny); !r) { return std::unexpected(r.error()); }
-      break;
+    if (auto r = Sipi::processing::scale_with(
+          *img, nnx, nny, scaling_method_for(SipiQualityFormat::JPG, scaling_quality));
+        !r) {
+      return std::unexpected(r.error());
     }
   }
 
@@ -972,9 +987,8 @@ Result<SipiImgInfo> SipiIOJpeg::read_shape(const std::string &filepath)
       // — the APP1 XMP segment payload starts with the 29-byte namespace
       // header "http://ns.adobe.com/xap/1.0/\0"; everything after it is the
       // raw XMP packet (older Photoshop exports omit the optional
-      // <?xpacket> wrappers, so scanning for them is not reliable). TODO:
-      // handle ExtendedXMP (multi-APP1-segment XMP packets larger than
-      // 64 KB).
+      // <?xpacket> wrappers, so scanning for them is not reliable). Only
+      // StandardXMP is read: ExtendedXMP segments are ignored.
       //
       // Nothing below can throw but std::bad_alloc.
       constexpr size_t kXmpNsLen = 29;// "http://ns.adobe.com/xap/1.0/" + NUL
@@ -987,17 +1001,14 @@ Result<SipiImgInfo> SipiIOJpeg::read_shape(const std::string &filepath)
           img.set_xmp(std::make_shared<Xmp>(std::string((const char *)xmp_start, xmp_len)));
         }
       }
-    } else if (marker->marker == JPEG_APP0 + 13) {
-      // PHOTOSHOP MARKER.... a malformed resource block is fatal: SIPI is a
-      // repository and must not admit corrupt embedded metadata.
-      if (marker->data_length >= 14 && strncmp("Photoshop 3.0", (char *)marker->data, 14) == 0) {
-        if (auto ps = parse_photoshop(&img, (char *)marker->data + 14, (int)marker->data_length - 14); !ps) {
-          jpeg_destroy_decompress(&cinfo);
-          return std::unexpected(ps.error());
-        }
-      }
     }
     marker = marker->next;
+  }
+  // A malformed resource block is fatal: SIPI is a repository and must not
+  // admit corrupt embedded metadata.
+  if (auto ps = parse_photoshop_resources(&img, photoshop_resources(cinfo.marker_list)); !ps) {
+    jpeg_destroy_decompress(&cinfo);
+    return std::unexpected(ps.error());
   }
 
   // errors → longjmp → setjmp handler above
@@ -1098,7 +1109,7 @@ Result<void> SipiIOJpeg::write(SipiImage *img, const OutputSink &sink, const Sip
   } else if (filepath == "stdout:") {
     use_stdout = true;
   } else {
-    int outfile = open(filepath.c_str(), O_WRONLY | O_CREAT, S_IRUSR | S_IWUSR | S_IRGRP | S_IROTH);
+    int outfile = open(filepath.c_str(), O_WRONLY | O_CREAT | O_TRUNC, S_IRUSR | S_IWUSR | S_IRGRP | S_IROTH);
     if (outfile == -1) {
       return std::unexpected(SipiValueError{ ErrorCode::kWriteFailed, "Cannot open file \"" + filepath + "\"!" });
     }
@@ -1191,29 +1202,68 @@ Result<void> SipiIOJpeg::write(SipiImage *img, const OutputSink &sink, const Sip
   // buffers — see the note there.
   //
 
+  // A marker segment holds at most 65533 bytes. EXIF has no multi-segment
+  // form; XMP and IPTC larger than one segment continue in further segments.
+  // A block that still cannot be fitted is left out with a warning; it never
+  // fails the write, and every block that fits is still written.
+  constexpr size_t kMaxSegment = 65533;
+  const auto be32 = [](size_t n) {
+    return std::array<unsigned char, 4>{ static_cast<unsigned char>(n >> 24),
+      static_cast<unsigned char>(n >> 16),
+      static_cast<unsigned char>(n >> 8),
+      static_cast<unsigned char>(n) };
+  };
+
   std::vector<unsigned char> exif_marker_payload;
   std::shared_ptr<Exif> exif = img->getExif();
   if (exif != nullptr) {
-    std::vector<unsigned char> buf = exif->exifBytes();
-    char start[] = "Exif\000\000";
-    size_t start_l = sizeof(start) - 1;
-    if (start_l + buf.size() <= 65533) {
-      exif_marker_payload.resize(start_l + buf.size());
-      memcpy(exif_marker_payload.data(), start, start_l);
-      if (!buf.empty()) memcpy(exif_marker_payload.data() + start_l, buf.data(), buf.size());
+    constexpr std::string_view start("Exif\0\0", 6);
+    auto buf = exif->exifBytes(kMaxSegment - start.size());
+    if (buf) {
+      exif_marker_payload.assign(start.begin(), start.end());
+      exif_marker_payload.insert(exif_marker_payload.end(), buf->begin(), buf->end());
+    } else {
+      log_warn("JPEG written without its EXIF block: %s", buf.error().client_message().c_str());
     }
   }
 
-  std::vector<unsigned char> xmp_marker_payload;
+  // StandardXMP, then the ExtendedXMP segments (XMP Specification Part 3,
+  // 1.1.3.1): signature, GUID, full length, offset, part.
+  std::vector<std::vector<unsigned char>> xmp_marker_payloads;
   std::shared_ptr<Xmp> xmp = img->getXmp();
   if (xmp != nullptr) {
-    std::string buf = xmp->xmpBytes();
-    char start[] = "http://ns.adobe.com/xap/1.0/\000";
-    size_t start_l = sizeof(start) - 1;
-    if ((!buf.empty()) && (start_l + buf.size() <= 65533)) {
-      xmp_marker_payload.resize(start_l + buf.size());
-      memcpy(xmp_marker_payload.data(), start, start_l);
-      memcpy(xmp_marker_payload.data() + start_l, buf.data(), buf.size());
+    constexpr std::string_view start("http://ns.adobe.com/xap/1.0/\0", 29);
+    constexpr std::string_view extension("http://ns.adobe.com/xmp/extension/\0", 35);
+    std::string standard = xmp->xmpBytes();
+    Xmp::Extended split;
+    if (start.size() + standard.size() > kMaxSegment) {
+      auto s = xmp->split_extended(kMaxSegment - start.size());
+      if (s) {
+        split = *std::move(s);
+        standard = split.standard;
+      } else {
+        log_warn("JPEG written without its XMP packet (%zu bytes): %s",
+          standard.size(),
+          s.error().client_message().c_str());
+        standard.clear();
+      }
+    }
+    if (!standard.empty()) {
+      auto &payload = xmp_marker_payloads.emplace_back(start.begin(), start.end());
+      payload.insert(payload.end(), standard.begin(), standard.end());
+    }
+    const size_t part_size = kMaxSegment - extension.size() - split.guid.size() - 8;
+    for (size_t offset = 0; offset < split.extended.size(); offset += part_size) {
+      auto &payload = xmp_marker_payloads.emplace_back(extension.begin(), extension.end());
+      payload.insert(payload.end(), split.guid.begin(), split.guid.end());
+      const auto total = be32(split.extended.size());
+      const auto at = be32(offset);
+      payload.insert(payload.end(), total.begin(), total.end());
+      payload.insert(payload.end(), at.begin(), at.end());
+      const size_t n = std::min(part_size, split.extended.size() - offset);
+      payload.insert(payload.end(),
+        split.extended.begin() + static_cast<std::ptrdiff_t>(offset),
+        split.extended.begin() + static_cast<std::ptrdiff_t>(offset + n));
     }
   }
 
@@ -1254,23 +1304,27 @@ Result<void> SipiIOJpeg::write(SipiImage *img, const OutputSink &sink, const Sip
     if (n_towrite != 0) { log_warn("Incomplete JPEG ICC write: %u bytes remaining", n_towrite); }
   }
 
-  std::vector<unsigned char> iptc_marker_payload;
+  // The APP13 layout parse_photoshop() reads: "Photoshop 3.0\0", then one
+  // 8BIM resource 0x0404 (empty name), its length, and the IPTC data padded
+  // to an even length. A resource larger than one segment continues in the
+  // next APP13 segment after its own "Photoshop 3.0\0"; readers join them.
+  std::vector<std::vector<unsigned char>> iptc_marker_payloads;
   std::shared_ptr<Iptc> iptc = img->getIptc();
   if (iptc != nullptr) {
     std::vector<unsigned char> buf = iptc->iptcBytes();
-    char start[] = " Photoshop 3.0\0008BIM\004\004\000\000";
-    size_t start_l = sizeof(start) - 1;
-    if (start_l + 4 + buf.size() <= 65533) {
-      unsigned char siz[4];
-      siz[0] = (unsigned char)((buf.size() >> 24) & 0x000000ff);
-      siz[1] = (unsigned char)((buf.size() >> 16) & 0x000000ff);
-      siz[2] = (unsigned char)((buf.size() >> 8) & 0x000000ff);
-      siz[3] = (unsigned char)(buf.size() & 0x000000ff);
-
-      iptc_marker_payload.resize(start_l + 4 + buf.size());
-      memcpy(iptc_marker_payload.data(), start, start_l);
-      memcpy(iptc_marker_payload.data() + start_l, siz, 4);
-      if (!buf.empty()) memcpy(iptc_marker_payload.data() + start_l + 4, buf.data(), buf.size());
+    constexpr std::string_view start("Photoshop 3.0\0", 14);
+    std::vector<unsigned char> resource = { '8', 'B', 'I', 'M', 0x04, 0x04, 0, 0 };
+    const auto size = be32(buf.size());
+    resource.insert(resource.end(), size.begin(), size.end());
+    resource.insert(resource.end(), buf.begin(), buf.end());
+    if (buf.size() % 2 == 1) { resource.push_back(0); }
+    const size_t part_size = kMaxSegment - start.size();
+    for (size_t offset = 0; offset < resource.size(); offset += part_size) {
+      auto &payload = iptc_marker_payloads.emplace_back(start.begin(), start.end());
+      const size_t n = std::min(part_size, resource.size() - offset);
+      payload.insert(payload.end(),
+        resource.begin() + static_cast<std::ptrdiff_t>(offset),
+        resource.begin() + static_cast<std::ptrdiff_t>(offset + n));
     }
   }
 
@@ -1333,16 +1387,14 @@ Result<void> SipiIOJpeg::write(SipiImage *img, const OutputSink &sink, const Sip
     jpeg_write_marker(
       &cinfo, JPEG_APP0 + 1, exif_marker_payload.data(), static_cast<unsigned int>(exif_marker_payload.size()));
   }
-  if (!xmp_marker_payload.empty()) {
-    jpeg_write_marker(
-      &cinfo, JPEG_APP0 + 1, xmp_marker_payload.data(), static_cast<unsigned int>(xmp_marker_payload.size()));
+  for (const auto &payload : xmp_marker_payloads) {
+    jpeg_write_marker(&cinfo, JPEG_APP0 + 1, payload.data(), static_cast<unsigned int>(payload.size()));
   }
   for (const auto &chunk : icc_marker_chunks) {
     jpeg_write_marker(&cinfo, ICC_MARKER, chunk.data(), static_cast<unsigned int>(chunk.size()));
   }
-  if (!iptc_marker_payload.empty()) {
-    jpeg_write_marker(
-      &cinfo, JPEG_APP0 + 13, iptc_marker_payload.data(), static_cast<unsigned int>(iptc_marker_payload.size()));
+  for (const auto &payload : iptc_marker_payloads) {
+    jpeg_write_marker(&cinfo, JPEG_APP0 + 13, payload.data(), static_cast<unsigned int>(payload.size()));
   }
 
   row_stride = img->getNx() * img->getNc();

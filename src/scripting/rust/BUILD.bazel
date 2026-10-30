@@ -31,9 +31,16 @@ _CPP_STDLIB_LINK = select({
     "//conditions:default": [],
 })
 
+# rustc links Apple targets with `-nodefaultlibs`, so clang reports BCR modules'
+# `-pthread` linkopt as unused and rustc's `linker_messages` lint prints it.
+_DARWIN_QUIET_LINK = select({
+    "@platforms//os:macos": ["-Clink-arg=-Wno-unused-command-line-argument"],
+    "//conditions:default": [],
+})
+
 # The runtime crate: VM factory (hardened profile, deadline hook, binding
 # chokepoint), limits/kill accounting, and the bytecode cache. `@lua` is a
-# direct dep — mlua's `external` mode emits no link inputs of its own, so the
+# `link_deps` entry — mlua's `external` mode emits no link inputs of its own, so the
 # interpreter symbols come from the same BCR cc_library the C++ side links
 # (one symbol set in the final binary).
 rust_library(
@@ -65,9 +72,11 @@ rust_library(
         "@crates//:serde",
         "@crates//:serde_json",
         "@crates//:tracing",
+    ],
+    link_deps = [
         # The narrow C FFI seam → the transitive C++ image engine, for the
-        # sipi_image_* handle family (engine_ffi.rs). @lua stays a direct dep
-        # (mlua external mode emits no link inputs of its own).
+        # sipi_image_* handle family (engine_ffi.rs). @lua is listed because mlua
+        # external mode emits no link inputs of its own.
         "//src/ffi:sipi_ffi",
         "@lua",
         # The sqlite C API for the `sqlite` binding (thin hand-written FFI —
@@ -85,7 +94,7 @@ rust_test(
     name = "scripting_test",
     crate = ":scripting",
     edition = "2021",
-    rustc_flags = _CPP_STDLIB_LINK,
+    rustc_flags = _CPP_STDLIB_LINK + _DARWIN_QUIET_LINK,
     tags = ["no-sanitizer"],
 )
 
@@ -100,7 +109,7 @@ rust_test(
         "@crates//:mlua",
         "@crates//:tempfile",
     ],
-    rustc_flags = _CPP_STDLIB_LINK,
+    rustc_flags = _CPP_STDLIB_LINK + _DARWIN_QUIET_LINK,
     tags = ["no-sanitizer"],
 )
 
@@ -114,7 +123,7 @@ rust_binary(
         "//scripts:all_scripts",
     ],
     edition = "2021",
-    rustc_flags = _CPP_STDLIB_LINK,
+    rustc_flags = _CPP_STDLIB_LINK + _DARWIN_QUIET_LINK,
     tags = [
         "manual",
         "no-sanitizer",
@@ -137,7 +146,7 @@ rust_test(
         "@crates//:serde_json",
         "@crates//:tempfile",
     ],
-    rustc_flags = _CPP_STDLIB_LINK,
+    rustc_flags = _CPP_STDLIB_LINK + _DARWIN_QUIET_LINK,
     tags = ["no-sanitizer"],
 )
 
@@ -147,7 +156,7 @@ rust_test(
     name = "entry_test",
     srcs = ["entry_tests.rs"],
     edition = "2021",
-    rustc_flags = _CPP_STDLIB_LINK,
+    rustc_flags = _CPP_STDLIB_LINK + _DARWIN_QUIET_LINK,
     tags = ["no-sanitizer"],
     deps = [
         ":scripting",
@@ -163,7 +172,7 @@ rust_test(
     srcs = ["image_tests.rs"],
     data = ["//test/_test_data:images"],
     edition = "2021",
-    rustc_flags = _CPP_STDLIB_LINK,
+    rustc_flags = _CPP_STDLIB_LINK + _DARWIN_QUIET_LINK,
     tags = ["no-sanitizer"],
     deps = [
         ":scripting",
@@ -186,22 +195,20 @@ rust_test(
         "@crates//:tempfile",
         "@rules_rust//rust/runfiles",
     ],
-    rustc_flags = _CPP_STDLIB_LINK,
+    rustc_flags = _CPP_STDLIB_LINK + _DARWIN_QUIET_LINK,
     tags = ["no-sanitizer"],
 )
 
 # Pins the mlua ↔ `@lua` external-link contract: VM creation, chunk exec,
 # integer-width ABI, `set_memory_limit`, the instruction-count hook, and the
 # `panic=unwind` build profile mlua's callback boundary requires. `@lua` is a
-# direct dep — with `external`, mlua-sys emits no link inputs of its own.
+# `link_deps` entry — with `external`, mlua-sys emits no link inputs of its own.
 rust_test(
     name = "mlua_external_link_test",
     srcs = ["mlua_external_link_test.rs"],
     edition = "2021",
-    deps = [
-        "@crates//:mlua",
-        "@lua",
-    ],
+    deps = ["@crates//:mlua"],
+    link_deps = ["@lua"],
     rustc_flags = _CPP_STDLIB_LINK,
     tags = ["no-sanitizer"],
 )

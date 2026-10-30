@@ -19,7 +19,13 @@ multiple concurrent large decodes.
 1. **Precise estimation from IIIF parameters:** Before each decode, the actual
    decode buffer size is computed from IIIF region/size parameters. For JP2, this
    accounts for DWT reduce levels and ROI restrictions — a tile request on a
-   20000x30000 source estimates ~4MB, not 4.8GB.
+   20000x30000 source estimates ~4MB, not 4.8GB. A JP2 with subsampled
+   components also holds one buffer per component while it decodes, together at
+   most the size of the decode buffer (half of it for 4:2:0). The estimate does
+   not charge them: the shape probe it is computed from does not report
+   subsampling. A size-restricted request is estimated as the decode of the
+   whole image at the restricted dimensions (RW, RH), whatever its region, since
+   every restricted output is cut from that one rendering.
 
 2. **Pipeline-aware peak estimation:** Walks the processing stages (decode → scale
    → rotate → ICC convert) and returns the maximum concurrent allocation at any

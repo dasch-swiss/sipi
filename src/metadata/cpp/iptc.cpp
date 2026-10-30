@@ -31,6 +31,20 @@ std::vector<unsigned char> Iptc::iptcBytes()
 }
 //============================================================================
 
+void Iptc::erase_preview()
+{
+  for (auto it = iptcData.begin(); it != iptcData.end();) {
+    const std::string key = it->key();
+    if (key == "Iptc.Application2.Preview" || key == "Iptc.Application2.PreviewFormat"
+        || key == "Iptc.Application2.PreviewVersion") {
+      it = iptcData.erase(it);
+    } else {
+      ++it;
+    }
+  }
+}
+//============================================================================
+
 std::ostream &operator<<(std::ostream &outstr, Iptc &rhs)
 {
   Exiv2::IptcData::iterator end = rhs.iptcData.end();

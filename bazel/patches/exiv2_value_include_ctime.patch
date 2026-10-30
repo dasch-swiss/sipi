@@ -1,0 +1,18 @@
+Include <ctime> in exiv2's `src/value.cpp`, which calls `std::mktime`.
+
+exiv2 0.28.9 relies on a transitive include for `std::mktime`. LLVM 23's
+libc++ no longer provides it on Linux, so the compile fails there with "no
+member named 'mktime' in namespace 'std'" (macOS still gets it transitively).
+Drop this patch once the pinned exiv2 includes <ctime> in value.cpp itself
+(the patch fails loudly on file-shape changes — desired feedback).
+
+--- a/src/value.cpp
++++ b/src/value.cpp
+@@ -9,6 +9,7 @@
+ #include "types.hpp"
+
+ // + standard includes
++#include <ctime>
+ #include <sstream>
+
+ // *****************************************************************************

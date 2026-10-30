@@ -14,10 +14,14 @@
 
 #include <gtest/gtest.h>
 
+#include <cstdint>
+#include <iterator>
 #include <memory>
+#include <sstream>
 #include <string>
 #include <vector>
 
+#include "error/SipiError.h"
 #include "image/SipiImage.h"
 #include "format_handlers/SipiIOTiff.h"
 #include "metadata/exif.h"
@@ -89,4 +93,95 @@ TEST(ExifRationalRegression, LensStringTagsRoundTrip)
   std::string lens_model;
   ASSERT_TRUE(exif->getValByKey("Exif.Photo.LensModel", lens_model));
   EXPECT_EQ(lens_model, "AF-S Nikkor 70-200mm f/2.8E FL ED VR");
+}
+
+namespace {
+
+const uint16_t kBrightnessValueTag = Exiv2::ExifKey("Exif.Photo.BrightnessValue").tag();
+const uint16_t kLensMakeTag = Exiv2::ExifKey("Exif.Photo.LensMake").tag();
+const uint16_t kLensSpecificationTag = Exiv2::ExifKey("Exif.Photo.LensSpecification").tag();
+
+// Exif has no entry accessor, so count the lines of its operator<< text that start with `key `.
+size_t key_occurrences(Sipi::Exif &exif, const std::string &key)
+{
+  std::ostringstream text;
+  text << exif;
+  std::istringstream lines(text.str());
+  size_t count = 0;
+  for (std::string line; std::getline(lines, line);) {
+    if (line.starts_with(key + " ")) { ++count; }
+  }
+  return count;
+}
+
+}// namespace
+
+TEST(ExifAddKeyVal, ScalarOverloadReplacesExistingValue)
+{
+  Sipi::Exif exif;
+  exif.addKeyVal(kBrightnessValueTag, "Photo", Exiv2::Rational{ 1, 2 });
+  exif.addKeyVal(kBrightnessValueTag, "Photo", Exiv2::Rational{ 3, 4 });
+
+  Exiv2::Rational value;
+  ASSERT_TRUE(exif.getValByKey(kBrightnessValueTag, "Photo", value));
+  EXPECT_EQ(value, (Exiv2::Rational{ 3, 4 }));
+  EXPECT_EQ(key_occurrences(exif, "Exif.Photo.BrightnessValue"), 1u);
+}
+
+TEST(ExifAddKeyVal, StringOverloadReplacesExistingValue)
+{
+  Sipi::Exif exif;
+  exif.addKeyVal(kLensMakeTag, "Photo", std::string("Nikon"));
+  exif.addKeyVal(kLensMakeTag, "Photo", std::string("Canon"));
+
+  std::string value;
+  ASSERT_TRUE(exif.getValByKey(kLensMakeTag, "Photo", value));
+  EXPECT_EQ(value, "Canon");
+  EXPECT_EQ(key_occurrences(exif, "Exif.Photo.LensMake"), 1u);
+}
+
+TEST(ExifAddKeyVal, PointerOverloadReplacesExistingValue)
+{
+  Sipi::Exif exif;
+  const Exiv2::Rational first[4] = { { 70, 1 }, { 200, 1 }, { 28, 10 }, { 28, 10 } };
+  const Exiv2::Rational second[4] = { { 24, 1 }, { 70, 1 }, { 4, 1 }, { 4, 1 } };
+  exif.addKeyVal(kLensSpecificationTag, "Photo", first, 4);
+  exif.addKeyVal(kLensSpecificationTag, "Photo", second, 4);
+
+  std::vector<Exiv2::Rational> value;
+  ASSERT_TRUE(exif.getValByKey(kLensSpecificationTag, "Photo", value));
+  EXPECT_EQ(value, std::vector<Exiv2::Rational>(std::begin(second), std::end(second)));
+  EXPECT_EQ(key_occurrences(exif, "Exif.Photo.LensSpecification"), 1u);
+}
+
+// image_orientation.jpg carries Exif.Photo.BrightnessValue as 0/0.
+TEST(ExifAddKeyVal, ReplacesValueReadFromJpeg)
+{
+  Sipi::SipiImage img;
+  ASSERT_TRUE(img.read(sipi::test::data_dir() + "/images/unit/image_orientation.jpg").has_value());
+  auto exif = img.getExif();
+  ASSERT_NE(exif, nullptr);
+  ASSERT_EQ(key_occurrences(*exif, "Exif.Photo.BrightnessValue"), 1u);
+
+  exif->addKeyVal(kBrightnessValueTag, "Photo", Exiv2::Rational{ 7, 2 });
+
+  Exiv2::Rational value;
+  ASSERT_TRUE(exif->getValByKey(kBrightnessValueTag, "Photo", value));
+  EXPECT_EQ(value, (Exiv2::Rational{ 7, 2 }));
+  EXPECT_EQ(key_occurrences(*exif, "Exif.Photo.BrightnessValue"), 1u);
+}
+
+TEST(ExifAddKeyVal, UnsupportedTypeThrowsAndKeepsExistingValue)
+{
+  Sipi::Exif exif;
+  exif.addKeyVal(kBrightnessValueTag, "Photo", Exiv2::Rational{ 3, 4 });
+
+  EXPECT_THROW(exif.addKeyVal(kBrightnessValueTag, "Photo", int64_t{ 5 }), Sipi::SipiError);
+  const int64_t values[2] = { 5, 6 };
+  EXPECT_THROW(exif.addKeyVal(kBrightnessValueTag, "Photo", values, 2), Sipi::SipiError);
+
+  Exiv2::Rational value;
+  ASSERT_TRUE(exif.getValByKey(kBrightnessValueTag, "Photo", value));
+  EXPECT_EQ(value, (Exiv2::Rational{ 3, 4 }));
+  EXPECT_EQ(key_occurrences(exif, "Exif.Photo.BrightnessValue"), 1u);
 }

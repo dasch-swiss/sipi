@@ -80,9 +80,9 @@ cc_binary(
             # ships only glibc + cacert + tzdata + openssl — there is
             # no libc++.so.1 there for the dynamic loader to find.
             # Without these flags sipi exits silently on first
-            # syscall under distroless. clang's libc++ ABI is stable
-            # across LLVM 19.x patch releases, so static-linking does
-            # not freeze us at toolchains_llvm 1.7.0.
+            # syscall under distroless. The archives come from the
+            # hermetic toolchain, so an `llvm.version` bump changes the
+            # embedded libc++ with no change to the image.
             #
             # `-Wl,-Bstatic … -Wl,-Bdynamic` brackets these three
             # archives only — system libs (`-lpthread`, `-lm`, `-ldl`)

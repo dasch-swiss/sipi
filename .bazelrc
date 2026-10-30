@@ -1,4 +1,4 @@
-# Sipi Bazel configuration — pinned to Bazel 9.0.2 LTS (.bazelversion).
+# Sipi Bazel configuration — Bazel version pinned in .bazelversion.
 #
 # Defaults in Bazel 9 (do NOT re-declare):
 #   --enable_bzlmod                          (default in 9)
@@ -148,16 +148,18 @@ build:linux --copt=-fstack-clash-protection
 
 # ── macOS ──────────────────────────────────────────────────────────────────
 # Pin the deployment target so Bazel-built binaries are portable across macOS
-# releases. The hermetic `llvm` toolchain fetches the MacOSX26.4 SDK from
+# releases. The hermetic `llvm` toolchain fetches the MacOSX26.5 SDK from
 # Apple's CDN; a recent SDK otherwise defaults the deployment target high, so
-# pin the floor explicitly. 13.3 is retained from the toolchains_llvm era (the
-# floor at which Apple's libc++ marked the C++23 `<expected>` machinery
-# available) and remains a safe minimum under hermetic-llvm's own libc++.
-build:macos --copt=-mmacosx-version-min=13.3
-build:macos --linkopt=-mmacosx-version-min=13.3
-build:macos --host_copt=-mmacosx-version-min=13.3
-build:macos --host_linkopt=-mmacosx-version-min=13.3
-build:macos --action_env=MACOSX_DEPLOYMENT_TARGET=13.3
+# pin the floor explicitly. macOS builds serve development and the macos-14 CI
+# leg only; production is Linux. Keep the floor at or above the deployment
+# target hermetic-llvm gives cc-rs build-script objects (`ring`, 14.0), which
+# `MACOSX_DEPLOYMENT_TARGET` below does not reach, or ld64.lld warns on every
+# Rust link.
+build:macos --copt=-mmacosx-version-min=14.0
+build:macos --linkopt=-mmacosx-version-min=14.0
+build:macos --host_copt=-mmacosx-version-min=14.0
+build:macos --host_linkopt=-mmacosx-version-min=14.0
+build:macos --action_env=MACOSX_DEPLOYMENT_TARGET=14.0
 
 # Inherit PATH during repo-rule evaluation on macOS so the Kakadu
 # `gh_release_archive` fetch (needs `gh` from the Nix dev shell) stays
@@ -351,8 +353,8 @@ build:tracy --copt=-Wno-thread-safety-analysis
 # build-completeness invariant holds by default and only this config needs the
 # runtime.
 #
-# **Linux + macOS.** hermetic-llvm 0.8.18 stages the compiler-rt libFuzzer
-# runtime for darwin too (`libclang_rt.fuzzer_osx.a`, upstream PR #700), so
+# **Linux + macOS.** Since 0.8.18, hermetic-llvm stages the compiler-rt
+# libFuzzer runtime for darwin too (`libclang_rt.fuzzer_osx.a`, upstream PR #700), so
 # `-fsanitize=fuzzer` links on macOS as well as Linux. The driver also pulls
 # `libclang_rt.ubsan_osx_dynamic` on darwin, so `config:ubsan=true` below is
 # required on both. (rules_fuzzing's Python launcher deps also need a macOS

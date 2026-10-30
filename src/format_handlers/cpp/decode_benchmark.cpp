@@ -23,6 +23,9 @@
 // measured path by design (decision recorded in the plan: no in-memory
 // decode seam exists, and adding one would be new public API).
 //
+// Plus decode_full_subsampled_jp2: a full decode of the ISO/IEC 15444-4
+// file3.jp2 (chroma subsampled 2x2), read from the source tree.
+//
 // HTJ2K is absent from the matrix: Kakadu's HT block coder is
 // license-gated (FBC_ENABLED) and the production build cannot decode it.
 //
@@ -108,5 +111,29 @@ SIPI_DECODE_BENCH(jpeg_baseline, "baseline.jpg");
 SIPI_DECODE_BENCH(flat_tiff, "flat.tif");
 
 #undef SIPI_DECODE_BENCH
+
+// Full decode of the ISO/IEC 15444-4 conformance file file3.jp2 (480x640,
+// sYCC, chroma subsampled 2x2): the planar pull + upsampling path in
+// SipiIOJ2k::read. It lives in the source tree, not @sipi_bench_fixtures, so it
+// resolves from SIPI_WORKSPACE_ROOT, which `just bench` exports.
+void decode_full_subsampled_jp2(benchmark::State &state)
+{
+  const char *root = std::getenv("SIPI_WORKSPACE_ROOT");
+  if (root == nullptr) {
+    std::fprintf(stderr, "SIPI_WORKSPACE_ROOT not set — run via `just bench decode`\n");
+    std::exit(1);
+  }
+  const std::string path = std::string{ root } + "/test/_test_data/images/iso-15444-4/testfiles_jp2/file3.jp2";
+  int64_t bytes = 0;
+  for (auto _ : state) {
+    Sipi::SipiImage img;
+    if (!img.read(path)) { std::abort(); }
+    benchmark::DoNotOptimize(img.getNx());
+    benchmark::ClobberMemory();
+    bytes = static_cast<int64_t>(img.getNx() * img.getNy() * img.getNc());
+  }
+  state.SetBytesProcessed(state.iterations() * bytes);
+}
+BENCHMARK(decode_full_subsampled_jp2)->Unit(benchmark::kMillisecond);
 
 }// namespace

@@ -86,9 +86,12 @@ fn sizes_for(width: u32, height: u32, scale_factors: &[u32]) -> Vec<Value> {
 }
 
 /// IIIF `info.json` for an image. The auth-service
-/// block (preflight-driven) is added by the handler.
+/// block (preflight-driven) is added by the handler. A size-restricted image
+/// (`size_restricted`, `dims` already its restricted (RW, RH)) also states
+/// `maxWidth`/`maxHeight` = (RW, RH): the engine serves nothing larger, so
+/// `^max` equals `max` (IIIF Image API 3.0 §5.2).
 #[must_use]
-pub fn image_info_json(id: &str, dims: &SipiImageDims) -> Value {
+pub fn image_info_json(id: &str, dims: &SipiImageDims, size_restricted: bool) -> Value {
     let mut root = Map::new();
     root.insert("@context".into(), json!(IMAGE_CONTEXT));
     root.insert("id".into(), json!(id));
@@ -97,6 +100,10 @@ pub fn image_info_json(id: &str, dims: &SipiImageDims) -> Value {
     root.insert("profile".into(), json!("level2"));
     root.insert("width".into(), json!(dims.width));
     root.insert("height".into(), json!(dims.height));
+    if size_restricted {
+        root.insert("maxWidth".into(), json!(dims.width));
+        root.insert("maxHeight".into(), json!(dims.height));
+    }
     if dims.numpages > 0 {
         root.insert("numpages".into(), json!(dims.numpages));
     }
@@ -334,7 +341,7 @@ mod tests {
         // The exact shape the e2e golden snapshot pins (iiif_compliance__info-json-lena512):
         // 512x512, tile 512 → the whole image already fits one tile, so there is no
         // pyramid: scaleFactors [1] and sizes [{512,512}] (native only).
-        let v = image_info_json("http://h/unit/lena512.jp2", &dims(512, 512, 512));
+        let v = image_info_json("http://h/unit/lena512.jp2", &dims(512, 512, 512), false);
         assert_eq!(v["type"], "ImageService3");
         assert_eq!(v["protocol"], "http://iiif.io/api/image");
         assert_eq!(v["profile"], "level2");
@@ -346,6 +353,21 @@ mod tests {
         assert_eq!(v["extraFeatures"].as_array().unwrap().len(), 17);
         assert_eq!(v["extraFormats"], json!(["tif", "jp2"]));
         assert!(v.get("numpages").is_none());
+        assert!(v.get("maxWidth").is_none());
+        assert!(v.get("maxHeight").is_none());
+    }
+
+    #[test]
+    fn size_restricted_image_states_its_max_size() {
+        // A restricted (RW, RH) of 96x128 arrives untiled: one sizes entry,
+        // and maxWidth/maxHeight bound every `^` request at full/max.
+        let v = image_info_json("http://h/id", &dims(96, 128, 0), true);
+        assert_eq!(v["width"], 96);
+        assert_eq!(v["height"], 128);
+        assert_eq!(v["maxWidth"], 96);
+        assert_eq!(v["maxHeight"], 128);
+        assert_eq!(v["sizes"], json!([{ "width": 96, "height": 128 }]));
+        assert!(v.get("tiles").is_none());
     }
 
     #[test]
@@ -353,7 +375,7 @@ mod tests {
         // tile_width == 0 → derive the sizes ladder from DEFAULT_TILE_SIZE (512),
         // tiles stays omitted. 1000x800 / 512 → scaleFactors [1,2], so
         // sizes ascending are [{500,400},{1000,800}].
-        let v = image_info_json("http://h/id", &dims(1000, 800, 0));
+        let v = image_info_json("http://h/id", &dims(1000, 800, 0), false);
         assert!(v.get("tiles").is_none());
         assert_eq!(
             v["sizes"],
@@ -417,7 +439,7 @@ mod tests {
                 tile_width: c.tw,
                 tile_height: c.th,
             };
-            let v = image_info_json("http://h/id", &d);
+            let v = image_info_json("http://h/id", &d, false);
 
             // §5.4: exactly one tile object; width/height are the stored tile
             // size, passed through unchanged.
@@ -485,7 +507,7 @@ mod tests {
             tile_width: 1,
             tile_height: 512,
         };
-        let v = image_info_json("http://h/id", &d);
+        let v = image_info_json("http://h/id", &d, false);
         let sf = v["tiles"][0]["scaleFactors"].as_array().unwrap();
         assert_eq!(sf.len(), 32, "exponent clamped to 31 → 2^0..2^31");
         assert!(

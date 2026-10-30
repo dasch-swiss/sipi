@@ -8,14 +8,14 @@
 exports_files(["kakadu.BUILD.bazel"])
 
 # Per-tool binutils from the prebuilt LLVM bundle, version-matched to the
-# toolchain (LLVM 22), selected by the *exec* platform: the debug-split genrule (`//src:sipi_debug_
+# toolchain (LLVM 23), selected by the *exec* platform: the debug-split genrule (`//src:sipi_debug_
 # split`, Linux-only) needs llvm-objcopy/llvm-readelf, and `just bazel-coverage`
 # needs llvm-cov/llvm-profdata version-matched to the instrumented `.profraw`
-# (a host LLVM 19 profdata cannot read an LLVM 22 profile). The Linux branches
+# (a host LLVM 19 profdata cannot read an LLVM 23 profile). The Linux branches
 # cover CI's two arches; the darwin default keeps `bazel build //...` resolving
 # on macOS (where the genrule is incompatible-skipped and coverage uses the
-# darwin bundle). Bumping LLVM_VERSION means updating the bundle names here and
-# in MODULE.bazel (ADR-0014 policy).
+# darwin bundle). The bundle repo names carry no version: the bundles follow
+# `llvm.version` in MODULE.bazel, so an LLVM bump needs no edit here.
 alias(
     name = "llvm-objcopy",
     actual = select({
@@ -102,4 +102,27 @@ cc_library(
     # out here ensures the macro is visible to any tooling that
     # introspects the cc_library's `defines`.
     defines = ["_GNU_SOURCE"],
+)
+
+# Public for the same reason as `:llvm-cov`: `just compile-commands` resolves
+# the absolute path of clang++ (the compile database's driver) and clangd (an
+# LSP server matching the toolchain version) via `bazel cquery --output=files`.
+alias(
+    name = "clang++",
+    actual = select({
+        "//platforms:is_linux_x86_64": "@llvm-toolchain-minimal-linux-amd64//:bin/clang++",
+        "//platforms:is_linux_aarch64": "@llvm-toolchain-minimal-linux-arm64//:bin/clang++",
+        "//conditions:default": "@llvm-toolchain-minimal-darwin-arm64//:bin/clang++",
+    }),
+    visibility = ["//visibility:public"],
+)
+
+alias(
+    name = "clangd",
+    actual = select({
+        "//platforms:is_linux_x86_64": "@llvm-toolchain-minimal-linux-amd64//:bin/clangd",
+        "//platforms:is_linux_aarch64": "@llvm-toolchain-minimal-linux-arm64//:bin/clangd",
+        "//conditions:default": "@llvm-toolchain-minimal-darwin-arm64//:bin/clangd",
+    }),
+    visibility = ["//visibility:public"],
 )

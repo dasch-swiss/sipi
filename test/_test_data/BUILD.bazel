@@ -74,6 +74,7 @@ filegroup(
         "images/malformed/j2k_eight_component.jp2",
         "images/malformed/j2k_exif_truncated.jp2",
         "images/malformed/j2k_oversized_dimensions.jp2",
+        "images/malformed/j2k_subsampling_unsupported_truncated.jp2",
         "images/malformed/j2k_uuid_rubber_length.jp2",
         "images/malformed/palette_undersized_lut.jp2",
         "images/unit/gray_with_icc.jp2",

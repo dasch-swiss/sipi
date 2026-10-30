@@ -33,6 +33,7 @@
 #include <memory>
 #include <span>
 #include <string>
+#include <type_traits>
 #include <vector>
 
 #include <cstring>
@@ -78,6 +79,94 @@ constexpr std::int64_t kMaxMetadataBytes = 64 * 1024 * 1024;// 64 MiB cap on any
   const int processors = kdu_get_num_processors();
   if (processors < 2) return 0;
   return std::min(processors, KDU_MAX_THREADS);
+}
+
+// Pixel channel of each of the nc codestream components: colour k of the
+// layer's colour space (Y, Cb, Cr for YCbCr) goes to channel k, taken from the
+// component the JP2 channel mapping (cdef box) assigns to it; components that
+// carry no colour (alpha) follow in codestream order. Empty when the mapping
+// is the identity or not a plain component permutation (a palette, another
+// codestream): component c then stays in channel c.
+[[nodiscard]] std::vector<int> jp2_channel_of(const jp2_channels &channels, int numcol, int nc)
+{
+  std::vector<int> channel_of(nc, -1);
+  for (int k = 0; k < numcol; ++k) {
+    int comp = 0;
+    int lut = 0;
+    int stream = 0;
+    int format = 0;
+    if (!channels.get_colour_mapping(k, comp, lut, stream, format) || lut >= 0 || stream != 0 || comp < 0
+        || comp >= nc || channel_of[comp] >= 0) {
+      return {};
+    }
+    channel_of[comp] = k;
+  }
+  int next = numcol;
+  bool identity = true;
+  for (int c = 0; c < nc; ++c) {
+    if (channel_of[c] < 0) channel_of[c] = next++;
+    identity = identity && channel_of[c] == c;
+  }
+  if (identity) return {};
+  return channel_of;
+}
+
+// Decodes a JP2 whose components are subsampled relative to component 0
+// (factors[c] is 1 or 2 per axis): pulls each component into its own buffer at
+// its own size, then replicates each sample onto component 0's grid and
+// interleaves it into `dst` (nc samples per pixel) at channel channel_of[c]
+// (component c when channel_of is empty). JPEG 2000 sites component
+// samples co-sited: sample k of a component with factor f sits at component-0
+// position k*f and covers positions k*f .. k*f+f-1. Positions come from
+// get_dims after the input restrictions, so region origins and reduce levels
+// stay aligned.
+template<typename T>
+void pull_upsampled(kdu_supp::kdu_stripe_decompressor &decompressor,
+  kdu_core::kdu_codestream &codestream,
+  const std::vector<kdu_core::kdu_coords> &factors,
+  const std::vector<int> &channel_of,
+  T *dst)
+{
+  const int nc = static_cast<int>(factors.size());
+  std::vector<kdu_core::kdu_dims> comp_dims(nc);
+  std::vector<std::vector<T>> planes(nc);
+  std::vector<T *> bufs(nc);
+  std::vector<int> heights(nc);
+  for (int c = 0; c < nc; ++c) {
+    codestream.get_dims(c, comp_dims[c], true);
+    planes[c].resize(static_cast<std::size_t>(comp_dims[c].size.x) * static_cast<std::size_t>(comp_dims[c].size.y));
+    bufs[c] = planes[c].data();
+    heights[c] = comp_dims[c].size.y;
+  }
+  if constexpr (std::is_same_v<T, kdu_core::kdu_byte>) {
+    decompressor.pull_stripe(bufs.data(), heights.data());
+  } else {
+    const auto is_signed = std::make_unique<bool[]>(nc);// all false: unsigned samples
+    decompressor.pull_stripe(bufs.data(), heights.data(), nullptr, nullptr, nullptr, is_signed.get());
+  }
+
+  const kdu_core::kdu_dims &ref = comp_dims[0];
+  const std::size_t nx = ref.size.x;
+  const std::size_t ny = ref.size.y;
+  // Component sample index for each reference coordinate, clamped to the
+  // component's extent.
+  const auto source_index = [](int ref_pos, std::size_t n, int f, int comp_pos, int comp_len) {
+    std::vector<std::size_t> idx(n);
+    for (std::size_t i = 0; i < n; ++i) {
+      idx[i] = std::clamp((ref_pos + static_cast<int>(i)) / f - comp_pos, 0, comp_len - 1);
+    }
+    return idx;
+  };
+  for (int c = 0; c < nc; ++c) {
+    const kdu_core::kdu_dims &d = comp_dims[c];
+    const auto xs = source_index(ref.pos.x, nx, factors[c].x, d.pos.x, d.size.x);
+    const auto ys = source_index(ref.pos.y, ny, factors[c].y, d.pos.y, d.size.y);
+    for (std::size_t j = 0; j < ny; ++j) {
+      const T *row = planes[c].data() + ys[j] * static_cast<std::size_t>(d.size.x);
+      T *out = dst + j * nx * nc + (channel_of.empty() ? c : channel_of[c]);
+      for (std::size_t i = 0; i < nx; ++i) { out[i * nc] = row[xs[i]]; }
+    }
+  }
 }
 }// namespace
 
@@ -552,17 +641,97 @@ Result<bool> SipiIOJ2k::read(SipiImage *img,
   codestream.apply_input_restrictions(0, 0, reduce, 0, do_roi ? &roi : nullptr);
 
 
-  // Determine number of components to decompress
+  // Output components, as kdu_stripe_decompressor counts them: every buffer,
+  // stripe height and loop bound below uses this one count.
+  const int nc = codestream.get_num_components(true);
   kdu_core::kdu_dims dims;
-  codestream.get_dims(0, dims);
+  codestream.get_dims(0, dims, true);
 
   // bitdepth of zeroth component, assumed valid for all; nc is not the same as
   // the number of colors. No pixel buffer exists yet, so geometry alone moves.
-  img->set_geometry(dims.size.x, dims.size.y, codestream.get_num_components(), codestream.get_bit_depth(0));
+  img->set_geometry(dims.size.x, dims.size.y, nc, codestream.get_bit_depth(0));
 
   if (auto r = validate_decode_dims(img->getNx(), img->getNy(), img->getNc(), static_cast<int>(img->getBps()), filepath);
       !r) {
     return std::unexpected(r.error());
+  }
+
+  // Subsampling of each component relative to component 0, from the
+  // fundamental factors (a dims ratio is off by the ceil() of odd extents).
+  // Only factors 1 and 2 are decoded; anything else fails here, before
+  // decompressor.start.
+  std::vector<kdu_core::kdu_coords> factors(nc);
+  bool subsampled = false;
+  const kdu_core::kdu_dims requested = dims;
+  // A corrupt codestream can make these Kakadu queries raise an error, thrown
+  // as a kdu_exception; it must leave as a value error like the reads above.
+  try {
+    {
+      kdu_core::kdu_coords s0;
+      codestream.get_min_subsampling(0, s0, true);
+      const auto supported = [](int s, int ref) { return s % ref == 0 && (s / ref == 1 || s / ref == 2); };
+      for (int c = 0; c < nc; ++c) {
+        kdu_core::kdu_coords sc;
+        codestream.get_min_subsampling(c, sc, true);
+        if (!supported(sc.x, s0.x) || !supported(sc.y, s0.y)) {
+          return std::unexpected(SipiValueError{ ErrorCode::kUnsupportedFormat,
+            "Cannot read JPEG2000 file \"" + filepath + "\": component " + std::to_string(c) + " subsampling "
+              + std::to_string(sc.x) + "x" + std::to_string(sc.y) + " relative to component 0's " + std::to_string(s0.x)
+              + "x" + std::to_string(s0.y) + " is not supported" });
+        }
+        factors[c] = kdu_core::kdu_coords(sc.x / s0.x, sc.y / s0.y);
+        subsampled = subsampled || factors[c].x != 1 || factors[c].y != 1;
+      }
+    }
+
+    // A region read of a subsampled image decodes a window expanded outward to
+    // whole subsampled samples and crops back to `requested` after the decode.
+    // Without it a small region at an odd origin gets a zero-sample component
+    // buffer, or the sample covering its first column lies outside the window.
+    if (subsampled && do_roi) {
+      kdu_core::kdu_coords s0;
+      codestream.get_subsampling(0, s0, true);// includes the reduce levels
+      int fx = 1;
+      int fy = 1;
+      for (const auto &f : factors) {
+        fx = std::max(fx, f.x);
+        fy = std::max(fy, f.y);
+      }
+      const int ax = fx * s0.x;
+      const int ay = fy * s0.y;
+      kdu_core::kdu_dims expanded;
+      expanded.pos.x = roi.pos.x - roi.pos.x % ax;
+      expanded.pos.y = roi.pos.y - roi.pos.y % ay;
+      const int end_x = std::min(__nx, (roi.pos.x + roi.size.x + ax - 1) / ax * ax);
+      const int end_y = std::min(__ny, (roi.pos.y + roi.size.y + ay - 1) / ay * ay);
+      expanded.size.x = end_x - expanded.pos.x;
+      expanded.size.y = end_y - expanded.pos.y;
+      codestream.apply_input_restrictions(0, 0, reduce, 0, &expanded);
+      codestream.get_dims(0, dims, true);
+      img->set_geometry(dims.size.x, dims.size.y, nc, codestream.get_bit_depth(0));
+      if (auto r = validate_decode_dims(img->getNx(), img->getNy(), img->getNc(), static_cast<int>(img->getBps()), filepath);
+          !r) {
+        return std::unexpected(r.error());
+      }
+    }
+    // pull_upsampled indexes every component's buffer, and the crop-back reads
+    // `requested`: neither may be empty.
+    if (subsampled) {
+      bool empty = requested.size.x <= 0 || requested.size.y <= 0;
+      for (int c = 0; c < nc && !empty; ++c) {
+        kdu_core::kdu_dims d;
+        codestream.get_dims(c, d, true);
+        empty = d.size.x <= 0 || d.size.y <= 0;
+      }
+      if (empty) {
+        return std::unexpected(SipiValueError{ ErrorCode::kMalformedInput,
+          "Cannot read JPEG2000 file \"" + filepath
+            + "\": the requested region is empty or leaves a subsampled component without samples" });
+      }
+    }
+  } catch (kdu_exception &) {
+    return std::unexpected(SipiValueError{ ErrorCode::kMalformedInput,
+      "Cannot read JPEG2000 file \"" + filepath + "\": corrupt component subsampling data" });
   }
 
   //
@@ -578,10 +747,12 @@ Result<bool> SipiIOJ2k::read(SipiImage *img,
   img->setPhoto(PhotometricInterpretation::INVALID);// we initialize to an invalid value in order to test later if
                                                      // photo has been set
   int numcol = 0;
+  std::vector<int> channel_of;
   if (jpx_layer.exists()) {
     kdu_supp::jp2_colour colinfo = jpx_layer.access_colour(0);
     kdu_supp::jp2_channels chaninfo = jpx_layer.access_channels();
     numcol = chaninfo.get_num_colours();// I assume these are the color channels (1, 3 or 4 in case of CMYK)
+    channel_of = jp2_channel_of(chaninfo, numcol, nc);
     int nluts = palette.get_num_luts();
     if (nluts == 3) {
       int nentries = palette.get_num_entries();
@@ -754,7 +925,19 @@ Result<bool> SipiIOJ2k::read(SipiImage *img,
     return std::unexpected(SipiValueError{ ErrorCode::kMalformedInput,
       "Cannot read JPEG2000 file \"" + filepath + "\": corrupt codestream (decompressor start failed)" });
   }
-  std::vector<int> stripe_heights(codestream.get_num_components(), dims.size.y);
+  std::vector<int> stripe_heights(nc, dims.size.y);
+  // Sample-interleaved output with each component at its mapped channel. A
+  // non-NULL sample_offsets makes Kakadu default NULL sample_gaps to 1
+  // (component-interleaved), so gaps and row gaps are passed alongside.
+  std::vector<int> sample_gaps;
+  std::vector<int> row_gaps;
+  if (!channel_of.empty()) {
+    sample_gaps.assign(channel_of.size(), static_cast<int>(img->getNc()));
+    row_gaps.assign(channel_of.size(), dims.size.x * static_cast<int>(img->getNc()));
+  }
+  const int *offsets_p = channel_of.empty() ? nullptr : channel_of.data();
+  const int *sample_gaps_p = channel_of.empty() ? nullptr : sample_gaps.data();
+  const int *row_gaps_p = channel_of.empty() ? nullptr : row_gaps.data();
 
   if (force_bps_8) img->set_geometry(img->getNx(), img->getNy(), img->getNc(), 8);// forces kakadu to convert to 8 bit!
   switch (img->getBps()) {
@@ -771,7 +954,11 @@ Result<bool> SipiIOJ2k::read(SipiImage *img,
     img->set_pixels(std::vector<byte>(*buf8_size), img->getNx(), img->getNy(), img->getNc(), img->getBps());
     byte *dst = img->pixels_writable().data();
     try {
-      decompressor.pull_stripe(dst, stripe_heights.data());
+      if (subsampled) {
+        pull_upsampled(decompressor, codestream, factors, channel_of, dst);
+      } else {
+        decompressor.pull_stripe(dst, stripe_heights.data(), offsets_p, sample_gaps_p, row_gaps_p);
+      }
     } catch (kdu_exception&) {
       log_err("Error while decompressing image: %s.", filepath.c_str());
       return std::unexpected(SipiValueError{ ErrorCode::kMalformedInput,
@@ -780,7 +967,7 @@ Result<bool> SipiIOJ2k::read(SipiImage *img,
     break;
   }
   case 12: {
-    std::vector<char> get_signed(codestream.get_num_components(), 0);// vector<bool> does not work -> special treatment in C++
+    std::vector<char> get_signed(nc, 0);// vector<bool> does not work -> special treatment in C++
     const auto buf16_size = checked_buf_size(
       static_cast<std::size_t>(dims.size.x), static_cast<std::size_t>(dims.size.y), static_cast<std::size_t>(img->getNc()), 2);
     if (!buf16_size) {
@@ -790,13 +977,17 @@ Result<bool> SipiIOJ2k::read(SipiImage *img,
     img->set_pixels(std::vector<byte>(*buf16_size), img->getNx(), img->getNy(), img->getNc(), 16);
     byte *dst = img->pixels_writable().data();
     try {
-      decompressor.pull_stripe(reinterpret_cast<kdu_core::kdu_int16 *>(dst),
-        stripe_heights.data(),
-        nullptr,
-        nullptr,
-        nullptr,
-        nullptr,
-        reinterpret_cast<bool *>(get_signed.data()));
+      if (subsampled) {
+        pull_upsampled(decompressor, codestream, factors, channel_of, reinterpret_cast<kdu_core::kdu_int16 *>(dst));
+      } else {
+        decompressor.pull_stripe(reinterpret_cast<kdu_core::kdu_int16 *>(dst),
+          stripe_heights.data(),
+          offsets_p,
+          sample_gaps_p,
+          row_gaps_p,
+          nullptr,
+          reinterpret_cast<bool *>(get_signed.data()));
+      }
     } catch (kdu_exception&) {
       log_err("Error while decompressing image: %s.", filepath.c_str());
       return std::unexpected(SipiValueError{ ErrorCode::kMalformedInput,
@@ -805,7 +996,7 @@ Result<bool> SipiIOJ2k::read(SipiImage *img,
     break;
   }
   case 16: {
-    std::vector<char> get_signed(codestream.get_num_components(), 0);// vector<bool> does not work -> special treatment in C++
+    std::vector<char> get_signed(nc, 0);// vector<bool> does not work -> special treatment in C++
     const auto buf16_size = checked_buf_size(
       static_cast<std::size_t>(dims.size.x), static_cast<std::size_t>(dims.size.y), static_cast<std::size_t>(img->getNc()), 2);
     if (!buf16_size) {
@@ -815,13 +1006,17 @@ Result<bool> SipiIOJ2k::read(SipiImage *img,
     img->set_pixels(std::vector<byte>(*buf16_size), img->getNx(), img->getNy(), img->getNc(), img->getBps());
     byte *dst = img->pixels_writable().data();
     try {
-      decompressor.pull_stripe(reinterpret_cast<kdu_core::kdu_int16 *>(dst),
-        stripe_heights.data(),
-        nullptr,
-        nullptr,
-        nullptr,
-        nullptr,
-        reinterpret_cast<bool *>(get_signed.data()));
+      if (subsampled) {
+        pull_upsampled(decompressor, codestream, factors, channel_of, reinterpret_cast<kdu_core::kdu_int16 *>(dst));
+      } else {
+        decompressor.pull_stripe(reinterpret_cast<kdu_core::kdu_int16 *>(dst),
+          stripe_heights.data(),
+          offsets_p,
+          sample_gaps_p,
+          row_gaps_p,
+          nullptr,
+          reinterpret_cast<bool *>(get_signed.data()));
+      }
     } catch (kdu_exception&) {
       log_err("Error while decompressing image: %s.", filepath.c_str());
       return std::unexpected(SipiValueError{ ErrorCode::kMalformedInput,
@@ -840,6 +1035,17 @@ Result<bool> SipiIOJ2k::read(SipiImage *img,
   }
   decompressor.finish();
   kdu_teardown.teardown();
+
+  if (subsampled && do_roi) {
+    if (auto r = processing::crop(*img,
+          requested.pos.x - dims.pos.x,
+          requested.pos.y - dims.pos.y,
+          static_cast<std::size_t>(requested.size.x),
+          static_cast<std::size_t>(requested.size.y));
+      !r) {
+      return std::unexpected(r.error());
+    }
+  }
 
   if (!rlut.empty()) {
     //
@@ -874,16 +1080,10 @@ Result<bool> SipiIOJ2k::read(SipiImage *img,
   }
 
   if ((size != nullptr) && (!redonly)) {
-    switch (scaling_quality.jk2) {
-    case ScalingMethod::HIGH:
-      if (auto r = Sipi::processing::scale(*img, nnx, nny); !r) { return std::unexpected(r.error()); }
-      break;
-    case ScalingMethod::MEDIUM:
-      if (auto r = Sipi::processing::scaleMedium(*img, nnx, nny); !r) { return std::unexpected(r.error()); }
-      break;
-    case ScalingMethod::LOW:
-      if (auto r = Sipi::processing::scaleFast(*img, nnx, nny); !r) { return std::unexpected(r.error()); }
-      break;
+    if (auto r = Sipi::processing::scale_with(
+          *img, nnx, nny, scaling_method_for(SipiQualityFormat::JP2, scaling_quality));
+        !r) {
+      return std::unexpected(r.error());
     }
   }
   return true;

@@ -14,15 +14,17 @@ should be a deliberate, self-contained unit of change. Working commits
   merge commits). Every commit on the branch lands on main verbatim — so
   the branch history _is_ the main history. There is no squash-on-merge
   safety net; whatever you leave on the branch is what ships.
+- **The history's reader is a coding agent.** This is the leading
+  principle for cleanup. An agent reaches a commit through `git blame`,
+  `git log -- <path>` and `git log -S`, and the commit message is where it
+  learns why the code is the way it is. Curate the branch for that reader:
+  **one commit per module per slice**, with a body that explains the end
+  state. See [Commit Organization](#commit-organization).
 - **Clean up before merging (mandatory)**: before a PR is merged, rewrite
-  the branch (interactive rebase) so its commits read well on main.
-  Squash working commits, reword messages, reorder as needed.
-- **Default to a single commit**: almost always, a PR should end up as
-  **one** clean commit. Split into multiple commits only when the work
-  genuinely represents several independent, self-contained changes that
-  each deserve their own line in the history — and each must stand on its
-  own. When in doubt, squash to one. See [Commit
-  Organization](#commit-organization).
+  the branch (interactive rebase) to that shape. Squash aggressively, in
+  service of that principle: fold working commits, fixups and
+  trial-and-error into the commit they belong to, reword messages, and
+  reorder as needed.
 
 ## Commit message schema
 
@@ -172,18 +174,50 @@ branch-protection rule, which blocks any merge commit from landing on `main`.
 
 ### Principle
 
-Start from the assumption that the whole PR is **one commit**. Group
-commits by user-visible impact, not by implementation journey. Only split
-the PR when the work genuinely divides into several independent,
-self-contained changes that each stand on their own.
+Shape the history for the agent that will read it. An agent asks two
+questions of it: "why is this line the way it is?" (`git blame`, then the
+commit body) and "how did this module get here?" (`git log -- <path>`).
+Both are answered best by **one commit per module per slice**:
+
+- **Too fine** (a commit per fix, per review round, per working step) makes
+  `git log -- <path>` a list of steps the agent must replay to learn the
+  current state, and each body explains one step rather than the design.
+- **Too coarse** (the whole PR as one commit when it spans several slices)
+  makes `git blame` land every line on one message that cannot explain any
+  of them.
+
+A slice is the unit the plan delivered: a phase, or a feature within it.
+Inside a slice, split by module (the scopes in
+[`CONVENTIONS.md` § Module Layout](../../../CONVENTIONS.md)), so each commit
+stays within one module's paths and its scope names that module. A shared
+piece a slice adds goes in its own commit ahead of the modules that use it,
+so no commit uses something that lands after it. A small PR that is one
+slice in one module is one commit.
+
+### The body is written for an agent
+
+The subject says what changed. The body carries what the diff cannot:
+
+- the decisions taken and the alternatives rejected, with the reason;
+- the invariants the code relies on and where they are enforced;
+- the gotchas a later change would trip over;
+- the stable sources behind them (an ADR, a `DEV-` id, a doc page).
+
+It describes the end state of the slice, never the journey to it: no
+"first tried", no review-round history, no test counts or benchmark runs,
+no behaviour that existed only on the branch. A long body is fine; an agent
+reads all of it.
 
 ### Rules
 
 1. Each `feat:` or `fix:` commit = one changelog entry in the sections
    developers deploying Sipi read first.
 2. Internal work (`build:`, `ci:`, `refactor:`, `docs:`, `chore:`,
-   `test:`) lands in its own changelog section further down — squash
-   aggressively so those sections stay readable.
+   `test:`) lands in its own changelog section further down. Squash
+   aggressively, in service of the agent reader: fold every working,
+   fixup and trial-and-error commit until each commit is one module in
+   one slice, and stop there. Squashing past that point makes the history
+   too coarse for `git blame`.
 3. Ask: "would a developer deploying Sipi care about this change?"
    If yes → `feat:` or `fix:`. If no → an internal-work prefix.
 4. Debugging journeys (trial-and-error, reverts of in-branch mistakes,
@@ -242,7 +276,7 @@ an umbrella issue it does not close.
 ### Why this format matters
 
 The "Challenges and Decisions" section captures the debugging journey
-that would otherwise be lost when commits are squashed. The
+that the curated commit history deliberately omits. The
 `/eng:workflows:compound` skill reads PR descriptions to generate
 structured learnings — well-structured challenges become high-quality
 learnings automatically.

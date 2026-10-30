@@ -1,0 +1,31 @@
+Drop hermetic-llvm's `-rtlib=compiler-rt` link arg on macOS.
+
+rules_rust forwards the cc_toolchain's link args to rustc, and rustc links
+Apple targets with `-nodefaultlibs`, so clang never selects a runtime library
+and warns `argument unused during compilation: '-rtlib=compiler-rt'`. rustc's
+`linker_messages` lint then prints that on every darwin Rust link. compiler-rt
+is the clang driver's only runtime library on Darwin, so omitting the flag
+there leaves C++ links unchanged.
+
+Re-check on every `llvm` bump: the `rtlib` cc_args_list in
+`toolchain/BUILD.bazel` (and `rtlib_compiler_rt` in `toolchain/args/BUILD.bazel`).
+Drop once hermetic-llvm stops passing `-rtlib` on macOS; without this patch
+the `-rtlib=compiler-rt` linker_messages warning returns on
+`bazel build //src/cli/rust:sipi`.
+
+--- a/toolchain/BUILD.bazel
++++ b/toolchain/BUILD.bazel
+@@ -264,9 +264,10 @@
+ # and paths when resolving compiler runtime libraries from the resource-dir.
+ cc_args_list(
+     name = "rtlib",
+-    args = [
+-        "//toolchain/args:rtlib_compiler_rt",
+-    ],
++    args = select({
++        "@platforms//os:macos": [],
++        "//conditions:default": ["//toolchain/args:rtlib_compiler_rt"],
++    }),
+ )
+
+ cc_args_list(
